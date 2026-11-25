@@ -408,7 +408,6 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
         valve_type: link.valveType,
         valve_setting: link.setting,
         pump_curve: link.pumpCurve,
-        link_status: link.status,
       };
       synchronized.push({ id, type: 'LineString', name: previous?.name || link.id, category: link.kind === 'pump' ? 'Pump' : link.kind === 'valve' ? 'Valve' : 'Pipeline', coordinates, properties });
     });
@@ -698,7 +697,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
       <div className="gis-toolbar">
         <div className="gis-tool-group">
           <button className="secondary-button" onClick={() => void applyTerrainElevation()} disabled={elevationBusy || !features.some(feature => feature.type === 'Point')}><Mountain size={15}/>{elevationBusy ? 'Sampling elevations…' : 'Fetch terrain elevations'}</button>
-          <button className="secondary-button" onClick={syncFromEpanet} disabled={!hydraulicNetwork?.geo?.nodes}>Synchronize from EPANET</button>
+          <button className="secondary-button" onClick={() => syncFromEpanet()} disabled={!hydraulicNetwork?.geo?.nodes}>Synchronize from EPANET</button>
           <button className="primary-button" onClick={sendToEpanet} disabled={!features.length}>Save and open EPANET</button>
         </div>
         <div className="gis-tool-group">
