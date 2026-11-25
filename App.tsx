@@ -82,6 +82,10 @@ const money = (value: number) =>
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
   const [section, setSection] = useState<Section>('Overview');
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeId, setActiveId] = useState('');
@@ -503,9 +507,26 @@ function App() {
               Sign in to open your private engineering workspace. Your project
               records are isolated to your account.
             </p>
-            <button className="primary-button full" onClick={signIn}>
-              Continue to sign in <ChevronRight size={17} />
+            <form className="auth-form" onSubmit={submitEmailAuth}>
+              <label htmlFor="auth-email">Email address</label>
+              <input id="auth-email" type="email" autoComplete="email" required value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="engineer@company.com" />
+              <label htmlFor="auth-password">Password</label>
+              <input id="auth-password" type="password" autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} minLength={8} required value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="At least 8 characters" />
+              <button className="primary-button full" type="submit" disabled={authBusy}>
+                {authBusy ? 'Please wait…' : authMode === 'signup' ? 'Create engineer account' : 'Sign in with email'}
+              </button>
+            </form>
+            <div className="auth-switch">
+              {authMode === 'signin' ? "New to RayanAqua? " : 'Already registered? '}
+              <button type="button" onClick={() => { setAuthMode(authMode === 'signin' ? 'signup' : 'signin'); setErrorMessage(''); setNotice(''); }}>
+                {authMode === 'signin' ? 'Create an account' : 'Sign in'}
+              </button>
+            </div>
+            <div className="auth-divider"><span>OR</span></div>
+            <button className="secondary-button full auth-google" onClick={signIn} disabled={authBusy}>
+              Continue with Google <ChevronRight size={17} />
             </button>
+            {notice && <div className="alert success">{notice}</div>}
             {errorMessage && <div className="alert error">{errorMessage}</div>}
             <div className="login-security">
               <ShieldCheck size={17} />
