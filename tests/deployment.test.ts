@@ -19,4 +19,27 @@ describe('deployment and data-boundary configuration', () => {
     expect(client).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
     expect(client.toLowerCase()).not.toContain('appdeploy');
   });
+  it('routes PyQGIS status checks separately from terrain operations', () => {
+    const api = readFileSync(resolve(process.cwd(), 'api/[...path].ts'), 'utf8');
+    expect(api).toContain("path[3] !== 'status'");
+    expect(api).toContain("path[3] === 'status' && method === 'POST'");
+    expect(api).toContain('PYQGIS_API_URL');
+    expect(api).toContain('PYQGIS_API_KEY');
+  });
+  it('keeps hydraulic simulation on the EPANET solver rather than a display-only estimate', () => {
+    const epanet = readFileSync(resolve(process.cwd(), 'EpanetEnginePanel.tsx'), 'utf8');
+    expect(epanet).toContain("from 'epanet-js'");
+    expect(epanet).toContain('new Workspace()');
+    expect(epanet).toContain('new EpanetProject(ws)');
+    expect(epanet).toContain('m.runH()');
+    expect(epanet).toContain('m.getLinkValue');
+  });
+  it('distinguishes the DEM-grid routing helper from server-side PyQGIS analysis', () => {
+    const gis = readFileSync(resolve(process.cwd(), 'GisEnginePanel.tsx'), 'utf8');
+    expect(gis).toContain('findLeastCostRoute');
+    expect(gis).toContain('fetchTerrainElevations');
+    expect(gis).toContain("'/gis-terrain/' + operation");
+    expect(gis).toContain('local 17'); // explanatory UI copy identifies the local DEM grid
+  });
+
 });
