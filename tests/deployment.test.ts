@@ -3,16 +3,19 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 describe('deployment and data-boundary configuration', () => {
-  it('pins Vercel functions to the supported Node 22 runtime', () => {
+  it('uses supported Vercel function configuration without an invalid runtime override', () => {
     const config = JSON.parse(readFileSync(resolve(process.cwd(), 'vercel.json'), 'utf8'));
-    expect(config.functions['api/**/*.ts'].runtime).toBe('nodejs22.x');
+    expect(config.functions['api/**/*.ts'].maxDuration).toBe(30);
+    expect(config.functions['api/**/*.ts']).not.toHaveProperty('runtime');
+    expect(config.buildCommand).toBe('npm run build');
+    expect(config.outputDirectory).toBe('dist');
   });
   it('enables RLS and owner predicates for every project data table', () => {
     const schema = readFileSync(resolve(process.cwd(), 'supabase/schema.sql'), 'utf8');
     for (const table of ['projects', 'project_documents', 'gis_drafts']) {
       expect(schema).toContain(`alter table public.${table} enable row level security`);
     }
-    expect(schema.match(/auth\.uid\(\)/g)?.length).toBeGreaterThanOrEqual(6);
+    expect(schema.match(/auth\\.uid\\(\\)/g)?.length).toBeGreaterThanOrEqual(6);
   });
   it('does not ship privileged database or AppDeploy credentials in the browser client', () => {
     const client = readFileSync(resolve(process.cwd(), 'client.ts'), 'utf8');
@@ -39,9 +42,8 @@ describe('deployment and data-boundary configuration', () => {
     expect(gis).toContain('findLeastCostRoute');
     expect(gis).toContain('fetchTerrainElevations');
     expect(gis).toContain("'/gis-terrain/' + operation");
-    expect(gis).toContain('local 17'); // explanatory UI copy identifies the local DEM grid
+    expect(gis).toContain('local 17');
   });
-
   it('calculates terrain profile chainage in metres and reports uphill grade', () => {
     const service = readFileSync(resolve(process.cwd(), 'app.py'), 'utf8');
     expect(service).toContain('QgsDistanceArea');
@@ -50,5 +52,4 @@ describe('deployment and data-boundary configuration', () => {
     expect(service).toContain('maximum_uphill_grade_percent');
     expect(service).not.toContain('"maximum_uphill_grade_percent":None');
   });
-
 });
