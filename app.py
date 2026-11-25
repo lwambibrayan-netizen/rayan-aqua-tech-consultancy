@@ -133,7 +133,7 @@ def analyze():
     interval=float(body.get("contourIntervalM",5))
     contours=processing.run("gdal:contour",{"INPUT":layer,"BAND":1,"INTERVAL":interval,"FIELD_NAME":"elevation","CREATE_3D":False,"IGNORE_NODATA":True,"OUTPUT":"memory:"})["OUTPUT"]
     slope_layer=processing.run("native:slope",{"INPUT":layer,"Z_FACTOR":1,"OUTPUT":"TEMPORARY_OUTPUT"})["OUTPUT"]
-    return jsonify(contours=layer_geojson(contours),slope={"source":slope_layer.source(),"crs":slope_layer.crs().authid()},dem={"source":os.path.basename(DEM),"resolution_m":abs(layer.rasterUnitsPerPixelX()),"crs":layer.crs().authid()})
+    return jsonify(contours=layer_geojson(contours),slope={"source":slope_layer.source(),"crs":slope_layer.crs().authid()},dem={"source":os.path.basename(DEM),"resolution_m":pixel_resolution_m(layer),"crs":layer.crs().authid()})
 
 @app.post("/terrain/least-cost")
 @auth
