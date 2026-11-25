@@ -134,7 +134,7 @@ export default async function handler(request: VercelRequest): Promise<Response>
           return json({ deleted: true, draftId });
         }
       }
-      if (path[2] === 'gis-terrain' && path.length === 4 && method === 'POST') {
+      if (path[2] === 'gis-terrain' && path.length === 4 && path[3] !== 'status' && method === 'POST') {
         const service = process.env.PYQGIS_API_URL; const key = process.env.PYQGIS_API_KEY;
         if (!service || !key) return fail('PyQGIS terrain service is not configured. Configure PYQGIS_API_URL and PYQGIS_API_KEY.', 503);
         const operation = path[3]; if (!['profile', 'compare', 'contours', 'slope', 'analyze'].includes(operation)) return fail('Unknown terrain operation.', 404);
