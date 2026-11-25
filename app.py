@@ -4,7 +4,7 @@ Configure TERRAIN_DEM_PATH to a georeferenced DEM GeoTIFF. No DEM is fabricated.
 import os, json, math, tempfile
 from functools import wraps
 from flask import Flask, request, jsonify
-from qgis.core import QgsApplication, QgsRasterLayer, QgsVectorLayer, QgsProject, QgsPointXY, QgsGeometry, QgsFeature, QgsFields, QgsField, QgsVectorFileWriter, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsWkbTypes
+from qgis.core import QgsApplication, QgsRasterLayer, QgsVectorLayer, QgsProject, QgsPointXY, QgsGeometry, QgsFeature, QgsFields, QgsField, QgsVectorFileWriter, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsWkbTypes, QgsDistanceArea
 from qgis.PyQt.QtCore import QVariant
 import processing
 from processing.core.Processing import Processing
@@ -33,14 +33,26 @@ def coords_route(coords):
     if not isinstance(coords,list) or len(coords)<2: raise ValueError("Route requires at least two [longitude, latitude] coordinates.")
     return [(float(p[0]),float(p[1])) for p in coords]
 
+def distance_measure(layer):
+    measure=QgsDistanceArea()
+    measure.setSourceCrs(layer.crs(),project.transformContext())
+    measure.setEllipsoid(project.ellipsoid() or "WGS84")
+    return measure
+
+def pixel_resolution_m(layer):
+    extent=layer.extent(); center=extent.center()
+    adjacent=QgsPointXY(center.x()+layer.rasterUnitsPerPixelX(),center.y())
+    return round(distance_measure(layer).measureLine(center,adjacent),2)
+
 def sample_profile(layer, coords, spacing):
     if spacing<1 or spacing>1000: raise ValueError("Sample spacing must be 1–1000 m.")
     crs=layer.crs(); wgs=QgsCoordinateReferenceSystem("EPSG:4326")
     to_dem=QgsCoordinateTransform(wgs,crs,project)
     pts=[to_dem.transform(QgsPointXY(x,y)) for x,y in coords]
+    measure=distance_measure(layer)
     samples=[]; chain=0.0
     for a,b in zip(pts,pts[1:]):
-        length=math.hypot(b.x()-a.x(),b.y()-a.y())
+        length=measure.measureLine(a,b)
         n=max(1,math.ceil(length/spacing))
         for i in range(n):
             t=i/n; x=a.x()+(b.x()-a.x())*t; y=a.y()+(b.y()-a.y())*t
@@ -53,7 +65,12 @@ def sample_profile(layer, coords, spacing):
     samples.append({"chainage_m":round(chain,2),"elevation_m":z})
     valid=[p["elevation_m"] for p in samples if p["elevation_m"] is not None]
     asc=sum(max(0,b-a) for a,b in zip(valid,valid[1:])); desc=sum(max(0,a-b) for a,b in zip(valid,valid[1:]))
-    return {"profile":samples,"length_m":round(chain,2),"minimum_elevation_m":min(valid) if valid else None,"maximum_elevation_m":max(valid) if valid else None,"total_ascent_m":round(asc,2),"total_descent_m":round(desc,2),"maximum_uphill_grade_percent":None}
+    grades=[]
+    for a,b in zip(samples,samples[1:]):
+        run=b["chainage_m"]-a["chainage_m"]
+        if run>0 and a["elevation_m"] is not None and b["elevation_m"] is not None:
+            grades.append(max(0.0,(b["elevation_m"]-a["elevation_m"])/run*100))
+    return {"profile":samples,"length_m":round(chain,2),"minimum_elevation_m":min(valid) if valid else None,"maximum_elevation_m":max(valid) if valid else None,"total_ascent_m":round(asc,2),"total_descent_m":round(desc,2),"maximum_uphill_grade_percent":round(max(grades,default=0.0),2)}
 
 def layer_geojson(layer):
     path=os.path.join(tempfile.gettempdir(),"terrain-"+str(os.getpid())+".geojson")
@@ -83,7 +100,7 @@ def profile():
     routes=[]
     for r in body.get("routes",[]):
         routes.append({"id":r.get("id"),"name":r.get("name","Route"),"profile_result":sample_profile(layer,coords_route(r.get("coordinates")),spacing)})
-    return jsonify(dem={"source":os.path.basename(DEM),"resolution_m":abs(layer.rasterUnitsPerPixelX()),"crs":layer.crs().authid()},routes=routes)
+    return jsonify(dem={"source":os.path.basename(DEM),"resolution_m":pixel_resolution_m(layer),"crs":layer.crs().authid()},routes=routes)
 
 @app.post("/terrain/compare")
 @auth
