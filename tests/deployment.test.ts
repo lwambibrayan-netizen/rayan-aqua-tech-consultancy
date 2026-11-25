@@ -15,7 +15,7 @@ describe('deployment and data-boundary configuration', () => {
     for (const table of ['projects', 'project_documents', 'gis_drafts']) {
       expect(schema).toContain(`alter table public.${table} enable row level security`);
     }
-    expect(schema.match(/auth\\.uid\\(\\)/g)?.length).toBeGreaterThanOrEqual(6);
+    expect(schema.split('auth.uid()').length - 1).toBeGreaterThanOrEqual(6);
   });
   it('does not ship privileged database or AppDeploy credentials in the browser client', () => {
     const client = readFileSync(resolve(process.cwd(), 'client.ts'), 'utf8');
