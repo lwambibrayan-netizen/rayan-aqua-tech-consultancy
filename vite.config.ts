@@ -3,11 +3,6 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: './',
-  build: {
-    outDir: process.env.APPDEPLOY_VITE_OUT_DIR || 'dist',
-    sourcemap:
-      process.env.APPDEPLOY_VITE_SOURCEMAP === 'hidden' ? 'hidden' : false,
-    target: ['chrome87', 'edge88', 'firefox78', 'safari14'],
-  },
+  build: { outDir: 'dist', sourcemap: false, target: 'es2022' },
+  server: { host: '0.0.0.0' },
 });
