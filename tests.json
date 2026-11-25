@@ -1,0 +1,173 @@
+[
+  {
+    "name": "Save complete GIS engineering data automatically and reopen it",
+    "sanity": true,
+    "viewport": "desktop",
+    "covers": [
+      "GIS feature property persistence",
+      "node and link hydraulic attribute preservation",
+      "GIS topology endpoint references",
+      "automatic draft saving",
+      "project-specific draft isolation",
+      "draft reopen after refresh"
+    ],
+    "description": "Verifies mapped engineering features retain hydraulic and spatial attributes in a named project draft.",
+    "steps": [
+      "Open a project GIS draft",
+      "Add a junction and reservoir with coordinates, elevation and demand/head",
+      "Add a pipeline and set diameter, roughness, status and explicit upstream/downstream node references",
+      "Wait for automatic save confirmation",
+      "Reload the GIS workspace and reopen the draft"
+    ],
+    "expected": "The same node and pipe specifications, coordinates, hydraulic metadata and endpoint references are restored."
+  },
+  {
+    "name": "Edit CAD entities and preserve layers and drawing units",
+    "viewport": "desktop",
+    "covers": [
+      "CAD entity selection",
+      "CAD property editing",
+      "CAD entity deletion",
+      "layer retention",
+      "drawing persistence"
+    ],
+    "description": "Verifies CAD geometry can be selected, inspected, edited, removed and saved without losing layer metadata.",
+    "steps": [
+      "Create a line and a circle on separate named layers",
+      "Select the line and edit its layer or coordinates",
+      "Delete the circle using the explicit delete control",
+      "Save and reload the project"
+    ],
+    "expected": "The edited line and its layer remain saved; only the confirmed selected circle is removed."
+  },
+  {
+    "name": "Import and export GIS and CAD exchange files",
+    "viewport": "desktop",
+    "covers": [
+      "GeoJSON import/export with properties",
+      "DXF import/export",
+      "CAD drawing units",
+      "GIS-to-CAD conversion warning"
+    ],
+    "description": "Verifies supported GIS and CAD exchange workflows preserve supported feature attributes and geometry.",
+    "steps": [
+      "Import GeoJSON containing a point and pipeline with properties",
+      "Export the GIS draft as GeoJSON",
+      "Bring GIS features into CAD",
+      "Export the drawing as DXF"
+    ],
+    "expected": "GeoJSON retains feature properties and geometry; supported CAD entities are present in the DXF."
+  },
+  {
+    "name": "Keep independent GIS drafts and require confirmation before deletion",
+    "viewport": "desktop",
+    "covers": [
+      "multiple project GIS drafts",
+      "draft isolation",
+      "explicit delete confirmation"
+    ],
+    "description": "Verifies multiple designs remain separate and destructive actions require confirmation.",
+    "steps": [
+      "Create two named GIS drafts with different features",
+      "Open the first draft and verify its contents",
+      "Cancel deletion of the second draft",
+      "Refresh the draft list"
+    ],
+    "expected": "Both drafts remain available and unchanged after cancelling deletion."
+  },
+  {
+    "name": "Model individual junction demand patterns, pump energy and generate a design report",
+    "viewport": "mobile",
+    "covers": [
+      "GIS-to-EPANET attribute mapping",
+      "explicit endpoint ID mapping",
+      "missing pipe design data validation",
+      "individual junction demand patterns",
+      "shared fallback demand pattern",
+      "EPANET pattern import and export",
+      "pump power and energy calculation",
+      "KES energy cost estimate",
+      "hydraulic design report export",
+      "pressure and velocity compliance"
+    ],
+    "description": "Verifies junction-specific patterns are transferred to EPANET, pump energy is calculated from simulated flow and head with declared assumptions, and a printable hydraulic report is produced.",
+    "steps": [
+      "Load the example network and select Junction J1",
+      "Enter a demand pattern different from Junction J2 and set a 1-hour pattern timestep",
+      "Set pump efficiency to 75%, electricity tariff to 30 KES/kWh and operating hours to 12 per day",
+      "Run the extended-period EPANET simulation",
+      "Review pump average/peak power, simulated kWh and projected daily cost",
+      "Download the hydraulic design report and open its print dialog",
+      "Export the EPANET INP and confirm each junction has its own pattern assignment"
+    ],
+    "expected": "The INP contains distinct pattern IDs assigned to each junction; simulation results show pump energy and cost based on simulated flow/head and the stated efficiency/tariff assumptions; the report contains hydraulic criteria, warnings, node/link results and energy estimates."
+  },
+  {
+    "name": "Connect to the real QGIS Server WMS and WFS project",
+    "viewport": "mobile",
+    "covers": [
+      "live QGIS Server OGC capabilities",
+      "QGIS WMS layer catalogue",
+      "QGIS WMS map overlay",
+      "QGIS WFS feature query",
+      "WFS GeoJSON import into GIS draft",
+      "empty WFS layer handling",
+      "invalid WFS layer rejection"
+    ],
+    "description": "Verifies the GIS workspace reads real QGIS Server WMS and WFS capabilities, displays a selected server-rendered layer and imports valid WFS GeoJSON without treating an empty layer as a successful feature import.",
+    "steps": [
+      "Open the GIS workspace and choose Check QGIS services",
+      "Confirm the server project reports WMS and WFS readiness and lists the published engineering layers",
+      "Select a WMS layer and show its QGIS Server overlay on the map",
+      "Select the junctions WFS layer and import features",
+      "Verify the interface clearly reports zero features when the published layer is empty",
+      "Submit an unsupported WFS type name through the feature query workflow"
+    ],
+    "expected": "The UI lists layers advertised by live QGIS Server GetCapabilities responses, the WMS overlay requests tiles from the QGIS project endpoint, WFS returns GeoJSON for an allowed layer, and unsupported layer names are rejected."
+  },
+  {
+    "name": "Process real terrain data with PyQGIS and compare pipeline profiles",
+    "sanity": true,
+    "viewport": "mobile",
+    "covers": [
+      "authenticated project-scoped PyQGIS API",
+      "Copernicus GLO-30 DEM with GLO-90 fallback",
+      "UTM reprojection",
+      "contour generation and GeoJSON import",
+      "slope calculation and terrain classes",
+      "pipeline ground profile sampling",
+      "route alternative length and elevation comparison",
+      "terrain metadata disclosure",
+      "GeoJSON and CSV exports"
+    ],
+    "description": "Checks the GIS workspace calls the dedicated PyQGIS service through an authenticated owner-scoped backend route and displays DEM-derived results.",
+    "steps": [
+      "Open a GIS project with a mapped boundary and at least two pipeline alternatives",
+      "Run a pipeline ground profile at 30 m sample spacing",
+      "Compare the pipeline route alternatives",
+      "Generate contours at a 5 m interval and calculate terrain slope",
+      "Verify contours appear as GIS line features",
+      "Export contours as GeoJSON and pipeline profiles as CSV"
+    ],
+    "expected": "The PyQGIS service returns DEM source and resolution, station elevations, ascent/descent and grade values, route comparison ranks, contour GeoJSON and slope class statistics. Only an authenticated owner of the project can invoke the backend terrain route."
+  },
+  {
+    "name": "Check PyQGIS processing service and Copernicus DEM coverage for a project",
+    "viewport": "mobile",
+    "covers": [
+      "owner-scoped PyQGIS service status",
+      "QGIS Processing initialization check",
+      "project-centre Copernicus GLO-30 tile availability",
+      "GLO-90 fallback availability",
+      "no-coverage guidance"
+    ],
+    "description": "Verifies the authenticated project owner can check the dedicated PyQGIS service and whether public Copernicus DEM tiles are available near the project centre.",
+    "steps": [
+      "Open a project GIS workspace",
+      "Add a project boundary or mapped features",
+      "Tap Check PyQGIS / DEM coverage",
+      "Review the PyQGIS online status and GLO-30/GLO-90 availability for the project centre"
+    ],
+    "expected": "The status panel reports the live PyQGIS service and the public DEM tile availability for the project-centre coordinate, including a clear local-GeoTIFF fallback message when no tile exists."
+  }
+]
