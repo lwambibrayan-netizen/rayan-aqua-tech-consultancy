@@ -654,11 +654,11 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
       </div>
       <div className="gis-tool-group" style={{margin:'0 0 12px',padding:12,border:'1px solid var(--line, #d8e1e8)',borderRadius:10,background:'var(--panel, #fff)'}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-          <strong style={{fontSize:13,flexBasis:'100%'}}>PyQGIS terrain processing</strong>
+          <strong style={{fontSize:13,flexBasis:'100%'}}>Terrain analysis and pipeline routing</strong>
           <label className="gis-label">Route start<select className="gis-input" value={routeStartId} onChange={e=>setRouteStartId(e.target.value)}><option value="">Choose point…</option>{features.filter(f=>f.type==='Point').map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
           <label className="gis-label">Route end<select className="gis-input" value={routeEndId} onChange={e=>setRouteEndId(e.target.value)}><option value="">Choose point…</option>{features.filter(f=>f.type==='Point').map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
           <label className="gis-label">Slope cost weight<input className="gis-input" type="number" min="0" max="100" step="1" value={routeSlopeWeight} onChange={e=>setRouteSlopeWeight(e.target.value)} style={{width:90}}/></label>
-          <button className="primary-button" onClick={()=>void generateLeastCostPipelineRoute()} disabled={routeBusy||!routeStartId||!routeEndId}>{routeBusy?'Finding route…':'Generate least-cost route'}</button>
+          <button className="primary-button" onClick={()=>void generateLeastCostPipelineRoute()} disabled={routeBusy||!routeStartId||!routeEndId}>{routeBusy?'Finding route…':'Generate DEM-grid least-cost route'}</button>
           <label className="gis-label">Profile spacing (m)<input className="gis-input" type="number" min="5" max="500" step="5" value={profileSpacing} onChange={e=>setProfileSpacing(e.target.value)} style={{width:120}}/></label>
           <button className="secondary-button" onClick={()=>void generateSelectedPipelineProfile()} disabled={terrainBusy||!selectedPipelineRoute()}>{terrainBusy?'Processing…':'Pipeline ground profile'}</button>
           <button className="secondary-button" onClick={()=>void comparePipelineRoutes()} disabled={terrainBusy||pipelineRoutes().length<2}>Compare routes ({pipelineRoutes().length})</button>
@@ -666,7 +666,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
           <button className="primary-button" onClick={()=>void generateTerrainAnalysis()} disabled={terrainBusy||!features.length}>{terrainBusy?'Running PyQGIS…':'Generate contours + slope'}</button>
           <button className="secondary-button" onClick={()=>void checkTerrainService()} disabled={terrainStatusBusy}>{terrainStatusBusy?'Checking DEM…':'Check PyQGIS / DEM coverage'}</button>
         </div>
-        <small style={{display:'block',marginTop:6,opacity:.72}}>Copernicus DEM GLO-30 where available, with GLO-90 fallback. Satellite digital surface model, not surveyed ground.</small>
+        <small style={{display:'block',marginTop:6,opacity:.72}}>The least-cost route uses a local 17 × 17 grid and public DEM elevation samples. Ground profiles, route comparisons, contours and slope analysis are separate PyQGIS-service operations. DEM values are terrain estimates, not surveyed ground levels; verify with survey data before final design.</small>
         {terrainServiceStatus&&<small style={{display:'block',marginTop:6}}>
           {terrainServiceStatus.error ? 'PyQGIS status: '+terrainServiceStatus.error :
             'PyQGIS '+(terrainServiceStatus.service?.status==='ok'?'online':'unavailable')+' · GLO-30 '+(terrainServiceStatus.demAvailability?.copernicus_glo30_available?'available':'not available')+' · GLO-90 '+(terrainServiceStatus.demAvailability?.copernicus_glo90_available?'available':'not available')+' · tile '+terrainServiceStatus.demAvailability?.tile}
