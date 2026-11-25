@@ -201,16 +201,48 @@ function App() {
     };
   }, []);
 
-  async function signIn() {
+  async function submitEmailAuth(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthBusy(true);
     setErrorMessage('');
+    setNotice('');
     try {
-      await auth.signInWithRedirect();
+      if (authMode === 'signup') {
+        const confirmationRequired = await auth.signUpWithPassword(authEmail.trim(), authPassword);
+        setNotice(
+          confirmationRequired
+            ? 'Account created. Check your email to confirm your address before signing in.'
+            : 'Account created and signed in successfully.'
+        );
+      } else {
+        await auth.signInWithPassword(authEmail.trim(), authPassword);
+        const current = await auth.getUser();
+        setUser(current);
+        if (current) await loadProjects();
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Email authentication failed. Please retry.'
+      );
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function signIn() {
+    setAuthBusy(true);
+    setErrorMessage('');
+    setNotice('');
+    try {
+      await auth.signInWithGoogle();
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Sign-in could not start. Please retry.'
+          : 'Google sign-in could not start. Please retry.'
       );
+    } finally {
+      setAuthBusy(false);
     }
   }
 
