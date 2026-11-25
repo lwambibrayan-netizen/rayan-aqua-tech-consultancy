@@ -89,7 +89,7 @@ def health(): return jsonify(status="ok",engine="PyQGIS",processing=True,dem_con
 def dem_check():
     try:
         layer=dem_layer()
-        return jsonify(copernicus_glo30_available=False,copernicus_glo90_available=False,local_dem_available=True,source=os.path.basename(DEM),resolution_m=layer.rasterUnitsPerPixelX(),crs=layer.crs().authid(),note="Local DEM configured; confirm source and survey accuracy.")
+        return jsonify(copernicus_glo30_available=False,copernicus_glo90_available=False,local_dem_available=True,source=os.path.basename(DEM),resolution_m=pixel_resolution_m(layer),crs=layer.crs().authid(),note="Local DEM configured; confirm source and survey accuracy.")
     except Exception as e:
         return jsonify(copernicus_glo30_available=False,copernicus_glo90_available=False,local_dem_available=False,error=str(e),recommended_action="Configure TERRAIN_DEM_PATH with a verified GeoTIFF DEM.")
 
@@ -117,7 +117,7 @@ def contours():
     if interval<=0: return jsonify(error="Contour interval must be positive."),400
     layer=dem_layer()
     out=processing.run("gdal:contour",{"INPUT":layer,"BAND":1,"INTERVAL":interval,"FIELD_NAME":"elevation","CREATE_3D":False,"IGNORE_NODATA":True,"OUTPUT":"memory:"})["OUTPUT"]
-    return jsonify(contours=layer_geojson(out),dem={"source":os.path.basename(DEM),"resolution_m":abs(layer.rasterUnitsPerPixelX()),"crs":layer.crs().authid()})
+    return jsonify(contours=layer_geojson(out),dem={"source":os.path.basename(DEM),"resolution_m":pixel_resolution_m(layer),"crs":layer.crs().authid()})
 
 @app.post("/terrain/slope")
 @auth
