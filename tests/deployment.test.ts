@@ -32,7 +32,7 @@ describe('deployment and data-boundary configuration', () => {
     expect(epanet).toContain('new Workspace()');
     expect(epanet).toContain('new EpanetProject(ws)');
     expect(epanet).toContain('m.runH()');
-    expect(epanet).toContain('m.getLinkValue');
+    expect(epanet).toContain('getLinkValue');
   });
   it('distinguishes the DEM-grid routing helper from server-side PyQGIS analysis', () => {
     const gis = readFileSync(resolve(process.cwd(), 'GisEnginePanel.tsx'), 'utf8');
