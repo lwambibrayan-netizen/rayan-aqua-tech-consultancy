@@ -23,6 +23,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Check PyQGIS service Python syntax
+        run: python3 -m py_compile app.py
       - name: TypeScript typecheck
         run: npm run typecheck
       - name: Run tests
