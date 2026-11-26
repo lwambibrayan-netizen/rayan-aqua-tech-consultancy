@@ -654,7 +654,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}>
           {!drafts.length && <span style={{fontSize:13,opacity:.7}}>No named drafts yet. Create a draft before starting a new design.</span>}
           {drafts.map(draft => <div key={draft.draftId} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 9px',borderRadius:9,border:'1px solid ' + (draft.draftId === activeDraftId ? '#16866b' : 'var(--line, #d8e1e8)'),background:draft.draftId === activeDraftId ? 'rgba(22,134,107,.08)' : 'transparent'}}>
-            <button className="secondary-button" style={{padding:'5px 8px'}} onClick={() => void openDraft(draft)} disabled={draftBusy || draft.draftId === activeDraftId}><FolderOpen size={14}/>{draft.name}</button>
+            <button className="secondary-button" style={{padding:'5px 8px'}} onClick={() => void openDraft(draft)} disabled={draftBusy || draft.draftId === activeDraftId} title={draft.draftId === activeDraftId ? 'This draft is currently open' : 'Open this saved GIS draft for editing'}><FolderOpen size={14}/>{draft.draftId === activeDraftId ? 'Open: ' : 'Open draft: '}{draft.name}</button>
             <span style={{fontSize:11,opacity:.65}}>{new Date(draft.updatedAt).toLocaleDateString()}</span>
             <button className="icon-button" title={'Delete ' + draft.name} aria-label={'Delete ' + draft.name} onClick={() => void deleteDraft(draft)} disabled={draftBusy}><Trash2 size={14}/></button>
           </div>)}
