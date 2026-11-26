@@ -32,7 +32,7 @@ const nval=(v:number)=>Number.isFinite(v)?String(v):'0';
 const dutyPoint=(curve:string):[number,number]=>{const points=curve.split(',').map(z=>z.trim().split(':').map(Number)).filter(p=>p.length===2&&p.every(Number.isFinite));return (points[Math.floor(points.length/2)]||[20,55]) as [number,number]};
 const hoursToClock=(hours:number)=>{const whole=Math.floor(hours);const minutes=Math.round((hours-whole)*60);return whole+':'+String(minutes).padStart(2,'0')};
 
-function toInp(net:Net){
+export function toInp(net:Net){
  const j=net.nodes.filter(n=>n.kind==='J'),r=net.nodes.filter(n=>n.kind==='R'),t=net.nodes.filter(n=>n.kind==='T');
  const p=net.links.filter(l=>l.kind==='pipe'),pu=net.links.filter(l=>l.kind==='pump'),v=net.links.filter(l=>l.kind==='valve');
  const shared=String(net.settings.demandPattern||'').trim();
