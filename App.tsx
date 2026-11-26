@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import EpanetEnginePanel from './EpanetEnginePanel';
 import GisEnginePanel from './GisEnginePanel';
 import Cad3DEnginePanel from './Cad3DEnginePanel';
+import BoqEnginePanel from './BoqEnginePanel';
 import { api, auth } from './client';
 import {
   Activity,
@@ -1105,20 +1106,13 @@ function App() {
                   <strong>GIS processing scope</strong>
                   <p>Interactive mapping, editable feature layers, GeoJSON exchange and geometry measurements run in this workspace. Full QGIS/PyQGIS Processing for DEM terrain analysis, watershed delineation and advanced raster processing still requires a connected QGIS processing runtime; those capabilities are not represented as active here.</p>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {section === 'BOQ' && (
+              </d{section === 'BOQ' && (
             <div className="module-layout">
               <div className="page-intro">
                 <div>
-                  <span className="eyebrow muted">COST PLANNING</span>
+                  <span className="eyebrow muted">AUTOMATIC QUANTITIES · COST PLANNING</span>
                   <h1>Bill of quantities</h1>
-                  <p>
-                    Build a preliminary project BOQ with quantities, units and
-                    rates in KES.
-                  </p>
+                  <p>Generate pipeline quantities and topology-based fitting schedules from this project's saved engineering design, then apply verified KES rates.</p>
                 </div>
               </div>
               {!activeProject ? (
@@ -1126,170 +1120,22 @@ function App() {
               ) : (
                 <>
                   <div className="active-project-strip">
-                    <span>
-                      <ClipboardList size={17} /> {activeProject.title}
-                    </span>
-                    <span className="status-pill">
-                      {boqDoc ? 'Saved version ' + boqDoc.version : 'Draft BOQ'}
-                    </span>
+                    <span><ClipboardList size={17} /> {activeProject.title}</span>
+                    <span className="status-pill">{boqDoc ? 'Saved version ' + boqDoc.version : 'Draft BOQ'}</span>
                   </div>
-                  <div className="panel boq-panel">
-                    <div className="panel-heading">
-                      <div>
-                        <span className="eyebrow muted">
-                          PROJECT COST SCHEDULE
-                        </span>
-                        <h2>Measured items</h2>
-                      </div>
-                      <button
-                        className="secondary-button"
-                        onClick={() =>
-                          setBoqItems(items => [
-                            ...items,
-                            {
-                              id: crypto.randomUUID(),
-                              description: '',
-                              unit: 'm',
-                              qty: 0,
-                              rate: 0,
-                            },
-                          ])
-                        }
-                      >
-                        <Plus size={15} /> Add item
-                      </button>
-                    </div>
-                    {boqItems.length === 0 ? (
-                      <div className="empty-inline">
-                        No BOQ items yet. Add a line item to begin.
-                      </div>
-                    ) : (
-                      <div className="table-wrap">
-                        <table className="boq-table">
-                          <thead>
-                            <tr>
-                              <th>Description</th>
-                              <th>Unit</th>
-                              <th>Quantity</th>
-                              <th>Rate (KES)</th>
-                              <th>Amount</th>
-                              <th></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {boqItems.map(item => (
-                              <tr key={item.id}>
-                                <td>
-                                  <input
-                                    value={item.description}
-                                    onChange={e =>
-                                      setBoqItems(rows =>
-                                        rows.map(r =>
-                                          r.id === item.id
-                                            ? {
-                                                ...r,
-                                                description: e.target.value,
-                                              }
-                                            : r
-                                        )
-                                      )
-                                    }
-                                    placeholder="e.g. HDPE pipe PN16"
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    value={item.unit}
-                                    onChange={e =>
-                                      setBoqItems(rows =>
-                                        rows.map(r =>
-                                          r.id === item.id
-                                            ? { ...r, unit: e.target.value }
-                                            : r
-                                        )
-                                      )
-                                    }
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={item.qty}
-                                    onChange={e =>
-                                      setBoqItems(rows =>
-                                        rows.map(r =>
-                                          r.id === item.id
-                                            ? {
-                                                ...r,
-                                                qty: Number(e.target.value),
-                                              }
-                                            : r
-                                        )
-                                      )
-                                    }
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={item.rate}
-                                    onChange={e =>
-                                      setBoqItems(rows =>
-                                        rows.map(r =>
-                                          r.id === item.id
-                                            ? {
-                                                ...r,
-                                                rate: Number(e.target.value),
-                                              }
-                                            : r
-                                        )
-                                      )
-                                    }
-                                  />
-                                </td>
-                                <td className="amount-cell">
-                                  {money(item.qty * item.rate)}
-                                </td>
-                                <td>
-                                  <button
-                                    className="icon-button"
-                                    aria-label="Remove item"
-                                    onClick={() =>
-                                      setBoqItems(rows =>
-                                        rows.filter(r => r.id !== item.id)
-                                      )
-                                    }
-                                  >
-                                    <X size={15} />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                    <div className="boq-total">
-                      <span>Preliminary project total</span>
-                      <strong>{money(totalBoq)}</strong>
-                    </div>
-                    <button
-                      className="primary-button"
-                      onClick={() =>
-                        saveDocument('boq', {
-                          items: boqItems,
-                          total: totalBoq,
-                          currency: 'KES',
-                        })
-                      }
-                    >
-                      <Save size={16} /> Save BOQ to project
-                    </button>
-                  </div>
+                  <BoqEnginePanel
+                    projectTitle={activeProject.title}
+                    initialData={boqDoc?.data}
+                    hydraulicNetwork={hydraulicDoc?.data?.network}
+                    gisFeatures={gisDoc?.data?.featureCollection?.features ?? []}
+                    onSave={data => saveDocument('boq', data)}
+                  />
                 </>
               )}
+            </div>
+          )}
+
+           )}
             </div>
           )}
 
