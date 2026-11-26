@@ -27,10 +27,10 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
       hydraulicsOpen = true;
       project.initH(InitHydOption.SaveAndInit);
 
-      const junctionIndex = project.getNodeIndex('101');
       const sourceIndex = project.getNodeIndex('Lake');
-      const tankIndex = project.getNodeIndex('1');
-      const representativePipeIndex = project.getLinkIndex('60');
+      const junctions = imported.nodes.filter(n => n.kind === 'J').map(n => ({id:n.id,index:project.getNodeIndex(n.id)}));
+      const tanks = imported.nodes.filter(n => n.kind === 'T').map(n => ({id:n.id,index:project.getNodeIndex(n.id),elevation:n.elevation}));
+      const links = imported.links.map(l => ({id:l.id,kind:l.kind,index:project.getLinkIndex(l.id)}));
       let hydraulicPeriods = 0;
       let elapsedSeconds = 0;
       let finitePressureSamples = 0;
@@ -45,16 +45,19 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
       let sampleFlow = NaN;
       let sampleVelocity = NaN;
       let dt = Infinity;
-      const hourlySamples: Array<{timeHours:number;pressureAt101M:number;pipe60FlowLps:number;pipe60VelocityMps:number;tank1LevelM:number}> = [];
+      const hourlySamples: Array<{timeHours:number;nodes:Array<{id:string;pressureM:number}>;tanks:Array<{id:string;levelM:number}>;links:Array<{id:string;kind:string;flowLps:number;velocityMps?:number}>}> = [];
 
       do {
         project.runH();
         hydraulicPeriods += 1;
-        const pressure = project.getNodeValue(junctionIndex, NodeProperty.Pressure);
-        const flow = project.getLinkValue(representativePipeIndex, LinkProperty.Flow);
-        const velocity = project.getLinkValue(representativePipeIndex, LinkProperty.Velocity);
-        const tankHead = project.getNodeValue(tankIndex, NodeProperty.Head);
-        const tankLevel = tankHead - 40.20312;
+        const nodeSamples = junctions.map(n => ({id:n.id,pressureM:project.getNodeValue(n.index,NodeProperty.Pressure)}));
+        const tankSamples = tanks.map(t => ({id:t.id,levelM:project.getNodeValue(t.index,NodeProperty.Head)-t.elevation}));
+        const linkSamples = links.map(l => ({id:l.id,kind:l.kind,flowLps:project.getLinkValue(l.index,LinkProperty.Flow),...(l.kind==='pipe'?{velocityMps:project.getLinkValue(l.index,LinkProperty.Velocity)}:{})}));
+        const pressure = nodeSamples.find(n=>n.id==='101')?.pressureM ?? NaN;
+        const representativePipe = linkSamples.find(l=>l.id==='60');
+        const flow = representativePipe?.flowLps ?? NaN;
+        const velocity = representativePipe?.velocityMps ?? NaN;
+        const tankLevel = tankSamples.find(t=>t.id==='1')?.levelM ?? NaN;
 
         if (Number.isFinite(pressure)) {
           finitePressureSamples += 1;
@@ -77,7 +80,7 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
         }
         const currentHours = elapsedSeconds / 3600;
         if (Math.abs(currentHours - Math.round(currentHours)) < 1e-7) {
-          hourlySamples.push({timeHours:currentHours,pressureAt101M:pressure,pipe60FlowLps:flow,pipe60VelocityMps:velocity,tank1LevelM:tankLevel});
+          hourlySamples.push({timeHours:currentHours,nodes:nodeSamples,tanks:tankSamples,links:linkSamples});
         }
 
         dt = project.nextH();
@@ -137,6 +140,9 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
         benchmark: 'EPA Net3 / 168 hours',
         hydraulicPeriods,
         elapsedHours: elapsedSeconds / 3600,
+        junctionsCompared: junctions.length,
+        tanksCompared: tanks.length,
+        linksCompared: links.length,
         pressureAt101FinalM: samplePressure,
         pressureRangeAt101M: [minimumPressure, maximumPressure],
         riverIntakePipe60FinalFlowLps: sampleFlow,
