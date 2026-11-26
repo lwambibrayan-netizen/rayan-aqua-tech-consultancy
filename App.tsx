@@ -415,7 +415,7 @@ function App() {
       return;
     }
     try {
-      const response = await api.put(
+      const response = await api.post(
         '/api/projects/' + activeProject.id + '/docs/' + kind,
         { data }
       );
