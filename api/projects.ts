@@ -1,6 +1,6 @@
-import handler from './[...path]';
+import handler from './[...path].js';
 
 // Explicit Vercel function entrypoint for project collection requests.
-// The shared handler dispatches GET and POST /api/projects and enforces
-// Supabase authentication plus per-engineer project ownership.
+// Use the emitted .js extension because this project runs as native Node ESM.
+// The shared handler enforces Supabase authentication and per-engineer ownership.
 export default handler;
