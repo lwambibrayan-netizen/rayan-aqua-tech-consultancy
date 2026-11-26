@@ -32,7 +32,7 @@ async function bodyOf(request: Request): Promise<Json> {
   try { return record(await request.json()); } catch { return {}; }
 }
 async function upstreamJson(url: URL, init?: RequestInit): Promise<any> {
-  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(20000) });
+  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(120000) });
   const text = await response.text();
   let body: any;
   try { body = JSON.parse(text); } catch { body = { error: text.slice(0, 500) }; }
