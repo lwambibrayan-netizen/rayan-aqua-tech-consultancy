@@ -55,7 +55,7 @@ export function fromInp(raw:string):Net{
  raw.split(/\r?\n/).forEach(line=>{const s=line.split(';',1)[0].trim();if(!s)return;if(s.startsWith('[')&&s.endsWith(']')){section=s.slice(1,-1).toUpperCase();if(!sections.has(section))sections.set(section,[]);return}if(section)sections.get(section)!.push(s)});
  const rows=(name:string)=>sections.get(name)||[];const fields=(s:string)=>s.split(/\s+/);const coords=new Map<string,{x:number;y:number}>();const patterns=new Map<string,string>();
  rows('COORDINATES').forEach(s=>{const [id,x,y]=fields(s);if(id&&Number.isFinite(Number(x))&&Number.isFinite(Number(y)))coords.set(id,{x:Number(x),y:-Number(y)})});
- rows('PATTERNS').forEach(s=>{const f=fields(s),id=f[0];if(id)patterns.set(id,[...(patterns.get(id)||[]),...f.slice(1)].join(', '))});
+ rows('PATTERNS').forEach(s=>{const f=fields(s),id=f[0];if(id)patterns.set(id,[...(patterns.has(id)?[patterns.get(id)!]:[]),...f.slice(1)].join(', '))});
  const options=rows('OPTIONS').map(fields);const defaultPatternId=options.find(x=>x[0]?.toUpperCase()==='PATTERN')?.[1]||'1';const defaultDemandPattern=patterns.get(defaultPatternId)||'';const units=(options.find(x=>x[0]?.toUpperCase()==='UNITS')?.[1]||'LPS').toUpperCase();
  const unitFactors=getEpanetUnitFactors(units);const ff=unitFactors.flowToLps;const hf=unitFactors.lengthToM;const df=unitFactors.pipeDiameterToMm;const vf=unitFactors.tankVolumeToM3;const pf=unitFactors.pressureToM;const usCustomary=hf!==1;
  const headloss=(options.find(x=>x[0]?.toUpperCase()==='HEADLOSS')?.[1]||'H-W').toUpperCase();
