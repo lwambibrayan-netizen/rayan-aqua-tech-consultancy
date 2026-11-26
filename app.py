@@ -1,9 +1,10 @@
 """Dedicated PyQGIS terrain API. Run inside a QGIS-enabled Python image.
 Configure TERRAIN_DEM_PATH to a georeferenced DEM GeoTIFF. No DEM is fabricated.
 """
-import os, json, math, tempfile
+import os, json, math, tempfile, re, uuid
+from datetime import datetime, timezone
 from functools import wraps
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from qgis.core import QgsApplication, QgsRasterLayer, QgsVectorLayer, QgsProject, QgsPointXY, QgsGeometry, QgsFeature, QgsFields, QgsField, QgsVectorFileWriter, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsWkbTypes, QgsDistanceArea
 from qgis.PyQt.QtCore import QVariant
 import processing
@@ -72,6 +73,34 @@ def sample_profile(layer, coords, spacing):
             grades.append(max(0.0,(b["elevation_m"]-a["elevation_m"])/run*100))
     return {"profile":samples,"length_m":round(chain,2),"minimum_elevation_m":min(valid) if valid else None,"maximum_elevation_m":max(valid) if valid else None,"total_ascent_m":round(asc,2),"total_descent_m":round(desc,2),"maximum_uphill_grade_percent":round(max(grades,default=0.0),2)}
 
+def output_scope(user_id, project_id):
+    user_id=str(user_id or "").strip(); project_id=str(project_id or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}",user_id) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}",project_id):
+        raise ValueError("A valid authenticated user and project are required for persistent terrain outputs.")
+    root=os.path.realpath(os.environ.get("TERRAIN_OUTPUT_DIR","/data/terrain-outputs"))
+    folder=os.path.realpath(os.path.join(root,user_id,project_id))
+    if not folder.startswith(root+os.sep): raise ValueError("Invalid terrain output scope.")
+    os.makedirs(folder,exist_ok=True)
+    return folder
+
+def create_output_file(body, operation, extension):
+    folder=output_scope(body.get("userId"),body.get("projectId"))
+    output_id=uuid.uuid4().hex[:16]
+    return output_id,folder,os.path.join(folder,output_id+"."+extension)
+
+def persist_json_output(body, operation, payload, metadata=None):
+    output_id,folder,path=create_output_file(body,operation,"json")
+    record={"id":output_id,"operation":operation,"created_at":datetime.now(timezone.utc).isoformat(),"format":"application/json","metadata":metadata or {},"data":payload}
+    with open(path,"w",encoding="utf-8") as stream: json.dump(record,stream,separators=(",",":"),allow_nan=False)
+    return {"id":output_id,"operation":operation,"format":"application/json","saved":True,"created_at":record["created_at"]}
+
+def persist_raster_output(body, operation, raster_path, metadata=None, output_id=None, folder=None):
+    if not output_id or not folder: output_id,folder,_=create_output_file(body,operation,"tif")
+    record={"id":output_id,"operation":operation,"created_at":datetime.now(timezone.utc).isoformat(),"format":"image/tiff","file_name":os.path.basename(raster_path),"metadata":metadata or {}}
+    manifest=os.path.join(folder,output_id+".json")
+    with open(manifest,"w",encoding="utf-8") as stream: json.dump(record,stream,separators=(",",":"))
+    return {"id":output_id,"operation":operation,"format":"image/tiff","saved":True,"created_at":record["created_at"]}
+
 def layer_geojson(layer):
     path=os.path.join(tempfile.gettempdir(),"terrain-"+str(os.getpid())+".geojson")
     opts=QgsVectorFileWriter.SaveVectorOptions(); opts.driverName="GeoJSON"
@@ -79,6 +108,38 @@ def layer_geojson(layer):
     if result[0] != QgsVectorFileWriter.NoError: raise RuntimeError(str(result))
     with open(path,encoding="utf-8") as f: data=json.load(f)
     os.unlink(path); return data
+
+@app.get("/terrain/outputs")
+@auth
+def list_outputs():
+    try:
+        folder=output_scope(request.args.get("userId"),request.args.get("projectId"))
+        outputs=[]
+        for name in os.listdir(folder):
+            if not re.fullmatch(r"[a-f0-9]{16}\\.json",name): continue
+            try:
+                with open(os.path.join(folder,name),encoding="utf-8") as stream: item=json.load(stream)
+                outputs.append({k:item.get(k) for k in ("id","operation","created_at","format","metadata")})
+            except Exception: continue
+        outputs.sort(key=lambda item:item.get("created_at",""),reverse=True)
+        return jsonify(outputs=outputs)
+    except Exception as e: return jsonify(error=str(e)),400
+
+@app.get("/terrain/outputs/<output_id>")
+@auth
+def get_output(output_id):
+    if not re.fullmatch(r"[a-f0-9]{16}",output_id): return jsonify(error="Invalid terrain output ID."),400
+    try:
+        folder=output_scope(request.args.get("userId"),request.args.get("projectId"))
+        manifest=os.path.join(folder,output_id+".json")
+        if not os.path.isfile(manifest): return jsonify(error="Terrain output not found in this project."),404
+        with open(manifest,encoding="utf-8") as stream: item=json.load(stream)
+        if item.get("file_name"):
+            path=os.path.realpath(os.path.join(folder,item["file_name"]))
+            if not path.startswith(folder+os.sep) or not os.path.isfile(path): return jsonify(error="Stored terrain raster is missing."),404
+            return send_file(path,as_attachment=True,download_name=os.path.basename(path),mimetype="image/tiff")
+        return jsonify(item)
+    except Exception as e: return jsonify(error=str(e)),400
 
 @app.get("/health")
 @auth
