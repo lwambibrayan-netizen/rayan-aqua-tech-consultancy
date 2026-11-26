@@ -23,7 +23,7 @@ describe('EPANET velocity compliance diagnosis', () => {
     const warning = suggestions.find((message) => message.includes('PIPE-60'));
     expect(warning).toBeDefined();
     expect(warning).toContain('maximum simulated velocity 2.83 m/s');
-    expect(warning).toContain('exceeds the 2.00 m/s limit');
+    expect(warning).toContain('exceeds the 2 m/s limit');
     expect(warning).toContain('larger diameter or parallel pipeline options');
   });
 
