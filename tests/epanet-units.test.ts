@@ -29,6 +29,11 @@ describe('EPANET unit conversion', () => {
     expect(convertEmitterCoefficient(1, f.flowToLps, f.lengthToM)).toBeCloseTo(0.1143, 4);
   });
 
+  it('respects non-default EPANET emitter exponents', () => {
+    const f = getEpanetUnitFactors('GPM');
+    expect(convertEmitterCoefficient(1, f.flowToLps, f.lengthToM, 1)).toBeCloseTo(0.2070, 4);
+  });
+
   it('rejects unsupported unit labels instead of silently mis-scaling', () => {
     expect(() => getEpanetUnitFactors('UNKNOWN')).toThrow(/Unsupported EPANET flow unit/);
   });
