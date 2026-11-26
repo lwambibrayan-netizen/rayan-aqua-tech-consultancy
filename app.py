@@ -1,305 +1,278 @@
-"""Dedicated PyQGIS terrain API. Run inside a QGIS-enabled Python image.
-Configure TERRAIN_DEM_PATH to a georeferenced DEM GeoTIFF. No DEM is fabricated.
-"""
-import os, json, math, tempfile, re, uuid
-from datetime import datetime, timezone
-from functools import wraps
-from flask import Flask, request, jsonify, send_file
-from qgis.core import QgsApplication, QgsRasterLayer, QgsVectorLayer, QgsProject, QgsPointXY, QgsGeometry, QgsFeature, QgsFields, QgsField, QgsVectorFileWriter, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsWkbTypes, QgsDistanceArea
-from qgis.PyQt.QtCore import QVariant
-import processing
+import os,sys,json,math,hashlib,urllib.request,uuid,traceback
+from http.server import BaseHTTPRequestHandler,HTTPServer
+from urllib.parse import urlparse,parse_qs
+os.environ.setdefault("QT_QPA_PLATFORM","offscreen")
+os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN","EMPTY_DIR")
+sys.path.extend(["/usr/share/qgis/python","/usr/share/qgis/python/plugins"])
+from qgis.core import QgsApplication,QgsCoordinateReferenceSystem,QgsCoordinateTransform,QgsPointXY,QgsGeometry,QgsRectangle,QgsProject
+from osgeo import gdal,ogr,osr
+import numpy as np
+ROOT="/io/data/processing"; os.makedirs(ROOT,exist_ok=True)
+QgsApplication.setPrefixPath("/usr",True)
+app=QgsApplication([],False); app.initQgis()
 from processing.core.Processing import Processing
+Processing.initialize()
+gdal.UseExceptions()
+def send(h,code,obj):
+ raw=json.dumps(obj,allow_nan=False).encode()
+ h.send_response(code); h.send_header("Content-Type","application/json"); h.send_header("Content-Length",str(len(raw))); h.end_headers(); h.wfile.write(raw)
+def outdir(user,project):
+ key=hashlib.sha256((user+"|"+project).encode()).hexdigest()[:32]
+ p=os.path.join(ROOT,key); os.makedirs(p,exist_ok=True); return p
+def check_bbox(b):
+ w,s,e,n=[float(b[k]) for k in ("west","south","east","north")]
+ if not all(map(math.isfinite,[w,s,e,n])) or w>=e or s>=n or w< -180 or e>180 or s< -85 or n>85 or e-w>1.5 or n-s>1.5:
+  raise ValueError("Use a valid WGS84 bounding box no larger than 1.5 degrees per side.")
+ return w,s,e,n
+def tile_url(y,x,res):
+ ns=("S" if y<0 else "N")+("%02d"%abs(y))+"_00"
+ ew=("W" if x<0 else "E")+("%03d"%abs(x))+"_00"
+ tag="COG_10" if res==30 else "COG_30"
+ bucket="copernicus-dem-30m" if res==30 else "copernicus-dem-90m"
+ stem="Copernicus_DSM_"+tag+"_"+ns+"_"+ew+"_DEM"
+ return "https://"+bucket+".s3.amazonaws.com/"+stem+"/"+stem+".tif"
+def exists(url):
+ try:
+  req=urllib.request.Request(url,method="HEAD",headers={"User-Agent":"RayanAqua-PyQGIS/1.0"})
+  with urllib.request.urlopen(req,timeout=15) as r:return r.status==200
+ except Exception:return False
+def utm(lon,lat):
+ zone=max(1,min(60,int((lon+180)//6)+1))
+ return (32700 if lat<0 else 32600)+zone
+def dem_for(b,folder):
+ w,s,e,n=check_bbox(b)
+ tiles=[(y,x) for y in range(math.floor(s),math.floor(n)+1) for x in range(math.floor(w),math.floor(e)+1)]
+ if len(tiles)>9:raise ValueError("Split this analysis into smaller terrain areas.")
+ sources=[]; res=30
+ for y,x in tiles:
+  u=tile_url(y,x,30)
+  if not exists(u):
+   u=tile_url(y,x,90); res=90
+   if not exists(u):raise RuntimeError("No public Copernicus DEM tile for "+str((y,x))+". Upload a local GeoTIFF DEM for this area.")
+  sources.append("/vsicurl/"+u)
+ epsg=utm((w+e)/2,(s+n)/2)
+ tr=QgsCoordinateTransform(QgsCoordinateReferenceSystem("EPSG:4326"),QgsCoordinateReferenceSystem("EPSG:"+str(epsg)),QgsProject.instance())
+ r=tr.transformBoundingBox(QgsRectangle(w,s,e,n))
+ vrtpath="/vsimem/ra_"+uuid.uuid4().hex+".vrt"; vrt=gdal.BuildVRT(vrtpath,sources)
+ if vrt is None:raise RuntimeError("GDAL could not read the Copernicus DEM tiles.")
+ path=os.path.join(folder,"dem_"+uuid.uuid4().hex+".tif")
+ ds=gdal.Warp(path,vrt,dstSRS="EPSG:"+str(epsg),outputBounds=(r.xMinimum(),r.yMinimum(),r.xMaximum(),r.yMaximum()),outputBoundsSRS="EPSG:"+str(epsg),xRes=res,yRes=res,resampleAlg="bilinear",outputType=gdal.GDT_Float32,dstNodata=-9999,multithread=True)
+ vrt=None; gdal.Unlink(vrtpath)
+ if ds is None or ds.RasterXSize<2 or ds.RasterYSize<2:raise RuntimeError("DEM clipping and UTM reprojection failed.")
+ ds=None
+ return path,res,epsg
+def sample(ds,x,y):
+ gt=ds.GetGeoTransform(); col=int((x-gt[0])/gt[1]); row=int((y-gt[3])/gt[5])
+ if col<0 or row<0 or col>=ds.RasterXSize or row>=ds.RasterYSize:return None
+ a=ds.GetRasterBand(1).ReadAsArray(col,row,1,1)
+ if a is None:return None
+ z=float(a[0,0]); return z if math.isfinite(z) and z>-9990 else None
+def profile(ds,coords,spacing):
+ if not isinstance(coords,list) or len(coords)<2 or len(coords)>20000:raise ValueError("Each route needs at least two coordinate vertices.")
+ if spacing<5 or spacing>500:raise ValueError("Profile spacing must be between 5 m and 500 m.")
+ target=QgsCoordinateReferenceSystem(); target.createFromWkt(ds.GetProjection())
+ tr=QgsCoordinateTransform(QgsCoordinateReferenceSystem("EPSG:4326"),target,QgsProject.instance())
+ points=[]
+ for pair in coords:
+  lon,lat=float(pair[0]),float(pair[1])
+  if not math.isfinite(lon+lat) or abs(lon)>180 or abs(lat)>85:raise ValueError("Invalid route coordinate.")
+  points.append(tr.transform(QgsPointXY(lon,lat)))
+ geom=QgsGeometry.fromPolylineXY(points); length=geom.length()
+ if length<=0:raise ValueError("Pipeline route has zero length.")
+ distances=list(np.arange(0,length,spacing))
+ if not distances or length-distances[-1]>.01:distances.append(length)
+ rows=[]
+ for d in distances:
+  p=geom.interpolate(float(d)).asPoint(); z=sample(ds,p.x(),p.y())
+  rows.append({"chainage_m":round(float(d),2),"elevation_m":None if z is None else round(z,2)})
+ valid=[r["elevation_m"] for r in rows if r["elevation_m"] is not None]
+ if len(valid)<2:raise RuntimeError("Insufficient valid DEM samples along the route.")
+ up=down=0.0; grades=[]
+ for a,b in zip(rows,rows[1:]):
+  if a["elevation_m"] is None or b["elevation_m"] is None:continue
+  dz=b["elevation_m"]-a["elevation_m"]; up+=max(0,dz); down+=max(0,-dz)
+  dx=b["chainage_m"]-a["chainage_m"]
+  if dx:grades.append(dz/dx*100)
+ return {"length_m":round(length,2),"sample_spacing_m":spacing,"sample_count":len(rows),"valid_sample_count":len(valid),
+ "minimum_elevation_m":round(min(valid),2),"maximum_elevation_m":round(max(valid),2),
+ "start_elevation_m":rows[0]["elevation_m"],"end_elevation_m":rows[-1]["elevation_m"],
+ "net_elevation_change_m":round(valid[-1]-valid[0],2),"total_ascent_m":round(up,2),"total_descent_m":round(down,2),
+ "maximum_uphill_grade_percent":round(max([g for g in grades if g>0],default=0),2),
+ "maximum_downhill_grade_percent":round(min([g for g in grades if g<0],default=0),2),"profile":rows}
+def contour_geojson(path,interval,res):
+ if interval<=0 or interval>100:raise ValueError("Contour interval must be between 0 and 100 metres.")
+ dem=gdal.Open(path); mem=ogr.GetDriverByName("Memory").CreateDataSource("contours")
+ src=osr.SpatialReference(); src.ImportFromWkt(dem.GetProjection())
+ layer=mem.CreateLayer("contours",src,ogr.wkbLineString)
+ layer.CreateField(ogr.FieldDefn("ID",ogr.OFTInteger)); layer.CreateField(ogr.FieldDefn("ELEV_M",ogr.OFTReal))
+ gdal.ContourGenerate(dem.GetRasterBand(1),float(interval),0.0,[],0,-9999,layer,0,1)
+ dst=osr.SpatialReference(); dst.ImportFromEPSG(4326); ct=osr.CoordinateTransformation(src,dst)
+ features=[]; layer.ResetReading()
+ while True:
+  f=layer.GetNextFeature()
+  if f is None:break
+  g=f.GetGeometryRef().Clone(); g.Transform(ct); z=float(f.GetField("ELEV_M"))
+  features.append({"type":"Feature","id":int(f.GetField("ID")),"geometry":json.loads(g.ExportToJson()),
+   "properties":{"name":"Contour "+str(z)+" m","category":"Contour","contour_elevation_m":z,"elevation_source":"Copernicus DEM GLO-"+str(res)}})
+ mem=None; dem=None
+ return {"type":"FeatureCollection","features":features}
+def slope_stats(path):
+ dem=gdal.Open(path); target=os.path.join(os.path.dirname(path),"slope_"+uuid.uuid4().hex+".tif")
+ ds=gdal.DEMProcessing(target,dem,"slope",computeEdges=True,slopeFormat="degree")
+ if ds is None:raise RuntimeError("GDAL slope calculation failed.")
+ band=ds.GetRasterBand(1); a=band.ReadAsArray().astype("float64"); nd=band.GetNoDataValue()
+ valid=np.isfinite(a)
+ if nd is not None:valid &= a!=nd
+ v=a[valid]
+ if not v.size:raise RuntimeError("No valid slope cells.")
+ pct=lambda mask:round(float(np.mean(mask)*100),2)
+ result={"cell_count":int(v.size),"minimum_slope_degrees":round(float(v.min()),2),"maximum_slope_degrees":round(float(v.max()),2),"mean_slope_degrees":round(float(v.mean()),2),
+ "slope_classes_percent":{"0_to_2":pct((v>=0)&(v<2)),"2_to_5":pct((v>=2)&(v<5)),"5_to_10":pct((v>=5)&(v<10)),"10_to_20":pct((v>=10)&(v<20)),"above_20":pct(v>=20)}}
+ ds=None; dem=None
+ return result
 
-app=Flask(__name__)
-TOKEN=os.environ.get("PYQGIS_API_KEY","")
-DEM=os.environ.get("TERRAIN_DEM_PATH","/data/dem/project-dem.tif")
-QgsApplication.setPrefixPath(os.environ.get("QGIS_PREFIX_PATH","/usr"), True)
-qgs=QgsApplication([],False); qgs.initQgis(); Processing.initialize()
-project=QgsProject.instance()
+def least_cost_route(body,folder):
+ start=body.get("start"); end=body.get("end")
+ if not isinstance(start,list) or len(start)<2 or not isinstance(end,list) or len(end)<2: raise ValueError("Provide start and end as [longitude, latitude].")
+ sx,sy=float(start[0]),float(start[1]); ex,ey=float(end[0]),float(end[1])
+ if not all(map(math.isfinite,[sx,sy,ex,ey])) or max(abs(sx),abs(ex))>180 or max(abs(sy),abs(ey))>85: raise ValueError("Invalid route start or end coordinate.")
+ if math.hypot((ex-sx)*111320*math.cos(math.radians((sy+ey)/2)),(ey-sy)*111320)<1: raise ValueError("Choose start and end points at least 1 m apart.")
+ pad=max(0.003,math.hypot(ex-sx,ey-sy)*0.25)
+ bb={"west":min(sx,ex)-pad,"south":min(sy,ey)-pad,"east":max(sx,ex)+pad,"north":max(sy,ey)+pad}
+ dem,res,epsg=dem_for(bb,folder); src=gdal.Open(dem); band=src.GetRasterBand(1); arr=band.ReadAsArray().astype("float64")
+ nd=band.GetNoDataValue(); valid=np.isfinite(arr)
+ if nd is not None: valid &= arr!=nd
+ gt=src.GetGeoTransform()
+ wgs=osr.SpatialReference(); wgs.ImportFromEPSG(4326)
+ target=osr.SpatialReference(); target.ImportFromEPSG(int(epsg))
+ to_dem=osr.CoordinateTransformation(wgs,target); to_wgs=osr.CoordinateTransformation(target,wgs)
+ def rc(lon,lat):
+  x,y,_=to_dem.TransformPoint(lon,lat)
+  return int((y-gt[3])/gt[5]),int((x-gt[0])/gt[1])
+ sr,sc=rc(sx,sy); tr,tc=rc(ex,ey)
+ rows,cols=arr.shape
+ if not(0<=sr<rows and 0<=sc<cols and 0<=tr<rows and 0<=tc<cols): raise ValueError("Route endpoints fall outside the downloaded DEM coverage.")
+ grid_n=max(41,min(201,int(body.get("gridSize",121))))
+ rlo=max(0,min(sr,tr)-max(8,int(abs(tr-sr)*0.25))); rhi=min(rows-1,max(sr,tr)+max(8,int(abs(tr-sr)*0.25)))
+ clo=max(0,min(sc,tc)-max(8,int(abs(tc-sc)*0.25))); chi=min(cols-1,max(sc,tc)+max(8,int(abs(tc-sc)*0.25)))
+ rr=np.unique(np.rint(np.linspace(rlo,rhi,min(grid_n,max(2,rhi-rlo+1)))).astype(int))
+ cc=np.unique(np.rint(np.linspace(clo,chi,min(grid_n,max(2,chi-clo+1)))).astype(int))
+ if len(rr)<2 or len(cc)<2: raise ValueError("DEM coverage is too small for route analysis.")
+ sidx=(int(np.argmin(abs(rr-sr))),int(np.argmin(abs(cc-sc))))
+ tidx=(int(np.argmin(abs(rr-tr))),int(np.argmin(abs(cc-tc))))
+ elev=arr[np.ix_(rr,cc)]; ok=valid[np.ix_(rr,cc)]
+ if not ok[sidx] or not ok[tidx]: raise ValueError("A route endpoint has no valid DEM elevation.")
+ obs=[]
+ for f in body.get("obstacles",[]) if isinstance(body.get("obstacles",[]),list) else []:
+  geom=f.get("geometry",f) if isinstance(f,dict) else None
+  if geom and geom.get("type")=="Polygon":
+   g=ogr.CreateGeometryFromJson(json.dumps(geom))
+   if g: obs.append(g)
+ if obs:
+  for i,r in enumerate(rr):
+   for j,c in enumerate(cc):
+    if (i,j)==sidx or (i,j)==tidx: continue
+    x=gt[0]+(c+0.5)*gt[1]; y=gt[3]+(r+0.5)*gt[5]
+    lon,lat,_=to_wgs.TransformPoint(x,y); pt=ogr.Geometry(ogr.wkbPoint); pt.AddPoint(lon,lat)
+    if any(g.Contains(pt) for g in obs): ok[i,j]=False
+ weight=float(body.get("slopeWeight",8))
+ if not math.isfinite(weight) or weight<0 or weight>1000: raise ValueError("Slope weight must be from 0 to 1000.")
+ import heapq
+ dist={sidx:0.0}; prev={}; heap=[(0.0,sidx)]; dirs=[(-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]
+ while heap:
+  cost,u=heapq.heappop(heap)
+  if cost!=dist.get(u): continue
+  if u==tidx: break
+  i,j=u
+  for di,dj in dirs:
+   ni,nj=i+di,j+dj
+   if ni<0 or nj<0 or ni>=len(rr) or nj>=len(cc) or not ok[ni,nj]: continue
+   dz=abs(float(elev[ni,nj]-elev[i,j])); dx=abs(float(gt[1])*(cc[nj]-cc[j])); dy=abs(float(gt[5])*(rr[ni]-rr[i]))
+   horizontal=math.hypot(dx,dy)
+   if horizontal<=0: continue
+   nc=cost+horizontal*(1+weight*dz/horizontal); v=(ni,nj)
+   if nc<dist.get(v,float("inf")): dist[v]=nc; prev[v]=u; heapq.heappush(heap,(nc,v))
+ if tidx not in dist: raise ValueError("No route found through valid DEM cells; widen the corridor or review obstacles.")
+ path=[tidx]
+ while path[-1]!=sidx:path.append(prev[path[-1]])
+ path.reverse(); coords=[]; length=0.0; ascent=0.0; max_grade=0.0
+ for k,(i,j) in enumerate(path):
+  x=gt[0]+(cc[j]+0.5)*gt[1]; y=gt[3]+(rr[i]+0.5)*gt[5]
+  lon,lat,_=to_wgs.TransformPoint(x,y); coords.append([round(lon,7),round(lat,7)])
+  if k:
+   pi,pj=path[k-1]; d=math.hypot(float(gt[1])*(cc[j]-cc[pj]),float(gt[5])*(rr[i]-rr[pi]))
+   dz=float(elev[i,j]-elev[pi,pj]); length+=d; ascent+=max(0,dz); max_grade=max(max_grade,abs(dz)/max(d,1e-9)*100)
+ coords[0]=[sx,sy]; coords[-1]=[ex,ey]
+ return {"coordinates":coords,"length_m":round(length,2),"terrain_cost":round(dist[tidx],2),"total_ascent_m":round(ascent,2),"max_slope_percent":round(max_grade,2),"dem_source":"Copernicus DEM GLO-"+str(res),"dem_resolution_m":res,"grid_rows":len(rr),"grid_columns":len(cc),"routing_method":"PyQGIS/GDAL DEM Dijkstra","slope_weight":weight}
 
-def auth(fn):
-    @wraps(fn)
-    def wrapped(*a,**kw):
-        if not TOKEN or request.headers.get("Authorization") != "Bearer "+TOKEN:
-            return jsonify(error="Unauthorized"),401
-        return fn(*a,**kw)
-    return wrapped
-
-def dem_layer():
-    layer=QgsRasterLayer(DEM,"project DEM")
-    if not layer.isValid(): raise ValueError("No valid project DEM GeoTIFF is configured. Set TERRAIN_DEM_PATH to a surveyed or verified DEM.")
-    return layer
-
-def coords_route(coords):
-    if not isinstance(coords,list) or len(coords)<2: raise ValueError("Route requires at least two [longitude, latitude] coordinates.")
-    return [(float(p[0]),float(p[1])) for p in coords]
-
-def distance_measure(layer):
-    measure=QgsDistanceArea()
-    measure.setSourceCrs(layer.crs(),project.transformContext())
-    measure.setEllipsoid(project.ellipsoid() or "WGS84")
-    return measure
-
-def pixel_resolution_m(layer):
-    extent=layer.extent(); center=extent.center()
-    adjacent=QgsPointXY(center.x()+layer.rasterUnitsPerPixelX(),center.y())
-    return round(distance_measure(layer).measureLine(center,adjacent),2)
-
-def sample_profile(layer, coords, spacing):
-    if spacing<1 or spacing>1000: raise ValueError("Sample spacing must be 1–1000 m.")
-    crs=layer.crs(); wgs=QgsCoordinateReferenceSystem("EPSG:4326")
-    to_dem=QgsCoordinateTransform(wgs,crs,project)
-    pts=[to_dem.transform(QgsPointXY(x,y)) for x,y in coords]
-    measure=distance_measure(layer)
-    samples=[]; chain=0.0
-    for a,b in zip(pts,pts[1:]):
-        length=measure.measureLine(a,b)
-        n=max(1,math.ceil(length/spacing))
-        for i in range(n):
-            t=i/n; x=a.x()+(b.x()-a.x())*t; y=a.y()+(b.y()-a.y())*t
-            val=layer.dataProvider().identify(QgsPointXY(x,y),QgsRasterLayer.IdentifyFormatValue).results()
-            z=next((v for v in val.values() if isinstance(v,(int,float)) and math.isfinite(v)),None)
-            samples.append({"chainage_m":round(chain+length*t,2),"elevation_m":z})
-        chain+=length
-    val=layer.dataProvider().identify(pts[-1],QgsRasterLayer.IdentifyFormatValue).results()
-    z=next((v for v in val.values() if isinstance(v,(int,float)) and math.isfinite(v)),None)
-    samples.append({"chainage_m":round(chain,2),"elevation_m":z})
-    valid=[p["elevation_m"] for p in samples if p["elevation_m"] is not None]
-    asc=sum(max(0,b-a) for a,b in zip(valid,valid[1:])); desc=sum(max(0,a-b) for a,b in zip(valid,valid[1:]))
-    grades=[]
-    for a,b in zip(samples,samples[1:]):
-        run=b["chainage_m"]-a["chainage_m"]
-        if run>0 and a["elevation_m"] is not None and b["elevation_m"] is not None:
-            grades.append(max(0.0,(b["elevation_m"]-a["elevation_m"])/run*100))
-    return {"profile":samples,"length_m":round(chain,2),"minimum_elevation_m":min(valid) if valid else None,"maximum_elevation_m":max(valid) if valid else None,"total_ascent_m":round(asc,2),"total_descent_m":round(desc,2),"maximum_uphill_grade_percent":round(max(grades,default=0.0),2)}
-
-def output_scope(user_id, project_id):
-    user_id=str(user_id or "").strip(); project_id=str(project_id or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}",user_id) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}",project_id):
-        raise ValueError("A valid authenticated user and project are required for persistent terrain outputs.")
-    root=os.path.realpath(os.environ.get("TERRAIN_OUTPUT_DIR","/data/terrain-outputs"))
-    folder=os.path.realpath(os.path.join(root,user_id,project_id))
-    if not folder.startswith(root+os.sep): raise ValueError("Invalid terrain output scope.")
-    os.makedirs(folder,exist_ok=True)
-    return folder
-
-def create_output_file(body, operation, extension):
-    folder=output_scope(body.get("userId"),body.get("projectId"))
-    output_id=uuid.uuid4().hex[:16]
-    return output_id,folder,os.path.join(folder,output_id+"."+extension)
-
-def persist_json_output(body, operation, payload, metadata=None):
-    output_id,folder,path=create_output_file(body,operation,"json")
-    record={"id":output_id,"operation":operation,"created_at":datetime.now(timezone.utc).isoformat(),"format":"application/json","metadata":metadata or {},"data":payload}
-    with open(path,"w",encoding="utf-8") as stream: json.dump(record,stream,separators=(",",":"),allow_nan=False)
-    return {"id":output_id,"operation":operation,"format":"application/json","saved":True,"created_at":record["created_at"]}
-
-def persist_raster_output(body, operation, raster_path, metadata=None, output_id=None, folder=None):
-    if not output_id or not folder: output_id,folder,_=create_output_file(body,operation,"tif")
-    record={"id":output_id,"operation":operation,"created_at":datetime.now(timezone.utc).isoformat(),"format":"image/tiff","file_name":os.path.basename(raster_path),"metadata":metadata or {}}
-    manifest=os.path.join(folder,output_id+".json")
-    with open(manifest,"w",encoding="utf-8") as stream: json.dump(record,stream,separators=(",",":"))
-    return {"id":output_id,"operation":operation,"format":"image/tiff","saved":True,"created_at":record["created_at"]}
-
-def layer_geojson(layer):
-    path=os.path.join(tempfile.gettempdir(),"terrain-"+str(os.getpid())+".geojson")
-    opts=QgsVectorFileWriter.SaveVectorOptions(); opts.driverName="GeoJSON"
-    result=QgsVectorFileWriter.writeAsVectorFormatV3(layer,path,project.transformContext(),opts)
-    if result[0] != QgsVectorFileWriter.NoError: raise RuntimeError(str(result))
-    with open(path,encoding="utf-8") as f: data=json.load(f)
-    os.unlink(path); return data
-
-@app.get("/terrain/outputs")
-@auth
-def list_outputs():
-    try:
-        folder=output_scope(request.args.get("userId"),request.args.get("projectId"))
-        outputs=[]
-        for name in os.listdir(folder):
-            if not re.fullmatch(r"[a-f0-9]{16}\.json",name): continue
-            try:
-                with open(os.path.join(folder,name),encoding="utf-8") as stream: item=json.load(stream)
-                outputs.append({k:item.get(k) for k in ("id","operation","created_at","format","metadata")})
-            except Exception: continue
-        outputs.sort(key=lambda item:item.get("created_at",""),reverse=True)
-        return jsonify(outputs=outputs)
-    except Exception as e: return jsonify(error=str(e)),400
-
-@app.get("/terrain/outputs/<output_id>")
-@auth
-def get_output(output_id):
-    if not re.fullmatch(r"[a-f0-9]{16}",output_id): return jsonify(error="Invalid terrain output ID."),400
-    try:
-        folder=output_scope(request.args.get("userId"),request.args.get("projectId"))
-        manifest=os.path.join(folder,output_id+".json")
-        if not os.path.isfile(manifest): return jsonify(error="Terrain output not found in this project."),404
-        with open(manifest,encoding="utf-8") as stream: item=json.load(stream)
-        if item.get("file_name"):
-            path=os.path.realpath(os.path.join(folder,item["file_name"]))
-            if not path.startswith(folder+os.sep) or not os.path.isfile(path): return jsonify(error="Stored terrain raster is missing."),404
-            return send_file(path,as_attachment=True,download_name=os.path.basename(path),mimetype="image/tiff")
-        return jsonify(item)
-    except Exception as e: return jsonify(error=str(e)),400
-
-@app.get("/health")
-@auth
-def health(): return jsonify(status="ok",engine="PyQGIS",processing=True,dem_configured=os.path.isfile(DEM))
-
-@app.get("/dem/check")
-@auth
-def dem_check():
-    try:
-        layer=dem_layer()
-        return jsonify(copernicus_glo30_available=False,copernicus_glo90_available=False,local_dem_available=True,source=os.path.basename(DEM),resolution_m=pixel_resolution_m(layer),crs=layer.crs().authid(),note="Local DEM configured; confirm source and survey accuracy.")
-    except Exception as e:
-        return jsonify(copernicus_glo30_available=False,copernicus_glo90_available=False,local_dem_available=False,error=str(e),recommended_action="Configure TERRAIN_DEM_PATH with a verified GeoTIFF DEM.")
-
-@app.post("/terrain/profile")
-@auth
-def profile():
-    body=request.get_json(force=True); layer=dem_layer(); spacing=float(body.get("spacingM",30))
-    routes=[]
-    for r in body.get("routes",[]):
-        routes.append({"id":r.get("id"),"name":r.get("name","Route"),"profile_result":sample_profile(layer,coords_route(r.get("coordinates")),spacing)})
-    dem={"source":os.path.basename(DEM),"resolution_m":pixel_resolution_m(layer),"crs":layer.crs().authid()}
-    output=persist_json_output(body,"profile",{"routes":routes},{"dem":dem,"spacing_m":spacing})
-    return jsonify(dem=dem,routes=routes,output=output)
-
-@app.post("/terrain/compare")
-@auth
-def compare():
-    result=profile().get_json()
-    result["routes"].sort(key=lambda r:(r["profile_result"]["total_ascent_m"],r["profile_result"]["length_m"]))
-    for i,r in enumerate(result["routes"],1): r["rank"]=i
-    output=persist_json_output(request.get_json(force=True),"compare",{"routes":result["routes"]},{"dem":result.get("dem")})
-    result["output"]=output
-    return jsonify(result)
-
-@app.post("/terrain/contours")
-@auth
-def contours():
-    body=request.get_json(force=True); interval=float(body.get("contourIntervalM",5))
-    if interval<=0: return jsonify(error="Contour interval must be positive."),400
-    layer=dem_layer()
-    out=processing.run("gdal:contour",{"INPUT":layer,"BAND":1,"INTERVAL":interval,"FIELD_NAME":"elevation","CREATE_3D":False,"IGNORE_NODATA":True,"OUTPUT":"memory:"})["OUTPUT"]
-    contours_data=layer_geojson(out); dem={"source":os.path.basename(DEM),"resolution_m":pixel_resolution_m(layer),"crs":layer.crs().authid()}
-    output=persist_json_output(body,"contours",{"contours":contours_data},{"dem":dem,"contour_interval_m":interval})
-    return jsonify(contours=contours_data,dem=dem,output=output)
-
-@app.post("/terrain/slope")
-@auth
-def slope():
-    body=request.get_json(force=True); layer=dem_layer()
-    output_id,folder,raster_path=create_output_file(body,"slope","tif")
-    out=processing.run("native:slope",{"INPUT":layer,"Z_FACTOR":1,"OUTPUT":raster_path})["OUTPUT"]
-    metadata={"source":os.path.basename(DEM),"resolution_m":pixel_resolution_m(layer),"crs":layer.crs().authid(),"slope_crs":out.crs().authid()}
-    output=persist_raster_output(body,"slope",raster_path,metadata,output_id,folder)
-    return jsonify(message="Slope raster generated and saved by QGIS native:slope.",source=os.path.basename(raster_path),crs=out.crs().authid(),output=output)
-
-@app.post("/terrain/analyze")
-@auth
-def analyze():
-    body=request.get_json(force=True); layer=dem_layer()
-    interval=float(body.get("contourIntervalM",5))
-    if interval<=0: return jsonify(error="Contour interval must be positive."),400
-    contours=processing.run("gdal:contour",{"INPUT":layer,"BAND":1,"INTERVAL":interval,"FIELD_NAME":"elevation","CREATE_3D":False,"IGNORE_NODATA":True,"OUTPUT":"memory:"})["OUTPUT"]
-    contours_data=layer_geojson(contours); dem={"source":os.path.basename(DEM),"resolution_m":pixel_resolution_m(layer),"crs":layer.crs().authid()}
-    contour_output=persist_json_output(body,"contours",{"contours":contours_data},{"dem":dem,"contour_interval_m":interval})
-    output_id,folder,raster_path=create_output_file(body,"slope","tif")
-    slope_layer=processing.run("native:slope",{"INPUT":layer,"Z_FACTOR":1,"OUTPUT":raster_path})["OUTPUT"]
-    slope_output=persist_raster_output(body,"slope",raster_path,{"dem":dem,"slope_crs":slope_layer.crs().authid()},output_id,folder)
-    return jsonify(contours=contours_data,slope={"source":os.path.basename(raster_path),"crs":slope_layer.crs().authid()},dem=dem,outputs=[contour_output,slope_output])
-
-@app.post("/terrain/least-cost")
-@auth
-def least_cost():
-    """Generate a DEM-derived least-cost pipeline corridor using QGIS raster sampling and Dijkstra."""
-    import heapq
-    body=request.get_json(force=True)
-    layer=dem_layer()
-    start=body.get("start"); end=body.get("end")
-    if not (isinstance(start,list) and len(start)>=2 and isinstance(end,list) and len(end)>=2):
-        return jsonify(error="Choose valid start and end points [longitude, latitude]."),400
-    start=(float(start[0]),float(start[1])); end=(float(end[0]),float(end[1]))
-    if not all(math.isfinite(v) for v in (*start,*end)) or start==end:
-        return jsonify(error="Start and end coordinates must be finite and different."),400
-    size=max(31,min(151,int(body.get("gridSize",81))))
-    slope_weight=max(0.0,min(100.0,float(body.get("slopeWeight",8))))
-    wgs=QgsCoordinateReferenceSystem("EPSG:4326")
-    to_dem=QgsCoordinateTransform(wgs,layer.crs(),project)
-    to_wgs=QgsCoordinateTransform(layer.crs(),wgs,project)
-    a=to_dem.transform(QgsPointXY(*start)); b=to_dem.transform(QgsPointXY(*end))
-    extent=layer.extent()
-    dx=b.x()-a.x(); dy=b.y()-a.y()
-    direct=math.hypot(dx,dy)
-    if direct < 1: return jsonify(error="Start and end points are too close to route."),400
-    pad=max(direct*0.30, pixel_resolution_m(layer)*5)
-    nx=size; ny=size
-    transform=layer.dataProvider()
-    obstacles=body.get("obstacles") or []
-    obstacle_geometries=[]
-    for item in obstacles:
-        try:
-            geom=QgsGeometry.fromJson(json.dumps(item.get("geometry",item)).encode("utf-8"))
-            if not geom.isEmpty():
-                geom.transform(QgsCoordinateTransform(wgs,layer.crs(),project))
-                obstacle_geometries.append(geom)
-        except Exception: pass
-    nodes=[]; valid=[]
-    for r in range(ny):
-        for c in range(nx):
-            t=c/(nx-1)
-            side=(r/(ny-1)-0.5)*2*pad
-            x=a.x()+dx*t-(dy/direct)*side
-            y=a.y()+dy*t+(dx/direct)*side
-            point=QgsPointXY(x,y)
-            if not extent.contains(point):
-                nodes.append(None); continue
-            values=transform.identify(point,QgsRasterLayer.IdentifyFormatValue).results()
-            z=next((float(v) for v in values.values() if isinstance(v,(int,float)) and math.isfinite(v) and abs(v)<1e6),None)
-            if z is None:
-                nodes.append(None); continue
-            geo=to_wgs.transform(point)
-            blocked=False
-            for geom in obstacle_geometries:
-                if geom.contains(QgsGeometry.fromPointXY(point)): blocked=True; break
-            nodes.append({"x":x,"y":y,"z":z,"geo":[geo.x(),geo.y()],"blocked":blocked})
-            if not blocked: valid.append(len(nodes)-1)
-    def nearest_index(point):
-        return min(valid,key=lambda i:(nodes[i]["x"]-point.x())**2+(nodes[i]["y"]-point.y())**2) if valid else None
-    source=nearest_index(a); target=nearest_index(b)
-    if source is None or target is None:
-        return jsonify(error="The configured DEM does not cover the selected start/end corridor, or obstacles block it."),422
-    dist=[float("inf")]*len(nodes); prev=[-1]*len(nodes); dist[source]=0
-    queue=[(0.0,source)]; visited=set()
-    while queue:
-        cost,u=heapq.heappop(queue)
-        if u in visited: continue
-        visited.add(u)
-        if u==target: break
-        row,col=divmod(u,nx)
-        for rr in range(max(0,row-1),min(ny,row+2)):
-            for cc in range(max(0,col-1),min(nx,col+2)):
-                v=rr*nx+cc
-                if v==u or nodes[v] is None or nodes[v]["blocked"] or v in visited: continue
-                p=nodes[u]; q=nodes[v]
-                horizontal=math.hypot(q["x"]-p["x"],q["y"]-p["y"])
-                grade=abs(q["z"]-p["z"])/max(horizontal,0.1)
-                candidate=cost+horizontal*(1+slope_weight*grade*grade)
-                if candidate<dist[v]:
-                    dist[v]=candidate; prev[v]=u; heapq.heappush(queue,(candidate,v))
-    if not math.isfinite(dist[target]):
-        return jsonify(error="No traversable DEM route found. Widen the corridor or review obstacle polygons."),422
-    indices=[]; cur=target
-    while cur!=-1:
-        indices.append(cur); cur=prev[cur]
-    indices.reverse()
-    coords=[nodes[i]["geo"] for i in indices]
-    coords[0]=list(start); coords[-1]=list(end)
-    profile_result=sample_profile(layer,coords,max(5.0,pixel_resolution_m(layer)))
-    route={"coordinates":coords,"routing_method":"QGIS DEM-grid Dijkstra","dem_source":os.path.basename(DEM),"dem_resolution_m":pixel_resolution_m(layer),"terrain_cost":round(dist[target],3),"length_m":profile_result["length_m"],"max_slope_percent":profile_result["maximum_uphill_grade_percent"],"total_ascent_m":profile_result["total_ascent_m"],"total_descent_m":profile_result["total_descent_m"],"slope_weight":slope_weight,"grid_rows":ny,"grid_columns":nx}
-    dem={"source":os.path.basename(DEM),"resolution_m":pixel_resolution_m(layer),"crs":layer.crs().authid()}
-    output=persist_json_output(body,"least-cost",{"route":route,"dem":dem},{"start":list(start),"end":list(end)})
-    return jsonify(route=route,dem=dem,output=output)
-
-if __name__=="__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","8080")))
+class Handler(BaseHTTPRequestHandler):
+ def log_message(self,fmt,*args):print("PYQGIS "+(fmt%args),flush=True)
+ def do_GET(self):
+  path=urlparse(self.path).path
+  if path=="/health":
+   send(self,200,{"status":"ok","service":"RayanAqua PyQGIS Processing API","qgis_version":"QGIS","processing_initialized":True,"dem_source":"Copernicus DEM GLO-30 with GLO-90 fallback"})
+  elif path=="/dem/check":
+   q=parse_qs(urlparse(self.path).query)
+   lat=float(q.get("lat",["-3.4"])[0]); lon=float(q.get("lon",["38.5"])[0])
+   if not math.isfinite(lat+lon) or abs(lat)>85 or abs(lon)>180: raise ValueError("Provide a valid latitude and longitude.")
+   y=math.floor(lat); x=math.floor(lon)
+   u30=tile_url(y,x,30); u90=tile_url(y,x,90)
+   a30=exists(u30); a90=exists(u90)
+   check={"tile":str(y)+","+str(x),"location":{"latitude":lat,"longitude":lon},"copernicus_glo30_available":a30,"copernicus_glo90_available":a90,"recommended_resolution_m":30 if a30 else 90 if a90 else None,"status":"available" if a30 or a90 else "no_public_tile"}
+   print("COPERNICUS_TILE_CHECK "+json.dumps(check),flush=True)
+   send(self,200,check)
+  elif path=="/algorithms":
+   ids=[a.id() for a in QgsApplication.processingRegistry().algorithms()]
+   send(self,200,{"count":len(ids),"algorithms":ids[:250]})
+  elif path=="/selftest":
+   folder=outdir("rayan-aqua-self-test","voi-terrain")
+   bb={"west":38.50,"south":-3.40,"east":38.51,"north":-3.39}
+   dem,res,epsg=dem_for(bb,folder)
+   contour_result=contour_geojson(dem,10,res)
+   slope_result=slope_stats(dem)
+   ds=gdal.Open(dem)
+   profile_result=profile(ds,[[38.501,-3.399],[38.509,-3.391]],30)
+   ds=None
+   report={"status":"passed","dem_source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"crs":"EPSG:"+str(epsg),"contour_features":len(contour_result["features"]),"slope_mean_degrees":slope_result["mean_slope_degrees"],"profile_sample_count":profile_result["sample_count"],"profile_valid_samples":profile_result["valid_sample_count"],"profile_min_elevation_m":profile_result["minimum_elevation_m"],"profile_max_elevation_m":profile_result["maximum_elevation_m"]}
+   print("PYQGIS_SELF_TEST "+json.dumps(report),flush=True)
+   send(self,200,report)
+  else:send(self,404,{"error":"Not found"})
+ def do_POST(self):
+  if self.headers.get("Authorization","")!="Bearer "+os.environ.get("PYQGIS_API_KEY",""):return send(self,401,{"error":"Unauthorized"})
+  try:
+   size=int(self.headers.get("Content-Length","0"))
+   if size<1 or size>10000000:return send(self,413,{"error":"Request body must be 1 byte to 10 MB."})
+   b=json.loads(self.rfile.read(size)); user=str(b.get("userId","")); project=str(b.get("projectId",""))
+   if not user or not project:return send(self,400,{"error":"Authenticated user and project IDs are required."})
+   folder=outdir(user,project); op=urlparse(self.path).path.rstrip("/")
+   if op.endswith("/terrain/least-cost"):
+    result=least_cost_route(b,folder)
+    send(self,200,{"route":result,"dem":{"source":result["dem_source"],"resolution_m":result["dem_resolution_m"]}})
+   elif op in ("/terrain/profile","/terrain/compare"):
+    routes=b.get("routes")
+    if not isinstance(routes,list) or not routes or len(routes)>20:raise ValueError("Provide 1 to 20 pipeline routes.")
+    pts=[p for r in routes for p in r.get("coordinates",[]) if isinstance(p,list) and len(p)>=2]
+    if len(pts)<2:raise ValueError("At least two route vertices are required.")
+    xs=[float(p[0]) for p in pts]; ys=[float(p[1]) for p in pts]; pad=max(.002,float(b.get("bufferDegrees",.003)))
+    bb={"west":min(xs)-pad,"south":min(ys)-pad,"east":max(xs)+pad,"north":max(ys)+pad}
+    dem,res,epsg=dem_for(bb,folder); ds=gdal.Open(dem); results=[]
+    for r in routes:results.append({"id":str(r.get("id","")),"name":str(r.get("name","Pipeline")),"profile_result":profile(ds,r.get("coordinates",[]),float(b.get("spacingM",30)))})
+    ds=None
+    if op.endswith("compare"):
+     results.sort(key=lambda r:(r["profile_result"]["length_m"],r["profile_result"]["total_ascent_m"]))
+     for i,r in enumerate(results):r["rank"]=i+1
+    send(self,200,{"dem":{"source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"type":"Digital Surface Model","crs":"EPSG:"+str(epsg),"bbox":bb},"routes":results,"comparison":op.endswith("compare")})
+   elif op in ("/terrain/contours","/terrain/slope","/terrain/analyze"):
+    w,s,e,n=check_bbox(b.get("bbox",{})); bb={"west":w,"south":s,"east":e,"north":n}
+    dem,res,epsg=dem_for(bb,folder)
+    result={"dem":{"source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"type":"Digital Surface Model","crs":"EPSG:"+str(epsg),"bbox":bb}}
+    if op in ("/terrain/contours","/terrain/analyze"):result["contours"]=contour_geojson(dem,float(b.get("contourIntervalM",5)),res)
+    if op in ("/terrain/slope","/terrain/analyze"):result["slope"]=slope_stats(dem)
+    send(self,200,result)
+   else:send(self,404,{"error":"Unknown terrain operation"})
+  except ValueError as ex:send(self,400,{"error":str(ex)})
+  except Exception as ex:
+   print(traceback.format_exc(),flush=True); send(self,500,{"error":"PyQGIS processing failed: "+str(ex)[:450]})
+port=int(os.environ.get("PORT","8080"))
+print("Starting RayanAqua PyQGIS Processing API on",port,flush=True)
+HTTPServer(("0.0.0.0",port),Handler).serve_forever()
