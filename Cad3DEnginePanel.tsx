@@ -32,6 +32,19 @@ function exportDxf(shapes: Shape[]) {
     '0', 'SECTION', '2', 'ENTITIES',
   ];
   shapes.forEach(shape => {
+    // A rectangle is four edges, not a two-vertex diagonal polyline.
+    if (shape.type === 'rect') {
+      const [a, b] = shape.points;
+      const corners = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
+      for (let i = 0; i < 4; i++) {
+        const start = corners[i];
+        const end = corners[(i + 1) % 4];
+        output.push('0', 'LINE', '8', shape.layer || '0',
+          '10', String(start.x), '20', String(start.y),
+          '11', String(end.x), '21', String(end.y));
+      }
+      return;
+    }
     output.push(
       '0',
       shape.type === 'line' ? 'LINE' : shape.type === 'circle' ? 'CIRCLE' : 'LWPOLYLINE',
@@ -364,7 +377,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       return;
     }
     const features = sourceFeatures.filter(feature =>
-      ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon'].includes(feature.geometry?.type)
+      ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon'].includes(feature.geometry?.type)
     );
     if (!features.length) {
       setMessage('No supported saved GIS features were found. Save the GIS draft first, then retry CAD import.');
