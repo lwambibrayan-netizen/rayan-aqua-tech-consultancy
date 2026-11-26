@@ -1106,7 +1106,11 @@ function App() {
                   <strong>GIS processing scope</strong>
                   <p>Interactive mapping, editable feature layers, GeoJSON exchange and geometry measurements run in this workspace. Full QGIS/PyQGIS Processing for DEM terrain analysis, watershed delineation and advanced raster processing still requires a connected QGIS processing runtime; those capabilities are not represented as active here.</p>
                 </div>
-              </d{section === 'BOQ' && (
+              </div>
+            </div>
+          )}
+
+          {section === 'BOQ' && (
             <div className="module-layout">
               <div className="page-intro">
                 <div>
@@ -1132,10 +1136,6 @@ function App() {
                   />
                 </>
               )}
-            </div>
-          )}
-
-           )}
             </div>
           )}
 
