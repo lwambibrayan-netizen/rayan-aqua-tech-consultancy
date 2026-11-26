@@ -46,7 +46,7 @@ node_quality = ref.node["quality"]
 junction_ids = sorted(name for name, _node in wn.junctions())
 tank_ids = sorted(name for name, _node in wn.tanks())
 link_ids = sorted(name for name, _link in wn.links())
-pipe_ids = sorted(l.name for l in wn.pipe_name_list)
+pipe_ids = sorted(wn.pipe_name_list)
 require(len(junction_ids) == 92, f"Expected 92 junctions, got {len(junction_ids)}")
 require(len(tank_ids) == 3, f"Expected 3 tanks, got {len(tank_ids)}")
 require(len(link_ids) == 119, f"Expected 119 links, got {len(link_ids)}")
