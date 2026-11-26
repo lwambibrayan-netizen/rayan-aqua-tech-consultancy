@@ -30,6 +30,7 @@ describe('EPA Net3 EPANET benchmark import', () => {
     expect(tank?.elevation).toBeCloseTo(40.20312, 4);
     expect(tank?.initialLevel).toBeCloseTo(3.99288, 4);
     expect(tank?.diameter).toBeCloseTo(25.908, 3);
+    expect(tank?.volumeCurve).toBeUndefined();
     expect(pipe?.length).toBeCloseTo(375.2088, 3);
     expect(pipe?.diameter).toBeCloseTo(609.6, 2);
   });
