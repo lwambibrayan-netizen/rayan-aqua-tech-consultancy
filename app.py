@@ -138,6 +138,88 @@ def analyze():
 @app.post("/terrain/least-cost")
 @auth
 def least_cost():
-    return jsonify(error="Least-cost routing requires a project-specific cost raster and obstacle layer. Supply these as configured layers before routing; the service will not invent terrain or obstacle data."),422
+    """Generate a DEM-derived least-cost pipeline corridor using QGIS raster sampling and Dijkstra."""
+    import heapq
+    body=request.get_json(force=True)
+    layer=dem_layer()
+    start=body.get("start"); end=body.get("end")
+    if not (isinstance(start,list) and len(start)>=2 and isinstance(end,list) and len(end)>=2):
+        return jsonify(error="Choose valid start and end points [longitude, latitude]."),400
+    start=(float(start[0]),float(start[1])); end=(float(end[0]),float(end[1]))
+    if not all(math.isfinite(v) for v in (*start,*end)) or start==end:
+        return jsonify(error="Start and end coordinates must be finite and different."),400
+    size=max(31,min(151,int(body.get("gridSize",81))))
+    slope_weight=max(0.0,min(100.0,float(body.get("slopeWeight",8))))
+    wgs=QgsCoordinateReferenceSystem("EPSG:4326")
+    to_dem=QgsCoordinateTransform(wgs,layer.crs(),project)
+    to_wgs=QgsCoordinateTransform(layer.crs(),wgs,project)
+    a=to_dem.transform(QgsPointXY(*start)); b=to_dem.transform(QgsPointXY(*end))
+    extent=layer.extent()
+    dx=b.x()-a.x(); dy=b.y()-a.y()
+    direct=math.hypot(dx,dy)
+    if direct < 1: return jsonify(error="Start and end points are too close to route."),400
+    pad=max(direct*0.30, pixel_resolution_m(layer)*5)
+    nx=size; ny=size
+    transform=layer.dataProvider()
+    obstacles=body.get("obstacles") or []
+    obstacle_geometries=[]
+    for item in obstacles:
+        try:
+            geom=QgsGeometry.fromJson(json.dumps(item.get("geometry",item)).encode("utf-8"))
+            if not geom.isEmpty(): obstacle_geometries.append(geom)
+        except Exception: pass
+    nodes=[]; valid=[]
+    for r in range(ny):
+        for c in range(nx):
+            t=c/(nx-1)
+            side=(r/(ny-1)-0.5)*2*pad
+            x=a.x()+dx*t-(dy/direct)*side
+            y=a.y()+dy*t+(dx/direct)*side
+            point=QgsPointXY(x,y)
+            if not extent.contains(point):
+                nodes.append(None); continue
+            values=transform.identify(point,QgsRasterLayer.IdentifyFormatValue).results()
+            z=next((float(v) for v in values.values() if isinstance(v,(int,float)) and math.isfinite(v) and abs(v)<1e6),None)
+            if z is None:
+                nodes.append(None); continue
+            geo=to_wgs.transform(point)
+            blocked=False
+            for geom in obstacle_geometries:
+                if geom.contains(QgsGeometry.fromPointXY(point)): blocked=True; break
+            nodes.append({"x":x,"y":y,"z":z,"geo":[geo.x(),geo.y()],"blocked":blocked})
+            if not blocked: valid.append(len(nodes)-1)
+    def nearest_index(point):
+        return min(valid,key=lambda i:(nodes[i]["x"]-point.x())**2+(nodes[i]["y"]-point.y())**2) if valid else None
+    source=nearest_index(a); target=nearest_index(b)
+    if source is None or target is None:
+        return jsonify(error="The configured DEM does not cover the selected start/end corridor, or obstacles block it."),422
+    dist=[float("inf")]*len(nodes); prev=[-1]*len(nodes); dist[source]=0
+    queue=[(0.0,source)]; visited=set()
+    while queue:
+        cost,u=heapq.heappop(queue)
+        if u in visited: continue
+        visited.add(u)
+        if u==target: break
+        row,col=divmod(u,nx)
+        for rr in range(max(0,row-1),min(ny,row+2)):
+            for cc in range(max(0,col-1),min(nx,col+2)):
+                v=rr*nx+cc
+                if v==u or nodes[v] is None or nodes[v]["blocked"] or v in visited: continue
+                p=nodes[u]; q=nodes[v]
+                horizontal=math.hypot(q["x"]-p["x"],q["y"]-p["y"])
+                grade=abs(q["z"]-p["z"])/max(horizontal,0.1)
+                candidate=cost+horizontal*(1+slope_weight*grade*grade)
+                if candidate<dist[v]:
+                    dist[v]=candidate; prev[v]=u; heapq.heappush(queue,(candidate,v))
+    if not math.isfinite(dist[target]):
+        return jsonify(error="No traversable DEM route found. Widen the corridor or review obstacle polygons."),422
+    indices=[]; cur=target
+    while cur!=-1:
+        indices.append(cur); cur=prev[cur]
+    indices.reverse()
+    coords=[nodes[i]["geo"] for i in indices]
+    coords[0]=list(start); coords[-1]=list(end)
+    profile_result=sample_profile(layer,coords,max(5.0,pixel_resolution_m(layer)))
+    return jsonify(route={"coordinates":coords,"routing_method":"QGIS DEM-grid Dijkstra","dem_source":os.path.basename(DEM),"dem_resolution_m":pixel_resolution_m(layer),"terrain_cost":round(dist[target],3),"length_m":profile_result["length_m"],"max_slope_percent":profile_result["maximum_uphill_grade_percent"],"total_ascent_m":profile_result["total_ascent_m"],"total_descent_m":profile_result["total_descent_m"],"slope_weight":slope_weight,"grid_rows":ny,"grid_columns":nx},dem={"source":os.path.basename(DEM),"resolution_m":pixel_resolution_m(layer),"crs":layer.crs().authid()})
 
 if __name__=="__main__": app.run(host="0.0.0.0",port=int(os.environ.get("PORT","8080")))
