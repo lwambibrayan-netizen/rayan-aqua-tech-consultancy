@@ -76,15 +76,15 @@ function fromInp(raw:string):Net{
  return {nodes,links,settings:{duration:Number.isFinite(duration)?duration:0,step:Number.isFinite(step)&&step>0?step:1,patternStep:Number.isFinite(patternStep)&&patternStep>0?patternStep:1,demandPattern:'',minPressure:15,maxPressure:60,minVelocity:.3,maxVelocity:2,headloss:['H-W','D-W','C-M'].includes(headloss)?headloss as S['headloss']:'H-W',pumpEfficiency:75,energyTariff:30,operatingHoursPerDay:12,qualityMode,qualityUnits:qualityOption[1]||'Chlorine',qualityStepMinutes:Number.isFinite(qualityStepMinutes)&&qualityStepMinutes>0?qualityStepMinutes:5,qualitySourceNode:source?.[0]||'',qualitySourceConcentration:Number(source?.[2]||1),qualityTraceNode:qualityMode==='trace'?qualityOption[2]||'':'',qualityBulkReaction:Number.isFinite(bulk)?bulk:-0.5,qualityWallReaction:Number.isFinite(wall)?wall:-0.1,tankControls,timeControls,ruleControls},inpExtras};
 }
 function validate(net:Net){
- const e:string[]=[],ids=new Set<string>();
- net.nodes.forEach(n=>{if(!idOk(n.id)||ids.has(n.id))e.push('Node IDs must be unique and use up to 31 letters, numbers, dots, dashes or underscores.');ids.add(n.id);
+ const e:string[]=[],nodeIds=new Set<string>(),linkIds=new Set<string>();
+ net.nodes.forEach(n=>{if(!idOk(n.id)||nodeIds.has(n.id))e.push('Node IDs must be unique within the node list and use up to 31 letters, numbers, dots, dashes or underscores.');nodeIds.add(n.id);
   if(n.kind==='J'&&n.demand<0)e.push(n.id+': demand cannot be negative.');
   if(n.emitterCoefficient!==undefined&&(!Number.isFinite(n.emitterCoefficient)||n.emitterCoefficient<0))e.push(n.id+': emitter leakage coefficient must be zero or positive.');
   if(n.initialQuality!==undefined&&(!Number.isFinite(n.initialQuality)||n.initialQuality<0))e.push(n.id+': initial water quality cannot be negative.');
   if(n.kind==='R'&&!(n.head>0))e.push(n.id+': enter a positive reservoir head.');
   if(n.kind==='T'&&(!(n.diameter>0)||n.minLevel>n.initialLevel||n.initialLevel>n.maxLevel))e.push(n.id+': check tank diameter and minimum ≤ initial ≤ maximum levels.');
  });
- net.links.forEach(l=>{if(!idOk(l.id)||ids.has(l.id))e.push('Pipe, pump and valve IDs must be unique.');ids.add(l.id);
+ net.links.forEach(l=>{if(!idOk(l.id)||linkIds.has(l.id))e.push('Pipe, pump and valve IDs must be unique within the link list.');linkIds.add(l.id);
   if(!net.nodes.some(n=>n.id===l.from)||!net.nodes.some(n=>n.id===l.to)||l.from===l.to)e.push(l.id+': connect two different existing nodes.');
   if(l.kind==='pipe'&&(!(l.length>0)||!(l.diameter>0)||!(l.roughness>0)))e.push(l.id+': length, diameter and roughness must be positive.');
   if(l.kind==='pump'){if(l.pumpPower!==undefined){if(!Number.isFinite(l.pumpPower)||l.pumpPower<=0)e.push(l.id+': rated pump power must be positive HP.');}else{const pts=l.pumpCurve.split(',').map(z=>z.trim().split(':').map(Number));if(pts.length<2||pts.some(p=>p.length!==2||!p.every(Number.isFinite)||p[0]<0||p[1]<=0))e.push(l.id+': enter positive manufacturer pump-curve pairs as flow L/s : head m, e.g. 5:62, 10:55, 15:42.');else if(new Set(pts.map(p=>p[0])).size!==pts.length)e.push(l.id+': pump-curve flow values must be unique.');else if(pts.some((p,i)=>i>0&&(p[0]<=pts[i-1][0]||p[1]>pts[i-1][1])))e.push(l.id+': order pump-curve points by increasing flow and non-increasing head. Check the manufacturer curve data.');}}
