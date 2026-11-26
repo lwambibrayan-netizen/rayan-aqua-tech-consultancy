@@ -190,14 +190,14 @@ export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=
    await ws.loadModule();m=new EpanetProject(ws);ws.writeFile('rayan-sketch.inp',toInp(net));m.open('rayan-sketch.inp','rayan-report.rpt','rayan-output.bin');opened=true;
    m.openH();hopen=true;m.initH(InitHydOption.SaveAndInit);
    const min:Record<string,number>={},max:Record<string,number>={},minV:Record<string,number>={},maxV:Record<string,number>={},nr:Record<string,NR>={},lr:Record<string,LR>={},nodeHeads:Record<string,number>={},pumpAcc:Record<string,{flowHours:number;headHours:number;powerHours:number;energyKwh:number;peakPowerKw:number}>={};
-   const leakAcc:Record<string,{coefficient:number;flowHours:number;peak:number;volumeM3:number}>={};
-   net.nodes.filter(n=>n.kind==='J').forEach(n=>{min[n.id]=Infinity;max[n.id]=-Infinity;if((n.emitterCoefficient||0)>0)leakAcc[n.id]={coefficient:n.emitterCoefficient||0,flowHours:0,peak:0,volumeM3:0}});
+   const leakAcc:Record<string,{coefficient:number;flowHours:number;peak:number;volumeM3:number;lastFlow:number}>={};
+   net.nodes.filter(n=>n.kind==='J').forEach(n=>{min[n.id]=Infinity;max[n.id]=-Infinity;if((n.emitterCoefficient||0)>0)leakAcc[n.id]={coefficient:n.emitterCoefficient||0,flowHours:0,peak:0,volumeM3:0,lastFlow:0}});
    net.links.filter(l=>l.kind==='pump').forEach(l=>{pumpAcc[l.id]={flowHours:0,headHours:0,powerHours:0,energyKwh:0,peakPowerKw:0}});
    let periods=0,dt=Infinity,totalHours=0;
    do{
     m.runH();periods++;
     net.nodes.forEach(n=>{const i=m!.getNodeIndex(n.id);nodeHeads[n.id]=m!.getNodeValue(i,NodeProperty.Head)});
-    net.nodes.filter(n=>n.kind==='J').forEach(n=>{const i=m!.getNodeIndex(n.id),p=m!.getNodeValue(i,NodeProperty.Pressure),h=nodeHeads[n.id];min[n.id]=Math.min(min[n.id],p);max[n.id]=Math.max(max[n.id],p);nr[n.id]={id:n.id,pressure:p,minPressure:min[n.id],maxPressure:max[n.id],head:h};
+    net.nodes.filter(n=>n.kind==='J').forEach(n=>{const i=m!.getNodeIndex(n.id),p=m!.getNodeValue(i,NodeProperty.Pressure),h=nodeHeads[n.id];min[n.id]=Math.min(min[n.id],p);max[n.id]=Math.max(max[n.id],p);nr[n.id]={id:n.id,pressure:p,minPressure:min[n.id],maxPressure:max[n.id],head:h};const leak=leakAcc[n.id];if(leak){leak.lastFlow=leak.coefficient*Math.sqrt(Math.max(0,p));leak.peak=Math.max(leak.peak,leak.lastFlow);}
      
     });
     net.links.forEach(l=>{const i=m!.getLinkIndex(l.id),q=m!.getLinkValue(i,LinkProperty.Flow),v=m!.getLinkValue(i,LinkProperty.Velocity),hl=m!.getLinkValue(i,LinkProperty.Headloss),st=m!.getLinkValue(i,LinkProperty.Status);minV[l.id]=Math.min(minV[l.id]??Infinity,Math.abs(v));maxV[l.id]=Math.max(maxV[l.id]??0,Math.abs(v));lr[l.id]={id:l.id,kind:l.kind,flow:q,velocity:v,minVelocity:minV[l.id],maxVelocity:maxV[l.id],headloss:hl,status:st===0?'Closed':'Open'};});
@@ -226,7 +226,7 @@ export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=
    m.close();opened=false;
    const report=String(ws.readFile('rayan-report.rpt','utf8')??''),nodes=Object.values(nr),links=Object.values(lr),eff=net.settings.pumpEfficiency??75,tariff=net.settings.energyTariff??30,operatingHours=net.settings.operatingHoursPerDay??12;
    const pumpEnergy:PumpEnergy[]=net.links.filter(l=>l.kind==='pump').map(l=>{const a=pumpAcc[l.id],averageFlow=totalHours?a.flowHours/totalHours:0,averageHead=totalHours?a.headHours/totalHours:0,averagePowerKw=totalHours?a.powerHours/totalHours:0;return {id:l.id,averageFlow,averageHead,averagePowerKw,peakPowerKw:a.peakPowerKw,energyKwh:a.energyKwh,simulatedCost:a.energyKwh*tariff,projectedDailyCost:averagePowerKw*operatingHours*tariff}});
-   const emitters=Object.entries(leakAcc).map(([id,a])=>({id,coefficient:a.coefficient,averageFlowLps:totalHours?a.flowHours/totalHours:0,peakFlowLps:a.peak,volumeM3:a.volumeM3}));
+   const emitters=Object.entries(leakAcc).map(([id,a])=>({id,coefficient:a.coefficient,averageFlowLps:totalHours?a.flowHours/totalHours:a.lastFlow,peakFlowLps:a.peak,volumeM3:a.volumeM3}));
    const leakage=emitters.length?{totalAverageLps:emitters.reduce((v,x)=>v+x.averageFlowLps,0),totalPeakLps:emitters.reduce((v,x)=>v+x.peakFlowLps,0),totalVolumeM3:emitters.reduce((v,x)=>v+x.volumeM3,0),emitters}:undefined;
    const result:Sim={at:new Date().toISOString(),periods,nodes,links,report,suggestions:diagnose(net,nodes,links),nodeHeads,pumpEnergy,pumpEfficiency:eff,energyTariff:tariff,operatingHoursPerDay:operatingHours,simulationHours:totalHours,leakage,waterQuality};
    setSim(result);setNote('EPANET solved '+periods+' hydraulic period(s)'+(waterQuality?' and '+waterQuality.periods+' water-quality periods':'')+'. Review leakage and quality results.');
