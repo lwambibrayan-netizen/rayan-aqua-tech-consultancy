@@ -87,7 +87,8 @@ function validate(net:Net){
   if(l.kind==='valve'&&!(l.diameter>0))e.push(l.id+': valve diameter must be positive.');
  });
  if(!net.nodes.some(n=>n.kind==='R'||n.kind==='T'))e.push('Add at least one reservoir or tank.');
- if((net.settings.qualityMode||'none')==='trace'&&!(net.settings.qualityTraceNode||net.settings.qualitySourceNode))e.push('Select a trace-source node for source-tracing analysis.');\n if((net.settings.qualityMode||'none')==='trace'&&(!Number.isFinite(net.settings.minSourceContributionPct??80)||(net.settings.minSourceContributionPct??80)<0||(net.settings.minSourceContributionPct??80)>100))e.push('Minimum source contribution target must be between 0 and 100%.');
+ if((net.settings.qualityMode||'none')==='trace'&&!(net.settings.qualityTraceNode||net.settings.qualitySourceNode))e.push('Select a trace-source node for source-tracing analysis.');
+ if((net.settings.qualityMode||'none')==='trace'&&(!Number.isFinite(net.settings.minSourceContributionPct??80)||(net.settings.minSourceContributionPct??80)<0||(net.settings.minSourceContributionPct??80)>100))e.push('Minimum source contribution target must be between 0 and 100%.');
  if((net.settings.qualityMode||'none')==='chemical'&&net.settings.qualitySourceNode&&!net.nodes.some(n=>n.id===net.settings.qualitySourceNode))e.push('The water-quality source node does not exist in this network.');
  if((net.settings.qualityMode||'none')!=='none'&&(!(net.settings.qualityStepMinutes||5)||(net.settings.qualityStepMinutes||5)<=0))e.push('Water-quality timestep must be greater than zero.');
  if(!(net.settings.step>0)||net.settings.duration<0)e.push('Simulation duration and time step are invalid.');
