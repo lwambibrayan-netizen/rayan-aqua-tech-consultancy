@@ -3,6 +3,7 @@ import EpanetEnginePanel from './EpanetEnginePanel';
 import GisEnginePanel from './GisEnginePanel';
 import Cad3DEnginePanel from './Cad3DEnginePanel';
 import BoqEnginePanel from './BoqEnginePanel';
+import ReportGenerator from './ReportGenerator';
 import { api, auth } from './client';
 import {
   Activity,
@@ -1175,14 +1176,9 @@ function App() {
             <div className="module-layout">
               <div className="page-intro">
                 <div>
-                  <span className="eyebrow muted">
-                    ENGINEERING DOCUMENTATION
-                  </span>
+                  <span className="eyebrow muted">ENGINEERING DOCUMENTATION</span>
                   <h1>Project reports</h1>
-                  <p>
-                    Prepare and save design notes, assumptions, findings and
-                    recommendations.
-                  </p>
+                  <p>Generate a structured engineering report from the currently opened project's saved design, analysis and cost records.</p>
                 </div>
               </div>
               {!activeProject ? (
@@ -1190,58 +1186,19 @@ function App() {
               ) : (
                 <>
                   <div className="active-project-strip">
-                    <span>
-                      <FileText size={17} /> {activeProject.title}
-                    </span>
-                    <span className="status-pill">
-                      {reportDoc
-                        ? 'Saved version ' + reportDoc.version
-                        : 'Draft report'}
-                    </span>
+                    <span><FileText size={17} /> {activeProject.title}</span>
+                    <span className="status-pill">{reportDoc ? 'Saved report notes · v' + reportDoc.version : 'Project report · not yet saved'}</span>
                   </div>
-                  <div className="panel report-panel">
-                    <div className="panel-heading">
-                      <div>
-                        <span className="eyebrow muted">REPORT WORKSPACE</span>
-                        <h2>Technical report notes</h2>
-                      </div>
-                      <button
-                        className="secondary-button"
-                        onClick={() =>
-                          setReportText(
-                            text =>
-                              text ||
-                              'PROJECT: ' +
-                                activeProject.title +
-                                '\nLOCATION: ' +
-                                activeProject.location +
-                                '\n\n1. PURPOSE\n\n2. DESIGN BASIS\n\n3. CALCULATIONS\n\n4. FINDINGS\n\n5. RECOMMENDATIONS\n'
-                          )
-                        }
-                      >
-                        <Plus size={15} /> Insert structure
-                      </button>
-                    </div>
-                    <textarea
-                      className="report-editor"
-                      value={reportText}
-                      onChange={e => setReportText(e.target.value)}
-                      placeholder="Write the project background, design basis, assumptions, calculations, results, risks and recommendations…"
-                    />
-                    <div className="report-footer">
-                      <span>
-                        {reportText.length.toLocaleString()} characters
-                      </span>
-                      <button
-                        className="primary-button"
-                        onClick={() =>
-                          saveDocument('report', { text: reportText })
-                        }
-                      >
-                        <Save size={16} /> Save report notes
-                      </button>
-                    </div>
-                  </div>
+                  <ReportGenerator
+                    project={activeProject}
+                    hydraulic={hydraulicDoc?.data}
+                    gis={gisDoc?.data}
+                    boq={boqDoc?.data}
+                    calculations={calculationDoc?.data}
+                    drawing={drawingDoc?.data}
+                    savedReport={reportDoc?.data}
+                    onSave={data => saveDocument('report', data)}
+                  />
                 </>
               )}
             </div>
