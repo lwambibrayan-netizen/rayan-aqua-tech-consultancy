@@ -1,6 +1,17 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-type VercelRequest = Request & { method?: string; query?: Record<string, string | string[]> };
+type VercelRequest = Request;
+type VercelNodeRequest = {
+  method?: string;
+  url?: string;
+  headers: Record<string, string | string[] | undefined> & { host?: string; 'x-forwarded-proto'?: string };
+  body?: unknown;
+};
+type VercelNodeResponse = {
+  statusCode: number;
+  setHeader(name: string, value: string): void;
+  end(body?: string): void;
+};
 type Json = Record<string, any>;
 const allowedKinds = new Set(['hydraulic', 'boq', 'report', 'drawing', 'gis', 'calculations']);
 const allowedStatuses = new Set(['Planning', 'In progress', 'On hold', 'Completed']);
@@ -29,14 +40,14 @@ async function upstreamJson(url: URL, init?: RequestInit): Promise<any> {
   return body;
 }
 
-export default async function handler(request: VercelRequest): Promise<Response> {
+async function handleRequest(request: VercelRequest): Promise<Response> {
   try {
     const url = new URL(request.url);
-    const path = url.pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+    const path = url.pathname.replace(/^\\/api\\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
     const method = request.method || 'GET';
     if (path.length === 1 && path[0] === 'health' && method === 'GET') return json({ status: 'ok', service: 'RayanAqua API' });
 
-    const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+    const token = request.headers.get('authorization')?.replace(/^Bearer\\s+/i, '');
     if (!token) return fail('Authentication required.', 401);
     const supabase = supabaseFor(token);
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
@@ -117,9 +128,8 @@ export default async function handler(request: VercelRequest): Promise<Response>
         if (method === 'PUT') {
           const input = await bodyOf(request); if (input.data === undefined) return fail('GIS draft data is required.');
           if (JSON.stringify(input.data).length > 900000) return fail('GIS draft exceeds the 900 KB storage limit.', 413);
-          const patch: Json = { data: input.data, version: undefined, updated_at: new Date().toISOString() };
+          const patch: Json = { data: input.data, updated_at: new Date().toISOString() };
           if (typeof input.name === 'string') patch.name = input.name.trim().slice(0, 100);
-          delete patch.version;
           const { data: current, error: readError } = await supabase.from('gis_drafts').select('version').eq('id', draftId).eq('project_id', projectId).maybeSingle();
           if (readError) throw readError;
           if (!current) return fail('GIS draft not found.', 404);
@@ -159,7 +169,7 @@ export default async function handler(request: VercelRequest): Promise<Response>
         const caps = async (service: string, version: string) => { const target = new URL(projectUrl); target.searchParams.set('SERVICE', service); target.searchParams.set('VERSION', version); target.searchParams.set('REQUEST', 'GetCapabilities'); const response = await fetch(target, { signal: AbortSignal.timeout(10000) }); if (!response.ok) throw new Error(`QGIS ${service} returned HTTP ${response.status}.`); return response.text(); };
         const [wms, wfs] = await Promise.all([caps('WMS', '1.3.0'), caps('WFS', '2.0.0')]);
         const extract = (xml: string, pattern: RegExp) => [...xml.matchAll(pattern)].map(m => m[1].trim()).filter(n => allowedLayers.has(n.split(':').pop() || n));
-        const wmsLayers = extract(wms, /<Name>([^<]+)<\/Name>/g); const wfsLayers = extract(wfs, /<FeatureType>\s*<Name>([^<]+)<\/Name>/g);
+        const wmsLayers = extract(wms, /<Name>([^<]+)<\\/Name>/g); const wfsLayers = extract(wfs, /<FeatureType>\\s*<Name>([^<]+)<\\/Name>/g);
         return json({ configured: true, connected: true, projectReady: Boolean(wmsLayers.length && wfsLayers.length), projectTitle: 'RayanAqua Engineering Base Layers', projectPath: projectUrl.pathname, wmsUrl: projectUrl.toString(), wmsLayers, wfsLayers, service: 'QGIS Server', message: `QGIS capabilities checked: ${wmsLayers.length} WMS and ${wfsLayers.length} WFS layers.` });
       } catch (error) { return json({ configured: true, connected: false, projectReady: false, service: 'QGIS Server', message: error instanceof Error ? error.message : 'QGIS Server could not be reached.' }); }
     }
@@ -177,5 +187,32 @@ export default async function handler(request: VercelRequest): Promise<Response>
     console.error('API request failed:', error);
     const message = error instanceof Error && !('code' in error) ? error.message : 'The API request could not be completed.';
     return fail(message, 500);
+  }
+}
+
+export default async function vercelHandler(req: VercelNodeRequest, res: VercelNodeResponse): Promise<void> {
+  try {
+    const host = req.headers.host || 'localhost';
+    const protocol = req.headers['x-forwarded-proto']?.toString().split(',')[0] || 'https';
+    const url = new URL(req.url || '/', `${protocol}://${host}`);
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(req.headers)) {
+      if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
+    }
+    const method = req.method || 'GET';
+    const hasBody = method !== 'GET' && method !== 'HEAD';
+    const body = hasBody && req.body !== undefined
+      ? typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
+      : undefined;
+    const webRequest = new Request(url, { method, headers, ...(body !== undefined ? { body } : {}) });
+    const response = await handleRequest(webRequest);
+    res.statusCode = response.status;
+    response.headers.forEach((value, name) => res.setHeader(name, value));
+    res.end(await response.text());
+  } catch (error) {
+    console.error('Vercel API adapter failed:', error);
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(JSON.stringify({ error: 'The API request could not be completed.' }));
   }
 }
