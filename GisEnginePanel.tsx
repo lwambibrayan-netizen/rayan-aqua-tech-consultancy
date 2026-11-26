@@ -261,7 +261,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
     }
   }
 
-  async function runTerrainOperation(operation: 'profile' | 'compare' | 'contours' | 'slope' | 'analyze', payload: Record<string, unknown>) {
+  async function runTerrainOperation(operation: 'profile' | 'compare' | 'least-cost' | 'contours' | 'slope' | 'analyze', payload: Record<string, unknown>) {
     setTerrainBusy(true); setTerrainResults(null);
     try {
       const response = await api.post('/api/projects/' + projectId + '/gis-terrain/' + operation, payload);
@@ -298,11 +298,17 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
   async function generateLeastCostPipelineRoute() {
     const points=features.filter(f=>f.type==='Point'); const a=points.find(f=>f.id===routeStartId), b=points.find(f=>f.id===routeEndId);
     if(!a||!b){setMessage('Select start and end GIS points for routing.');return;}
-    setRouteBusy(true);
-    try { const result=await findLeastCostRoute(a.coordinates as number[],b.coordinates as number[],features,17,Number(routeSlopeWeight));
-      const route=makeFeature('Least-cost route','Pipeline','LineString',result.coordinates); route.properties={routing_method:'Dijkstra terrain-cost grid',dem_source:'Open-Meteo elevation (public DEM)',terrain_cost:result.cost,route_length_m:result.length_m,max_sampled_slope_percent:result.maxSlope_percent,slope_weight:Number(routeSlopeWeight),grid_cells:289};
-      setFeatures(rows=>[...rows,route]); setSelectedId(route.id); setMessage('Least-cost route generated from sampled terrain elevations and avoided mapped obstacle polygons. Review the route against survey data and construction constraints before design.');
-    } catch(e){setMessage(e instanceof Error?e.message:'Least-cost routing failed.');} finally{setRouteBusy(false);}
+    setRouteBusy(true); setTerrainResults(null); setMessage('Requesting least-cost route from the PyQGIS DEM processor…');
+    try {
+      const response=await api.post('/api/projects/'+projectId+'/gis-terrain/least-cost',{start:a.coordinates,end:b.coordinates,slopeWeight:Number(routeSlopeWeight),gridSize:121,obstacles:features.filter(f=>f.type==='Polygon').map(featureToGeoJSON)});
+      const result=response.data?.route;
+      if(!Array.isArray(result?.coordinates)||result.coordinates.length<2) throw new Error('PyQGIS returned no valid route geometry.');
+      const route=makeFeature('Least-cost route','Pipeline','LineString',result.coordinates);
+      route.properties={routing_method:result.routing_method||'PyQGIS/GDAL DEM Dijkstra',dem_source:result.dem_source,dem_resolution_m:result.dem_resolution_m,terrain_cost:result.terrain_cost,route_length_m:result.length_m,max_sampled_slope_percent:result.max_slope_percent,total_ascent_m:result.total_ascent_m,slope_weight:result.slope_weight,grid_cells:Number(result.grid_rows||0)*Number(result.grid_columns||0)};
+      setFeatures(rows=>[...rows,route]); setSelectedId(route.id);
+      setTerrainResults({operation:'least-cost',...response.data,generatedAt:new Date().toISOString()});
+      setMessage('PyQGIS least-cost route generated from '+(result.dem_source||'the terrain DEM')+'. Review the route against survey data and construction constraints before design.');
+    } catch(e){setMessage(e instanceof Error?'PyQGIS least-cost routing failed: '+e.message:'PyQGIS least-cost routing failed.');} finally{setRouteBusy(false);}
   }
   async function generateTerrainAnalysis() {
     const bbox=projectTerrainBounds();
@@ -434,13 +440,16 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
 
   async function sendToEpanet() {
     const collection = { type: 'FeatureCollection', features: features.map(featureToGeoJSON) };
+    if (!collection.features.length) { setMessage('This GIS draft has no features to transfer.'); return; }
+    if (!onSendToEpanet) { setMessage('EPANET transfer is unavailable in this workspace.'); return; }
+    setDraftBusy(true); setMessage('Opening EPANET and saving the current GIS layers…');
     try {
-      await onSave({ format: 'GeoJSON', crs: 'OGC:CRS84 (longitude, latitude)', featureCollection: collection, savedAt: new Date().toISOString() });
-      setMessage('GIS draft handed to EPANET. Review the imported nodes, links, coordinates and hydraulic attributes before simulation.');
-      onSendToEpanet?.(collection.features);
-    } catch {
-      setMessage('Could not save GIS layers. The network was not sent to EPANET.');
-    }
+      const savePromise = onSave({ format: 'GeoJSON', crs: 'OGC:CRS84 (longitude, latitude)', featureCollection: collection, savedAt: new Date().toISOString() });
+      onSendToEpanet(collection.features);
+      await savePromise;
+    } catch (error) {
+      setMessage('EPANET opened, but the GIS backup save failed: '+(error instanceof Error ? error.message : 'unknown save error')+'.');
+    } finally { setDraftBusy(false); }
   }
 
   async function applyTerrainElevation(featureIds?: string[]) {
@@ -697,7 +706,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
         <div className="gis-tool-group">
           <button className="secondary-button" onClick={() => void applyTerrainElevation()} disabled={elevationBusy || !features.some(feature => feature.type === 'Point')}><Mountain size={15}/>{elevationBusy ? 'Sampling elevations…' : 'Fetch terrain elevations'}</button>
           <button className="secondary-button" onClick={() => syncFromEpanet()} disabled={!hydraulicNetwork?.geo?.nodes}>Synchronize from EPANET</button>
-          <button className="primary-button" onClick={sendToEpanet} disabled={!features.length}>Save and open EPANET</button>
+          <button className="primary-button" onClick={sendToEpanet} disabled={!features.length || draftBusy}>{draftBusy ? "Opening EPANET…" : "Save and open EPANET"}</button>
         </div>
         <div className="gis-tool-group">
           <button className={mode === 'select' ? 'gis-tool active' : 'gis-tool'} onClick={() => setMode('select')}><MousePointer2 size={16}/> Select</button>
