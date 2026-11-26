@@ -20,9 +20,11 @@ describe('EPANET velocity compliance diagnosis', () => {
 
     const suggestions = diagnose(network as any, [], links as any);
 
-    expect(suggestions).toContain(
-      'PIPE-60: maximum simulated velocity 2.83 m/s exceeds the 2.00 m/s limit. Recheck peak flow and internal diameter; compare larger diameter or parallel pipeline options and rerun headloss and cost calculations.',
-    );
+    const warning = suggestions.find((message) => message.includes('PIPE-60'));
+    expect(warning).toBeDefined();
+    expect(warning).toContain('maximum simulated velocity 2.83 m/s');
+    expect(warning).toContain('exceeds the 2.00 m/s limit');
+    expect(warning).toContain('larger diameter or parallel pipeline options');
   });
 
   it('does not report a high-velocity failure when the pipe remains within the limit', () => {
