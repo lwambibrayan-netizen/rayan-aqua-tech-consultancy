@@ -215,11 +215,15 @@ function App() {
     try {
       if (authMode === 'signup') {
         const confirmationRequired = await auth.signUpWithPassword(authEmail.trim(), authPassword);
-        setNotice(
-          confirmationRequired
-            ? 'Account created. Check your email to confirm your address before signing in.'
-            : 'Account created and signed in successfully.'
-        );
+        if (confirmationRequired) {
+          setNotice('Account created. Check your email to confirm your address before signing in.');
+        } else {
+          const current = await auth.getUser();
+          if (!current) throw new Error('Account created, but no active session was returned. Please sign in with your new account.');
+          setUser(current);
+          await loadProjects();
+          setNotice('Account created and signed in successfully.');
+        }
       } else {
         await auth.signInWithPassword(authEmail.trim(), authPassword);
         const current = await auth.getUser();
