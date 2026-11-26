@@ -52,7 +52,7 @@ function toInp(net:Net){
 }
 export function fromInp(raw:string):Net{
  const sections=new Map<string,string[]>();let section='';
- raw.split(/\r?\n/).forEach(line=>{const s=line.trim();if(!s||s.startsWith(';'))return;if(s.startsWith('[')&&s.endsWith(']')){section=s.slice(1,-1).toUpperCase();if(!sections.has(section))sections.set(section,[]);return}if(section)sections.get(section)!.push(s)});
+ raw.split(/\r?\n/).forEach(line=>{const s=line.split(';',1)[0].trim();if(!s)return;if(s.startsWith('[')&&s.endsWith(']')){section=s.slice(1,-1).toUpperCase();if(!sections.has(section))sections.set(section,[]);return}if(section)sections.get(section)!.push(s)});
  const rows=(name:string)=>sections.get(name)||[];const fields=(s:string)=>s.split(/\s+/);const coords=new Map<string,{x:number;y:number}>();const patterns=new Map<string,string>();
  rows('COORDINATES').forEach(s=>{const [id,x,y]=fields(s);if(id&&Number.isFinite(Number(x))&&Number.isFinite(Number(y)))coords.set(id,{x:Number(x),y:-Number(y)})});
  rows('PATTERNS').forEach(s=>{const f=fields(s),id=f[0];if(id)patterns.set(id,[...(patterns.get(id)||[]),...f.slice(1)].join(', '))});
