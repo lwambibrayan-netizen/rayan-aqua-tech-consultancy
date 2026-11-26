@@ -5,8 +5,10 @@ import { resolve } from 'node:path';
 describe('deployment and data-boundary configuration', () => {
   it('uses supported Vercel function configuration without an invalid runtime override', () => {
     const config = JSON.parse(readFileSync(resolve(process.cwd(), 'vercel.json'), 'utf8'));
-    expect(config.functions['api/**/*.ts'].maxDuration).toBe(30);
-    expect(config.functions['api/**/*.ts']).not.toHaveProperty('runtime');
+    for (const entry of ['api/projects.ts', 'api/[...path].ts']) {
+      expect(config.functions[entry]?.maxDuration).toBe(30);
+      expect(config.functions[entry]).not.toHaveProperty('runtime');
+    }
     expect(config.buildCommand).toBe('npm run build');
     expect(config.outputDirectory).toBe('dist');
   });
