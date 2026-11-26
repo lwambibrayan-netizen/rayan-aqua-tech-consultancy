@@ -52,7 +52,7 @@ for hour in range(169):
     row = js_samples[hour]
     errors = {
         "pressure_m": close_enough(f"hour {hour} node 101 pressure (m)", row["pressureAt101M"], node_pressure.loc[timestamp, "101"], 0.03),
-        "flow_lps": close_enough(f"hour {hour} pipe 60 flow (L/s)", row["pipe60FlowLps"], link_flow.loc[timestamp, "60"], 0.03),
+        "flow_lps": close_enough(f"hour {hour} pipe 60 flow (L/s)", row["pipe60FlowLps"], link_flow.loc[timestamp, "60"] * 1000.0, 0.03),
         "velocity_mps": close_enough(f"hour {hour} pipe 60 velocity (m/s)", row["pipe60VelocityMps"], link_velocity.loc[timestamp, "60"], 0.003),
         "tank_level_m": close_enough(f"hour {hour} tank 1 level (m)", row["tank1LevelM"], node_head.loc[timestamp, "1"] - tank_elevation, 0.03),
     }
