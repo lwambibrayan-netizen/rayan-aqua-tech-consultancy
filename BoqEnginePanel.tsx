@@ -79,28 +79,36 @@ function deriveItems(network: any, gisFeatures: any[]): { items: Item[]; notes: 
     adjacency.forEach((connections, nodeId) => {
       const node = nodeById.get(nodeId);
       const degree = connections.length;
-      // A change in connected main diameters needs a reducer/transition fitting.
-      // The count is an engineering take-off allowance and is deliberately flagged for review.
+      // Classify branch fittings using both topology and nominal diameters.
+      // Unequal diameters at a branch are treated as a reducing fitting, not a tee plus an extra reducer.
       const connectedDiameters = connections
         .map(({ link }) => safeNumber(link.diameter))
         .filter((diameter: number) => diameter > 0);
       const distinctDiameters = Array.from(new Set(connectedDiameters)).sort((a: number, b: number) => a - b);
-      if (distinctDiameters.length > 1) {
-        const reducerCount = distinctDiameters.length - 1;
-        items.push({
-          id: id(), section: 'Fittings – review', code: 'REDUCER-' + nodeId,
-          description: 'Diameter transition fitting at ' + nodeId + ' · connected sizes ' + distinctDiameters.join(' / ') + ' mm',
-          unit: 'No.', quantity: reducerCount, rate: 0,
-          source: 'EPANET pipe connectivity and nominal diameters; confirm reducer location, type and orientation',
-          review: true,
-        });
-        notes.push(nodeId + ': connected pipes have different nominal diameters (' + distinctDiameters.join(', ') + ' mm); confirm reducer/reducing-tee arrangement and count before procurement.');
+      const mixedSizes = distinctDiameters.length > 1;
+      if (mixedSizes) {
+        notes.push(nodeId + ': connected pipes have different nominal diameters (' + distinctDiameters.join(', ') + ' mm); verify fitting type, orientation and reducer arrangement against the detailed design.');
       }
       if (degree === 3) {
-        items.push({ id: id(), section: 'Fittings', code: 'TEE', description: 'Tee fitting at network node ' + nodeId, unit: 'No.', quantity: 1, rate: 0, source: 'EPANET pipe topology: 3 incident pipe links' });
+        items.push({
+          id: id(), section: mixedSizes ? 'Fittings – review' : 'Fittings',
+          code: mixedSizes ? 'REDUCING-TEE' : 'TEE',
+          description: (mixedSizes ? 'Reducing tee' : 'Equal tee') + ' at network node ' + nodeId + (mixedSizes ? ' · connected sizes ' + distinctDiameters.join(' / ') + ' mm' : ''),
+          unit: 'No.', quantity: 1, rate: 0,
+          source: 'EPANET pipe topology: 3 incident pipe links' + (mixedSizes ? '; mixed nominal diameters' : ''),
+          review: mixedSizes,
+        });
       } else if (degree === 4) {
-        items.push({ id: id(), section: 'Fittings', code: 'CROSS', description: 'Cross fitting at network node ' + nodeId, unit: 'No.', quantity: 1, rate: 0, source: 'EPANET pipe topology: 4 incident pipe links', review: true });
-        notes.push(nodeId + ': four-way connection detected; confirm whether a cross or a combination of tees is specified.');
+        items.push({ id: id(), section: 'Fittings – review', code: mixedSizes ? 'REDUCING-CROSS' : 'CROSS', description: (mixedSizes ? 'Mixed-diameter four-way fitting' : 'Cross fitting') + ' at network node ' + nodeId, unit: 'No.', quantity: 1, rate: 0, source: 'EPANET pipe topology: 4 incident pipe links', review: true });
+        notes.push(nodeId + ': four-way connection detected; confirm whether a cross, reducing cross or combination of tees is specified.');
+      } else if (degree === 2 && mixedSizes) {
+        items.push({
+          id: id(), section: 'Fittings – review', code: 'REDUCER-' + nodeId,
+          description: 'Reducer / diameter transition at ' + nodeId + ' · ' + distinctDiameters.join(' to ') + ' mm',
+          unit: 'No.', quantity: 1, rate: 0,
+          source: 'EPANET pipe connectivity and nominal diameters; confirm concentric/eccentric type and orientation',
+          review: true,
+        });
       } else if (degree > 4) {
         notes.push(nodeId + ': ' + degree + ' connected pipe links; fitting arrangement is non-standard and requires engineer detailing.');
         items.push({ id: id(), section: 'Fittings – review', code: 'NODE-' + nodeId, description: 'Fitting arrangement at ' + nodeId + ' (' + degree + ' pipe connections) – engineer to detail', unit: 'Set', quantity: 1, rate: 0, source: 'EPANET pipe topology; no fitting type assumed', review: true });
