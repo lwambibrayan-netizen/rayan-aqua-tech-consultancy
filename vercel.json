@@ -3,6 +3,9 @@
     "api/projects.ts": {
       "maxDuration": 30
     },
+    "api/projects/[...path].ts": {
+      "maxDuration": 30
+    },
     "api/[...path].ts": {
       "maxDuration": 30
     }
