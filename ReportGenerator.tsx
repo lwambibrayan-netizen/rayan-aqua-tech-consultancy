@@ -194,7 +194,7 @@ export default function ReportGenerator({ project, hydraulic, gis, boq, calculat
         {calculations && Object.keys(calculations).length > 0 ? <pre className="report-preformatted">{JSON.stringify(calculations, null, 2)}</pre> : <p className="report-missing">No saved engineering calculation record was found for this project.</p>}
         {drawing && Object.keys(drawing).length > 0 ? <><h3>CAD / drawing record</h3><p>Saved drawing document is present. Drawing geometry and detailed schedules should be reviewed in the CAD workspace.</p></> : <p className="report-missing">No saved CAD / drawing document was found for this project.</p>}
 
-        {sectionTitle('9. Engineer's notes, findings and recommendations')}
+        {sectionTitle('9. Engineer’s notes, findings and recommendations')}
         <p>Enter project-specific narrative, site observations, design assumptions, decisions and recommendations below. These notes are saved against the selected project.</p>
         <div className="report-editor-print-hide"><textarea className="report-editor" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add project background, site observations, design assumptions, recommendations, outstanding actions and review comments…" /></div>
         {notes.trim() ? <div className="report-notes-content">{notes}</div> : <p className="report-missing">No additional engineer's notes have been entered.</p>}
