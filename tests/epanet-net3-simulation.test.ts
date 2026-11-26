@@ -28,7 +28,7 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
       const junctionIndex = project.getNodeIndex('101');
       const sourceIndex = project.getNodeIndex('Lake');
       const tankIndex = project.getNodeIndex('1');
-      const representativePipeIndex = project.getLinkIndex('101');
+      const representativePipeIndex = project.getLinkIndex('60');
       let hydraulicPeriods = 0;
       let elapsedSeconds = 0;
       let finitePressureSamples = 0;
@@ -89,6 +89,8 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
       expect(minimumPressure).toBeGreaterThan(-100);
       expect(maximumPressure).toBeGreaterThan(minimumPressure);
       expect(nonZeroFlowSamples).toBeGreaterThan(0);
+      expect(Math.abs(sampleFlow)).toBeGreaterThan(0.1);
+      expect(Math.abs(sampleVelocity)).toBeGreaterThan(0.0001);
       expect(finiteVelocitySamples).toBe(hydraulicPeriods);
       expect(Number.isFinite(samplePressure)).toBe(true);
       expect(Number.isFinite(sampleFlow)).toBe(true);
@@ -126,8 +128,8 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
         elapsedHours: elapsedSeconds / 3600,
         pressureAt101FinalM: samplePressure,
         pressureRangeAt101M: [minimumPressure, maximumPressure],
-        pipe101FinalFlowLps: sampleFlow,
-        pipe101FinalVelocityMps: sampleVelocity,
+        riverIntakePipe60FinalFlowLps: sampleFlow,
+        riverIntakePipe60FinalVelocityMps: sampleVelocity,
         tank1LevelRangeM: [minimumTankLevel, maximumTankLevel],
         qualityPeriods,
         lakeTracePercent: lakeTrace
