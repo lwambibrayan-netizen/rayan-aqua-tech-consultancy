@@ -140,8 +140,6 @@ export default function BoqEnginePanel({ projectTitle, initialData, hydraulicNet
   const [items, setItems] = useState<Item[]>(Array.isArray(initialData?.items) ? initialData.items : []);
   const [notes, setNotes] = useState<string[]>(Array.isArray(initialData?.notes) ? initialData.notes : []);
   const [contingencyPct, setContingencyPct] = useState(safeNumber(initialData?.contingencyPct));
-  const [trenchWidth, setTrenchWidth] = useState(safeNumber(initialData?.assumptions?.trenchWidth) || 0.6);
-  const [beddingDepth, setBeddingDepth] = useState(safeNumber(initialData?.assumptions?.beddingDepth) || 0.15);
   const [expanded, setExpanded] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -150,8 +148,6 @@ export default function BoqEnginePanel({ projectTitle, initialData, hydraulicNet
       setItems(Array.isArray(initialData.items) ? initialData.items : []);
       setNotes(Array.isArray(initialData.notes) ? initialData.notes : []);
       setContingencyPct(safeNumber(initialData.contingencyPct));
-      setTrenchWidth(safeNumber(initialData.assumptions?.trenchWidth) || 0.6);
-      setBeddingDepth(safeNumber(initialData.assumptions?.beddingDepth) || 0.15);
     }
   }, [initialData]);
   const subtotal = useMemo(() => items.reduce((sum, item) => sum + Math.max(0, safeNumber(item.quantity)) * Math.max(0, safeNumber(item.rate)), 0), [items]);
@@ -183,7 +179,7 @@ export default function BoqEnginePanel({ projectTitle, initialData, hydraulicNet
   async function save() {
     setBusy(true); setMessage('');
     try {
-      await onSave({ version: 2, projectTitle, currency: 'KES', items, notes, subtotal, contingencyPct, contingency, total, assumptions: { trenchWidth, beddingDepth }, generatedFrom: hydraulicNetwork?.links?.length ? 'EPANET' : 'GIS', updatedAt: new Date().toISOString() });
+      await onSave({ version: 2, projectTitle, currency: 'KES', items, notes, subtotal, contingencyPct, contingency, total, generatedFrom: hydraulicNetwork?.links?.length ? 'EPANET' : 'GIS', updatedAt: new Date().toISOString() });
       setMessage('BOQ saved to this project.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'BOQ could not be saved.');
@@ -204,9 +200,7 @@ export default function BoqEnginePanel({ projectTitle, initialData, hydraulicNet
           <div className="metric-card"><small>Estimated total</small><strong>{money(total)}</strong></div>
         </div>
         <div className="field-grid">
-          <label>Contingency (%)<input type="number" min="0" max="100" step="0.5" value={contingencyPct} onChange={event => setContingencyPct(Math.max(0, safeNumber(event.target.value)))} /></label>
-          <label>Trench width assumption (m)<input type="number" min="0.1" step="0.05" value={trenchWidth} onChange={event => setTrenchWidth(Math.max(0.1, safeNumber(event.target.value)))} /></label>
-          <label>Bedding depth assumption (m)<input type="number" min="0" step="0.01" value={beddingDepth} onChange={event => setBeddingDepth(Math.max(0, safeNumber(event.target.value)))} /></label>
+          <label>Contingency (%)<input type="number" min="0" max="100" step="0.5" value={contingencyPct} onChange={event => setContingencyPct(Math.max(0, Math.min(100, safeNumber(event.target.value))))} /></label>
         </div>
         {notes.length > 0 && <div className="notice-panel"><ClipboardList size={18} /><div><strong>Engineering review notes</strong><ul>{notes.map((note, index) => <li key={index}>{note}</li>)}</ul></div></div>}
         <div className="panel-heading"><h3>Measured items</h3><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="secondary-button" onClick={addManual}><Plus size={15} /> Add manual item</button><button className="secondary-button" onClick={exportCsv} disabled={!items.length}><Download size={15} /> Export CSV</button></div></div>
@@ -225,7 +219,7 @@ export default function BoqEnginePanel({ projectTitle, initialData, hydraulicNet
           </tbody></table></div>}
         <div className="boq-total"><span>Project estimate · KES</span><strong>{money(total)}</strong></div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="primary-button" onClick={save} disabled={busy}><Save size={16} /> {busy ? 'Saving…' : 'Save BOQ to project'}</button><button className="secondary-button" onClick={() => setExpanded(!expanded)}>{expanded ? 'Hide' : 'Show'} assumptions</button></div>
-        {expanded && <p className="muted">Pipe lengths and fitting counts are derived from the saved EPANET network. A three-way pipe node is counted as a tee; a four-way node is flagged for confirmation. Bends are only suggestions from schematic coordinates and must be verified against surveyed route geometry. Unknown pipe material, pressure class or diameter is explicitly flagged. Valve and pump counts come from actual network components. GIS-only line lengths are geodesic estimates; no fittings are invented from unconnected endpoints. Trench dimensions and contingency are editable assumptions and are not automatically priced. Enter verified supplier/contract rates; all rates default to KES 0.</p>}
+        {expanded && <p className="muted">Pipe lengths and fitting counts are derived from the saved EPANET network. A three-way pipe node is counted as a tee; a four-way node is flagged for confirmation. Bends are only suggestions from schematic coordinates and must be verified against surveyed route geometry. Unknown pipe material, pressure class or diameter is explicitly flagged. Valve and pump counts come from actual network components. GIS-only line lengths are geodesic estimates; no fittings are invented from unconnected endpoints. Excavation, bedding, backfill, labour, transport and installation are not yet auto-measured; add them as manual items using verified project dimensions. Enter verified supplier/contract rates; all rates default to KES 0.</p>}
       </div>
     </section>
   );
