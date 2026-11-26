@@ -97,7 +97,7 @@ async function handleRequest(request: VercelRequest): Promise<Response> {
           if (error) throw error;
           return json({ document: data ? { data: data.data, version: data.version, updatedAt: data.updated_at } : null });
         }
-        if (method === 'PUT') {
+        if (method === 'PUT' || method === 'POST') {
           const input = await bodyOf(request); if (input.data === undefined) return fail('Document data is required.');
           const serialized = JSON.stringify(input.data); if (serialized.length > 220000) return fail('This document exceeds the 220 KB storage limit.', 413);
           const { data: current, error: readError } = await supabase.from('project_documents').select('version').eq('project_id', projectId).eq('kind', kind).maybeSingle();
