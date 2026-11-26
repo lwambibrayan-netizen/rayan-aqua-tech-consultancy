@@ -43,11 +43,11 @@ async function upstreamJson(url: URL, init?: RequestInit): Promise<any> {
 async function handleRequest(request: VercelRequest): Promise<Response> {
   try {
     const url = new URL(request.url);
-    const path = url.pathname.replace(/^\\/api\\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+    const path = url.pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
     const method = request.method || 'GET';
     if (path.length === 1 && path[0] === 'health' && method === 'GET') return json({ status: 'ok', service: 'RayanAqua API' });
 
-    const token = request.headers.get('authorization')?.replace(/^Bearer\\s+/i, '');
+    const token = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
     if (!token) return fail('Authentication required.', 401);
     const supabase = supabaseFor(token);
     const { data: authData, error: authError } = await supabase.auth.getUser(token);
@@ -169,7 +169,7 @@ async function handleRequest(request: VercelRequest): Promise<Response> {
         const caps = async (service: string, version: string) => { const target = new URL(projectUrl); target.searchParams.set('SERVICE', service); target.searchParams.set('VERSION', version); target.searchParams.set('REQUEST', 'GetCapabilities'); const response = await fetch(target, { signal: AbortSignal.timeout(10000) }); if (!response.ok) throw new Error(`QGIS ${service} returned HTTP ${response.status}.`); return response.text(); };
         const [wms, wfs] = await Promise.all([caps('WMS', '1.3.0'), caps('WFS', '2.0.0')]);
         const extract = (xml: string, pattern: RegExp) => [...xml.matchAll(pattern)].map(m => m[1].trim()).filter(n => allowedLayers.has(n.split(':').pop() || n));
-        const wmsLayers = extract(wms, /<Name>([^<]+)<\\/Name>/g); const wfsLayers = extract(wfs, /<FeatureType>\\s*<Name>([^<]+)<\\/Name>/g);
+        const wmsLayers = extract(wms, /<Name>([^<]+)<\/Name>/g); const wfsLayers = extract(wfs, /<FeatureType>\s*<Name>([^<]+)<\/Name>/g);
         return json({ configured: true, connected: true, projectReady: Boolean(wmsLayers.length && wfsLayers.length), projectTitle: 'RayanAqua Engineering Base Layers', projectPath: projectUrl.pathname, wmsUrl: projectUrl.toString(), wmsLayers, wfsLayers, service: 'QGIS Server', message: `QGIS capabilities checked: ${wmsLayers.length} WMS and ${wfsLayers.length} WFS layers.` });
       } catch (error) { return json({ configured: true, connected: false, projectReady: false, service: 'QGIS Server', message: error instanceof Error ? error.message : 'QGIS Server could not be reached.' }); }
     }
