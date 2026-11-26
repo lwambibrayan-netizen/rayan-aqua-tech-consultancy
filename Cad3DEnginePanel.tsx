@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
+import { api } from './client';
 
 type Point2D = { x: number; y: number };
 type Shape = {
@@ -12,6 +13,7 @@ type Shape = {
   layer: string;
 };
 type Props = {
+  projectId: string;
   initialData?: any;
   gisFeatures?: any[];
   onSave: (data: any) => Promise<void> | void;
@@ -186,7 +188,7 @@ function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled:
   return best;
 }
 
-export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave }: Props) {
+export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures = [], onSave }: Props) {
   const [shapes, setShapes] = useState<Shape[]>(initialData?.shapes || []);
   const [mode, setMode] = useState<'select' | 'line' | 'polyline' | 'rect' | 'circle'>('select');
   const [draft, setDraft] = useState<Point2D[]>([]);
@@ -294,12 +296,23 @@ export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave
     if (fileRef.current) fileRef.current.value = '';
   }
 
-  function importGisDraft() {
-    const features = gisFeatures.filter(feature =>
-      feature.geometry?.type === 'Point' || feature.geometry?.type === 'LineString'
+  async function importGisDraft() {
+    let sourceFeatures = gisFeatures;
+    try {
+      const response = await api.get('/api/projects/' + projectId + '/gis-drafts');
+      const drafts = response.data.drafts || [];
+      const newest = drafts.slice().sort((a: any, b: any) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
+      const savedFeatures = newest?.data?.featureCollection?.features;
+      if (Array.isArray(savedFeatures) && savedFeatures.length) sourceFeatures = savedFeatures;
+    } catch (error) {
+      setMessage(error instanceof Error ? 'Could not load saved GIS drafts: ' + error.message : 'Could not load saved GIS drafts.');
+      return;
+    }
+    const features = sourceFeatures.filter(feature =>
+      ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon'].includes(feature.geometry?.type)
     );
     if (!features.length) {
-      setMessage('No saved GIS points or pipeline routes were found in this project.');
+      setMessage('No supported saved GIS features were found. Save the GIS draft first, then retry CAD import.');
       return;
     }
     const coordinates: number[][] = [];
