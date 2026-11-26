@@ -19,6 +19,14 @@ def send(h,code,obj):
 def outdir(user,project):
  key=hashlib.sha256((user+"|"+project).encode()).hexdigest()[:32]
  p=os.path.join(ROOT,key); os.makedirs(p,exist_ok=True); return p
+def persist_output(folder,operation,payload,fmt="application/json",file_name=None,metadata=None):
+ output_id=uuid.uuid4().hex[:16]
+ record={"id":output_id,"operation":operation,"created_at":__import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),"format":fmt,"metadata":metadata or {}}
+ if payload is not None: record["data"]=payload
+ if file_name: record["file_name"]=os.path.basename(file_name)
+ path=os.path.join(folder,"output_"+output_id+".json")
+ with open(path,"w",encoding="utf-8") as stream: json.dump(record,stream,separators=(",",":"),allow_nan=False)
+ return {"id":output_id,"operation":operation,"format":fmt,"created_at":record["created_at"],"saved":True}
 def check_bbox(b):
  w,s,e,n=[float(b[k]) for k in ("west","south","east","north")]
  if not all(map(math.isfinite,[w,s,e,n])) or w>=e or s>=n or w< -180 or e>180 or s< -85 or n>85 or e-w>1.5 or n-s>1.5:
@@ -129,6 +137,8 @@ def slope_stats(path):
  result={"cell_count":int(v.size),"minimum_slope_degrees":round(float(v.min()),2),"maximum_slope_degrees":round(float(v.max()),2),"mean_slope_degrees":round(float(v.mean()),2),
  "slope_classes_percent":{"0_to_2":pct((v>=0)&(v<2)),"2_to_5":pct((v>=2)&(v<5)),"5_to_10":pct((v>=5)&(v<10)),"10_to_20":pct((v>=10)&(v<20)),"above_20":pct(v>=20)}}
  ds=None; dem=None
+ result["raster_file"]=os.path.basename(target)
+ ds=None; dem=None
  return result
 
 def least_cost_route(body,folder):
@@ -209,7 +219,32 @@ class Handler(BaseHTTPRequestHandler):
  def log_message(self,fmt,*args):print("PYQGIS "+(fmt%args),flush=True)
  def do_GET(self):
   path=urlparse(self.path).path
-  if path=="/health":
+  if path=="/terrain/outputs" or path.startswith("/terrain/outputs/"):
+   if self.headers.get("Authorization","")!="Bearer "+os.environ.get("PYQGIS_API_KEY",""):return send(self,401,{"error":"Unauthorized"})
+   q=parse_qs(urlparse(self.path).query); user=q.get("userId",[""])[0]; project=q.get("projectId",[""])[0]
+   if not user or not project:return send(self,400,{"error":"Authenticated user and project IDs are required."})
+   folder=outdir(user,project)
+   if path=="/terrain/outputs":
+    outputs=[]
+    for name in os.listdir(folder):
+     if not name.startswith("output_") or not name.endswith(".json"):continue
+     try:
+      with open(os.path.join(folder,name),encoding="utf-8") as stream:item=json.load(stream)
+      outputs.append({k:item.get(k) for k in ("id","operation","created_at","format","metadata")})
+     except Exception:continue
+    outputs.sort(key=lambda x:x.get("created_at",""),reverse=True)
+    return send(self,200,{"outputs":outputs})
+   output_id=path.rsplit("/",1)[-1]
+   if len(output_id)!=16 or any(c not in "0123456789abcdef" for c in output_id):return send(self,400,{"error":"Invalid terrain output ID."})
+   manifest=os.path.join(folder,"output_"+output_id+".json")
+   if not os.path.isfile(manifest):return send(self,404,{"error":"Terrain output not found in this project."})
+   with open(manifest,encoding="utf-8") as stream:item=json.load(stream)
+   if item.get("file_name"):
+    file_path=os.path.realpath(os.path.join(folder,item["file_name"]))
+    if not file_path.startswith(os.path.realpath(folder)+os.sep) or not os.path.isfile(file_path):return send(self,404,{"error":"Saved terrain raster is missing."})
+    raw=open(file_path,"rb").read(); self.send_response(200); self.send_header("Content-Type","image/tiff"); self.send_header("Content-Disposition",'attachment; filename="'+os.path.basename(file_path)+'"'); self.send_header("Content-Length",str(len(raw))); self.end_headers(); self.wfile.write(raw); return
+   raw=json.dumps(item,allow_nan=False).encode(); self.send_response(200); self.send_header("Content-Type","application/json"); self.send_header("Content-Disposition",'attachment; filename="rayanaqua-'+item.get("operation","terrain")+'-'+output_id+'.json"'); self.send_header("Content-Length",str(len(raw))); self.end_headers(); self.wfile.write(raw); return
+  elif path=="/health":
    send(self,200,{"status":"ok","service":"RayanAqua PyQGIS Processing API","qgis_version":"QGIS","processing_initialized":True,"dem_source":"Copernicus DEM GLO-30 with GLO-90 fallback"})
   elif path=="/dem/check":
    q=parse_qs(urlparse(self.path).query)
@@ -246,8 +281,9 @@ class Handler(BaseHTTPRequestHandler):
    if not user or not project:return send(self,400,{"error":"Authenticated user and project IDs are required."})
    folder=outdir(user,project); op=urlparse(self.path).path.rstrip("/")
    if op.endswith("/terrain/least-cost"):
-    result=least_cost_route(b,folder)
-    send(self,200,{"route":result,"dem":{"source":result["dem_source"],"resolution_m":result["dem_resolution_m"]}})
+    result=least_cost_route(b,folder); dem={"source":result["dem_source"],"resolution_m":result["dem_resolution_m"]}
+    output=persist_output(folder,"least-cost",{"route":result,"dem":dem})
+    send(self,200,{"route":result,"dem":dem,"output":output})
    elif op in ("/terrain/profile","/terrain/compare"):
     routes=b.get("routes")
     if not isinstance(routes,list) or not routes or len(routes)>20:raise ValueError("Provide 1 to 20 pipeline routes.")
@@ -261,13 +297,23 @@ class Handler(BaseHTTPRequestHandler):
     if op.endswith("compare"):
      results.sort(key=lambda r:(r["profile_result"]["length_m"],r["profile_result"]["total_ascent_m"]))
      for i,r in enumerate(results):r["rank"]=i+1
-    send(self,200,{"dem":{"source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"type":"Digital Surface Model","crs":"EPSG:"+str(epsg),"bbox":bb},"routes":results,"comparison":op.endswith("compare")})
+    payload={"dem":{"source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"type":"Digital Surface Model","crs":"EPSG:"+str(epsg),"bbox":bb},"routes":results,"comparison":op.endswith("compare")}
+    output=persist_output(folder,"compare" if op.endswith("compare") else "profile",payload)
+    payload["output"]=output
+    send(self,200,payload)
    elif op in ("/terrain/contours","/terrain/slope","/terrain/analyze"):
     w,s,e,n=check_bbox(b.get("bbox",{})); bb={"west":w,"south":s,"east":e,"north":n}
     dem,res,epsg=dem_for(bb,folder)
     result={"dem":{"source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"type":"Digital Surface Model","crs":"EPSG:"+str(epsg),"bbox":bb}}
     if op in ("/terrain/contours","/terrain/analyze"):result["contours"]=contour_geojson(dem,float(b.get("contourIntervalM",5)),res)
-    if op in ("/terrain/slope","/terrain/analyze"):result["slope"]=slope_stats(dem)
+    raster_output=None
+    if op in ("/terrain/slope","/terrain/analyze"):
+     result["slope"]=slope_stats(dem)
+     raster_file=result["slope"].get("raster_file")
+     if raster_file:raster_output=persist_output(folder,"slope-raster",None,"image/tiff",raster_file,result["slope"])
+    output=persist_output(folder,op.rsplit("/",1)[-1],result)
+    result["output"]=output
+    if raster_output:result["raster_output"]=raster_output
     send(self,200,result)
    else:send(self,404,{"error":"Unknown terrain operation"})
   except ValueError as ex:send(self,400,{"error":str(ex)})
