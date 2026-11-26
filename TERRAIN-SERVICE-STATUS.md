@@ -1,24 +1,27 @@
 # QGIS / PyQGIS terrain integration status
 
-## Source included in this branch
+## Implemented in the feature branch
 - `app.py` is the dedicated Flask + PyQGIS terrain API.
-- `Dockerfile` builds the QGIS 3.40 service image; `requirements.txt` installs Flask.
-- The API backend forwards authenticated project requests to the service using server-only `PYQGIS_API_URL` and `PYQGIS_API_KEY`.
-- The service requires its own `PYQGIS_API_KEY` and a mounted, georeferenced DEM configured through `TERRAIN_DEM_PATH`. It deliberately returns an error if the DEM is absent; it does not invent terrain.
-- Terrain profile chainage and raster pixel resolution are measured in metres using QGIS distance/ellipsoid calculations. Profile results now include maximum uphill grade.
-- GIS client labels distinguish the browser-side DEM-grid least-cost route from server-side PyQGIS profiles, route comparisons, contours and slope analysis.
+- The Docker image builds the QGIS 3.40 service and provisions `TERRAIN_OUTPUT_DIR=/data/terrain-outputs`.
+- The backend forwards authenticated, project-owned requests to PyQGIS using server-only `PYQGIS_API_URL` and `PYQGIS_API_KEY`.
+- The service requires its own `PYQGIS_API_KEY` and a mounted, georeferenced DEM configured through `TERRAIN_DEM_PATH`. It returns an error when the DEM is absent; it does not invent terrain.
+- Ground profiles, route comparisons, contours, least-cost route results and slope rasters are now written to a user- and project-scoped output directory. Authenticated list and retrieval endpoints prevent cross-project output access.
+- Profile and route outputs are persisted as JSON; contours are persisted as GeoJSON inside the output record; slope analysis is persisted as GeoTIFF.
+- Hydraulic result overlays now include pressure, flow, velocity and headloss selectors. EPANET simulations capture a bounded set of hydraulic time-step snapshots for time selection in GIS.
+- EPANET INP import preserves unrecognised sections and unsupported control/rule blocks for export instead of silently discarding them.
+- Terrain profile chainage and raster pixel resolution are measured in metres using QGIS distance/ellipsoid calculations. Profile results include maximum uphill grade.
 
-## Important limitations — not yet production-complete
-- Passing CI verifies Python syntax, TypeScript, tests and the Vite build. It does **not** prove that a live QGIS/PyQGIS service is deployed or reachable.
-- Deploy the service separately, set the backend and service secrets, mount a verified DEM, and run live health/DEM/profile/contour/slope requests before relying on outputs.
-- The current PyQGIS least-cost endpoint intentionally returns HTTP 422 until a project-specific cost raster and obstacle layer are supplied. The UI's current 17 × 17 least-cost route is a separate browser-side DEM-sampled grid, not the PyQGIS least-cost engine.
-- Contours are returned as GeoJSON and can be saved in a GIS draft. The slope operation currently produces a temporary raster; persistent slope-raster storage, styled/classified slope overlays and durable raster-layer retrieval are still outstanding.
-- The service does not yet download/manage Copernicus DEM tiles automatically. Provide a verified local GeoTIFF and confirm its datum, CRS, resolution and survey suitability.
-- QGIS Server WMS/WFS is a separate integration and requires `QGIS_SERVER_URL` plus a published QGIS project/layers.
+## Deployment requirements — not yet verified live
+- The PyQGIS container must be deployed separately, with a **persistent volume mounted at** `/data/terrain-outputs`. Docker `VOLUME` declares the mount point; the hosting platform must attach durable storage to retain files across redeployments.
+- Configure `PYQGIS_API_KEY` in the PyQGIS service and `PYQGIS_API_URL` plus `PYQGIS_API_KEY` in the authenticated Vercel API.
+- Mount a verified, georeferenced DEM and set `TERRAIN_DEM_PATH`. Confirm its datum, CRS, resolution and survey suitability.
+- Live health, DEM, profile, contours, least-cost, raster persistence and authenticated retrieval requests must be tested against the deployed service before relying on outputs.
+- The least-cost route uses a DEM-derived corridor and slope-weighted Dijkstra. Review obstacles and route constructability; it is not a detailed pipeline alignment approval.
+- The current QGIS Server WMS/WFS integration remains separate and requires `QGIS_SERVER_URL` plus a published QGIS project/layers.
 
-## Next engineering steps
-1. Deploy the QGIS service and configure secrets and DEM storage.
-2. Exercise authenticated live endpoints and test a known surveyed route against expected chainage/elevation values.
-3. Implement project-scoped persistent raster outputs and classified slope overlays.
-4. Implement PyQGIS least-cost routing using explicit terrain-cost and obstacle layers, then connect its output to saved GIS drafts.
-5. Add live integration tests; current automated tests are source/configuration checks, not hydraulic or GIS acceptance tests.
+## Engineering acceptance checks still required
+1. Deploy the PyQGIS service with durable storage and a verified project DEM.
+2. Test a known surveyed pipeline route against expected chainage/elevation values.
+3. Verify saved contour GeoJSON and slope GeoTIFF survive service restarts and can only be retrieved by the owning project.
+4. Validate pressure/flow/velocity/headloss map overlays against the same EPANET result period and the hydraulic report.
+5. Run representative EPANET INP round-trip files in OWA-EPANET and compare node/link counts, settings, controls, rules and report results.
