@@ -166,7 +166,9 @@ def least_cost():
     for item in obstacles:
         try:
             geom=QgsGeometry.fromJson(json.dumps(item.get("geometry",item)).encode("utf-8"))
-            if not geom.isEmpty(): obstacle_geometries.append(geom)
+            if not geom.isEmpty():
+                geom.transform(QgsCoordinateTransform(wgs,layer.crs(),project))
+                obstacle_geometries.append(geom)
         except Exception: pass
     nodes=[]; valid=[]
     for r in range(ny):
