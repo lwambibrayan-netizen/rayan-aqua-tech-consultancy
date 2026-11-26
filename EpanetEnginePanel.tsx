@@ -183,7 +183,7 @@ export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=
  async function run(){
   const issues=validate(net);if(issues.length){setErr(issues.join(' '));return}
   const positiveJunctionDemand=net.nodes.some(n=>n.kind==='J'&&n.demand>1e-9),hasTank=net.nodes.some(n=>n.kind==='T');
-  if(!positiveJunctionDemand&&!hasTank){setErr('No positive junction demand is defined. All Junctions currently have 0 L/s demand, so the supply pipes have no demand to serve. Enter actual design demand before running the model.');setNote('Zero-demand network was not simulated as a flowing water-supply design.');return}
+  if(!positiveJunctionDemand&&!hasTank&&!net.nodes.some(n=>n.kind==='J'&&(n.emitterCoefficient||0)>0)){setErr('No positive junction demand is defined. All Junctions currently have 0 L/s demand, so the supply pipes have no demand to serve. Enter actual design demand before running the model.');setNote('Zero-demand network was not simulated as a flowing water-supply design.');return}
   setBusy(true);setErr('');setSim(null);setNote('Running EPANET hydraulics, leakage emitters and configured water-quality analysis…');
   const ws=new Workspace();let m:EpanetProject|null=null,opened=false,hopen=false,qopen=false;
   try{
@@ -198,7 +198,7 @@ export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=
     m.runH();periods++;
     net.nodes.forEach(n=>{const i=m!.getNodeIndex(n.id);nodeHeads[n.id]=m!.getNodeValue(i,NodeProperty.Head)});
     net.nodes.filter(n=>n.kind==='J').forEach(n=>{const i=m!.getNodeIndex(n.id),p=m!.getNodeValue(i,NodeProperty.Pressure),h=nodeHeads[n.id];min[n.id]=Math.min(min[n.id],p);max[n.id]=Math.max(max[n.id],p);nr[n.id]={id:n.id,pressure:p,minPressure:min[n.id],maxPressure:max[n.id],head:h};
-     const leak=leakAcc[n.id];if(leak){const q=leak.coefficient*Math.sqrt(Math.max(0,p));leak.peak=Math.max(leak.peak,q);leak.flowHours+=q;leak.volumeM3+=q;/* replaced with time-weighted volume below */}
+     
     });
     net.links.forEach(l=>{const i=m!.getLinkIndex(l.id),q=m!.getLinkValue(i,LinkProperty.Flow),v=m!.getLinkValue(i,LinkProperty.Velocity),hl=m!.getLinkValue(i,LinkProperty.Headloss),st=m!.getLinkValue(i,LinkProperty.Status);minV[l.id]=Math.min(minV[l.id]??Infinity,Math.abs(v));maxV[l.id]=Math.max(maxV[l.id]??0,Math.abs(v));lr[l.id]={id:l.id,kind:l.kind,flow:q,velocity:v,minVelocity:minV[l.id],maxVelocity:maxV[l.id],headloss:hl,status:st===0?'Closed':'Open'};});
     dt=m.nextH();
@@ -232,7 +232,7 @@ export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=
    setSim(result);setNote('EPANET solved '+periods+' hydraulic period(s)'+(waterQuality?' and '+waterQuality.periods+' water-quality periods':'')+'. Review leakage and quality results.');
   }catch(e){if(m&&qopen){try{m.closeQ()}catch{}}if(m&&hopen){try{m.closeH()}catch{}}if(m&&opened){try{m.close()}catch{}}setErr(e instanceof Error?e.message:'EPANET failed to solve the network.');setNote('')}finally{setBusy(false)}
  }
- async function save(){if(!projectTitle){setErr('Select a project before saving this design.');return}setSaving(true);setErr('');try{await onSave({type:'rayan-aqua-hydraulic-network',version:3,network:net,simulation:sim,generatedAt:new Date().toISOString()});setNote('Network and results saved to '+projectTitle+'.')}catch(e){setErr(e instanceof Error?e.message:'Save failed.')}finally{setSaving(false)}}
+ async function save(){if(!projectTitle){setErr('Select a project before saving this design.');return}setSaving(true);setErr('');try{await onSave({type:'rayan-aqua-hydraulic-network',version:4,network:net,simulation:sim,generatedAt:new Date().toISOString()});setNote('Network and results saved to '+projectTitle+'.')}catch(e){setErr(e instanceof Error?e.message:'Save failed.')}finally{setSaving(false)}}
  const numInput=(v:number,fn:(v:number)=>void)=><input type="number" step="any" value={nval(v)} onChange={e=>fn(Number(e.target.value))} style={css}/>;
  const txt=(v:string,fn:(v:string)=>void)=><input value={v} onChange={e=>fn(e.target.value)} style={css}/>;
  const colour=(id:string)=>{const r=sim?.nodes.find(x=>x.id===id);return !r?'#758d91':r.minPressure<net.settings.minPressure||r.maxPressure>net.settings.maxPressure?'#c54f45':'#16866b'};
