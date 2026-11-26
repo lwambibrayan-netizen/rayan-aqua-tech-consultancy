@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, FileText, Printer, Save } from 'lucide-react';
+import { Printer, Save } from 'lucide-react';
 
 type Props = {
   project: any;
@@ -12,7 +12,7 @@ type Props = {
   savedReport?: any;
   onSave: (data: unknown) => Promise<void>;
 };
-const num = (value: any) => Number.isFinite(Number(value)) ? Number(value) : null;
+const num = (value: any) => value === null || value === undefined || value === '' ? null : Number.isFinite(Number(value)) ? Number(value) : null;
 const fmt = (value: any, digits = 2) => {
   const n = num(value);
   return n === null ? 'Not recorded' : n.toLocaleString('en-KE', { maximumFractionDigits: digits });
@@ -43,10 +43,21 @@ export default function ReportGenerator({ project, hydraulic, gis, gisDrafts = [
   const totalDemand = junctions.reduce((sum: number, n: any) => sum + (num(n.demand) || 0), 0);
   const resultNodes = rows(simulation?.nodes);
   const resultLinks = rows(simulation?.links);
-  const pressurePass = resultNodes.filter((n: any) => num(n.pressure) !== null && num(n.pressure)! >= (num(n.minPressure) ?? num(network?.settings?.minPressure) ?? -Infinity) && num(n.pressure)! <= (num(n.maxPressure) ?? num(network?.settings?.maxPressure) ?? Infinity)).length;
-  const pressureFail = resultNodes.length - pressurePass;
-  const velocityPass = resultLinks.filter((l: any) => l.kind !== 'pipe' || (num(l.velocity) !== null && num(l.velocity)! >= (num(l.minVelocity) ?? num(network?.settings?.minVelocity) ?? -Infinity) && num(l.velocity)! <= (num(l.maxVelocity) ?? num(network?.settings?.maxVelocity) ?? Infinity))).length;
-  const velocityFail = resultLinks.length - velocityPass;
+  const pressureChecks = resultNodes.map((n: any) => {
+    const value = num(n.pressure), min = num(n.minPressure) ?? num(network?.settings?.minPressure), max = num(n.maxPressure) ?? num(network?.settings?.maxPressure);
+    return value === null || min === null || max === null ? 'unassessed' : value >= min && value <= max ? 'pass' : 'fail';
+  });
+  const pressurePass = pressureChecks.filter((x: string) => x === 'pass').length;
+  const pressureFail = pressureChecks.filter((x: string) => x === 'fail').length;
+  const pressureUnassessed = pressureChecks.filter((x: string) => x === 'unassessed').length;
+  const pipeResults = resultLinks.filter((l: any) => l.kind === 'pipe');
+  const velocityChecks = pipeResults.map((l: any) => {
+    const value = num(l.velocity), min = num(l.minVelocity) ?? num(network?.settings?.minVelocity), max = num(l.maxVelocity) ?? num(network?.settings?.maxVelocity);
+    return value === null || min === null || max === null ? 'unassessed' : value >= min && value <= max ? 'pass' : 'fail';
+  });
+  const velocityPass = velocityChecks.filter((x: string) => x === 'pass').length;
+  const velocityFail = velocityChecks.filter((x: string) => x === 'fail').length;
+  const velocityUnassessed = velocityChecks.filter((x: string) => x === 'unassessed').length;
   const gisFeatures = rows(gis?.featureCollection?.features ?? gis?.features);
   const savedGisDrafts = rows(gisDrafts);
   const boqItems = rows(boq?.items ?? boq?.lines);
@@ -164,11 +175,11 @@ export default function ReportGenerator({ project, hydraulic, gis, gisDrafts = [
           <div className="report-kpi-grid">
             <div><b>{resultNodes.length}</b><span>Node results</span></div>
             <div><b>{pressurePass}</b><span>Pressure within configured limits</span></div>
-            <div><b>{resultLinks.length}</b><span>Link results</span></div>
-            <div><b>{velocityFail}</b><span>Link velocity checks outside configured limits</span></div>
+            <div><b>{pipeResults.length}</b><span>Pipe velocity checks</span></div>
+            <div><b>{velocityFail}</b><span>Pipe velocity checks outside limits</span></div>
           </div>
-          <p><b>Pressure check:</b> {pressurePass} of {resultNodes.length} node results are within their recorded pressure limits; {pressureFail} are outside or cannot be confirmed against the available limits.</p>
-          <p><b>Velocity check:</b> {velocityPass} of {resultLinks.length} link results are within their recorded velocity limits; {velocityFail} are outside or cannot be confirmed against the available limits. Non-pipe links are included in the result count but are not treated as pipe velocity checks.</p>
+          <p><b>Pressure check:</b> {pressurePass} of {resultNodes.length} node results are within recorded pressure limits; {pressureFail} are outside those limits and {pressureUnassessed} cannot be assessed from the saved limits.</p>
+          <p><b>Velocity check:</b> {velocityPass} of {pipeResults.length} pipe results are within recorded velocity limits; {velocityFail} are outside those limits and {velocityUnassessed} cannot be assessed from the saved limits. Pumps and valves are excluded from pipe velocity compliance counts.</p>
           {resultLinks.length > 0 && <table className="generated-report-table"><thead><tr><th>Link ID</th><th>Type</th><th>Flow</th><th>Velocity (m/s)</th><th>Headloss</th><th>Assessment</th></tr></thead><tbody>
             {resultLinks.map((link: any, i: number) => <tr key={link.id || i}><td>{text(link.id)}</td><td>{text(link.kind)}</td><td>{fmt(link.flow, 3)}</td><td>{fmt(link.velocity, 3)}</td><td>{fmt(link.headloss, 3)}</td><td>{text(link.status)}</td></tr>)}
           </tbody></table>}
