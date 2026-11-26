@@ -43,9 +43,9 @@ link_velocity = ref.link["velocity"]
 node_head = ref.node["head"]
 node_quality = ref.node["quality"]
 
-junction_ids = sorted(n.name for n in wn.junctions())
-tank_ids = sorted(n.name for n in wn.tanks())
-link_ids = sorted(l.name for l in wn.links())
+junction_ids = sorted(name for name, _node in wn.junctions())
+tank_ids = sorted(name for name, _node in wn.tanks())
+link_ids = sorted(name for name, _link in wn.links())
 pipe_ids = sorted(l.name for l in wn.pipe_name_list)
 require(len(junction_ids) == 92, f"Expected 92 junctions, got {len(junction_ids)}")
 require(len(tank_ids) == 3, f"Expected 3 tanks, got {len(tank_ids)}")
