@@ -1107,7 +1107,7 @@ function App() {
                 <ShieldCheck size={19} />
                 <div>
                   <strong>GIS processing scope</strong>
-                  <p>Interactive mapping, editable feature layers, GeoJSON exchange and geometry measurements run in this workspace. Full QGIS/PyQGIS Processing for DEM terrain analysis, watershed delineation and advanced raster processing still requires a connected QGIS processing runtime; those capabilities are not represented as active here.</p>
+                  <p>Interactive mapping, editable feature layers, GeoJSON exchange and geometry measurements run in this workspace. The connected PyQGIS service provides Copernicus DEM-based ground profiles, route comparison, contours, slope statistics and least-cost routing; QGIS Server and PostGIS provide the spatial data services. Verify DEM coverage, resolution and coordinate reference, and use surveyed ground data for construction design.</p>
                 </div>
               </div>
             </div>
@@ -1259,7 +1259,7 @@ function App() {
                   icon={<MapPinned size={21} />}
                   title="GIS / spatial analysis"
                   text="QGIS processing, PostGIS layers, reprojection and spatial exports."
-                  status="Engine not connected"
+                  status="Connected"
                 />
                 <ToolCard
                   icon={<Box size={21} />}
