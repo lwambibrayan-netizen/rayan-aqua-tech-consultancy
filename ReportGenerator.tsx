@@ -5,6 +5,7 @@ type Props = {
   project: any;
   hydraulic?: any;
   gis?: any;
+  gisDrafts?: any[];
   boq?: any;
   calculations?: any;
   drawing?: any;
@@ -24,7 +25,7 @@ const money = (value: any) => {
 };
 const sectionTitle = (title: string) => <h2 className="generated-report-section-title">{title}</h2>;
 
-export default function ReportGenerator({ project, hydraulic, gis, boq, calculations, drawing, savedReport, onSave }: Props) {
+export default function ReportGenerator({ project, hydraulic, gis, gisDrafts = [], boq, calculations, drawing, savedReport, onSave }: Props) {
   const [notes, setNotes] = useState(String(savedReport?.text || ''));
   const [saving, setSaving] = useState(false);
   useEffect(() => { setNotes(String(savedReport?.text || '')); }, [project?.id, savedReport?.text]);
@@ -47,6 +48,7 @@ export default function ReportGenerator({ project, hydraulic, gis, boq, calculat
   const velocityPass = resultLinks.filter((l: any) => l.kind !== 'pipe' || (num(l.velocity) !== null && num(l.velocity)! >= (num(l.minVelocity) ?? num(network?.settings?.minVelocity) ?? -Infinity) && num(l.velocity)! <= (num(l.maxVelocity) ?? num(network?.settings?.maxVelocity) ?? Infinity))).length;
   const velocityFail = resultLinks.length - velocityPass;
   const gisFeatures = rows(gis?.featureCollection?.features ?? gis?.features);
+  const savedGisDrafts = rows(gisDrafts);
   const boqItems = rows(boq?.items ?? boq?.lines);
   const boqTotal = boqItems.reduce((sum: number, item: any) => sum + (num(item.quantity ?? item.qty) || 0) * (num(item.rate) || 0), 0);
   const pricedCount = boqItems.filter((item: any) => num(item.rate) !== null).length;
@@ -181,8 +183,10 @@ export default function ReportGenerator({ project, hydraulic, gis, boq, calculat
           <table className="generated-report-table"><thead><tr><th>Feature</th><th>Category</th><th>Geometry</th><th>Recorded attributes</th></tr></thead><tbody>
             {gisFeatures.map((feature: any, i: number) => <tr key={feature.id || i}><td>{text(feature.properties?.name || feature.name, 'Feature ' + (i + 1))}</td><td>{text(feature.properties?.category || feature.category)}</td><td>{text(feature.geometry?.type || feature.type)}</td><td>{Object.entries(feature.properties || {}).filter(([key]) => !['name','category'].includes(key)).map(([key, value]) => key + ': ' + String(value)).join('; ') || 'No additional attributes'}</td></tr>)}
           </tbody></table>
-        </> : <p className="report-missing">No saved GIS feature collection was found in the project's main GIS document. Separate GIS drafts are not included in this report version.</p>}
+        </> : <p className="report-missing">No saved GIS feature collection was found in the project's main GIS document. Check the GIS workspace and saved draft list.</p>}
 
+        {savedGisDrafts.length > 0 && <><h3>Saved GIS design drafts</h3><table className="generated-report-table"><thead><tr><th>Draft name</th><th>Version</th><th>Feature count</th><th>Last updated</th></tr></thead><tbody>{savedGisDrafts.map((draft: any, i: number) => { const features = rows(draft?.data?.featureCollection?.features ?? draft?.data?.features); return <tr key={draft.id || i}><td>{text(draft.name, 'GIS draft ' + (i + 1))}</td><td>{text(draft.version)}</td><td>{features.length}</td><td>{text(draft.updatedAt)}</td></tr>; })}</tbody></table></>}
+ 
         {sectionTitle('7. Bill of quantities and cost summary')}
         {boqItems.length > 0 ? <>
           <table className="generated-report-table"><thead><tr><th>Item / description</th><th>Unit</th><th>Quantity</th><th>Rate (KES)</th><th>Amount (KES)</th></tr></thead><tbody>
