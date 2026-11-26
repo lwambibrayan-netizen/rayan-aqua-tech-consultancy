@@ -146,6 +146,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
   const [drafts, setDrafts] = useState<any[]>([]);
   const [activeDraftId, setActiveDraftId] = useState('');
   const [draftBusy, setDraftBusy] = useState(false);
+  const [draftNameInput, setDraftNameInput] = useState('GIS draft 1');
   const [draftsLoaded, setDraftsLoaded] = useState(false);
   const migratedLegacyProject = useRef('');
   const lastSavedDataRef = useRef('');
@@ -510,9 +511,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
     return { format: 'GeoJSON', crs: 'OGC:CRS84 (longitude, latitude)', featureCollection: { type: 'FeatureCollection', features: features.map(featureToGeoJSON) }, savedAt: new Date().toISOString() };
   }
   async function createDraft(copyCurrent = false) {
-    const suggested = 'GIS draft ' + (drafts.length + 1);
-    const draftName = window.prompt('Name this GIS draft:', suggested);
-    if (!draftName?.trim()) return;
+    const draftName = draftNameInput.trim() || 'GIS draft ' + (drafts.length + 1);
     setDraftBusy(true);
     try {
       const sourceFeatures = copyCurrent ? features : [];
@@ -524,8 +523,8 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
       setActiveDraftId(created.draftId);
       setFeatures(sourceFeatures);
       setSelectedId(''); setPendingLine([]); setPendingPolygon([]);
-      await onSave(data);
-      setMessage('Created and saved "' + created.name + '". It will remain in this project until you delete it.');
+      try { await onSave(data); setMessage('Created and saved "' + created.name + '". It will remain in this project until you delete it.'); }
+      catch (backupError) { setMessage('GIS draft "' + created.name + '" was saved. The secondary project GIS document could not be updated: ' + (backupError instanceof Error ? backupError.message : 'unknown error') + '.'); }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not create the GIS draft.');
     } finally { setDraftBusy(false); }
@@ -556,16 +555,15 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
         const updated = response.data.draft;
         setDrafts(rows => rows.map(row => row.draftId === activeDraftId ? updated : row).sort((a,b) => String(b.updatedAt).localeCompare(String(a.updatedAt))));
       } else {
-        const draftName = window.prompt('Name this GIS draft:', 'GIS draft ' + (drafts.length + 1));
-        if (!draftName?.trim()) return;
-        const response = await api.post('/api/projects/' + projectId + '/gis-drafts', { name: draftName.trim(), data });
+        const draftName = draftNameInput.trim() || 'GIS draft ' + (drafts.length + 1);
+        const response = await api.post('/api/projects/' + projectId + '/gis-drafts', { name: draftName, data });
         const created = response.data.draft;
         setDrafts(rows => [created, ...rows]);
         setActiveDraftId(created.draftId);
       }
-      await onSave(data);
       lastSavedDataRef.current = JSON.stringify(data);
-      setMessage('Saved GIS draft. It is stored under this project and will not be removed unless you explicitly delete it.');
+      try { await onSave(data); setMessage('Saved GIS draft. It is stored under this project and will not be removed unless you explicitly delete it.'); }
+      catch (backupError) { setMessage('GIS draft was saved successfully. The secondary project GIS document could not be updated: ' + (backupError instanceof Error ? backupError.message : 'unknown error') + '.'); }
     } catch (error) { setMessage(error instanceof Error ? error.message : 'GIS draft could not be saved.'); }
     finally { setDraftBusy(false); }
   }
@@ -638,6 +636,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
           <div><strong><FolderOpen size={16} style={{verticalAlign:'middle',marginRight:7}}/>Saved GIS drafts</strong><div style={{fontSize:12,opacity:.72,marginTop:4}}>{drafts.length} saved draft(s) · {activeDraftId ? 'Active: ' + (drafts.find(row => row.draftId === activeDraftId)?.name || 'working copy') : 'No saved draft selected'}</div></div>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <input aria-label="GIS draft name" value={draftNameInput} onChange={e => setDraftNameInput(e.target.value)} placeholder={'GIS draft ' + (drafts.length + 1)} maxLength={100} className="gis-input" style={{minWidth:150,maxWidth:220}} />
             <button className="secondary-button" onClick={() => void createDraft(false)} disabled={draftBusy}><Plus size={15}/> New blank draft</button>
             <button className="secondary-button" onClick={() => void createDraft(true)} disabled={draftBusy || !features.length}><Copy size={15}/> Save as new draft</button>
             <button className="primary-button" onClick={save} disabled={draftBusy}><Save size={15}/> {draftBusy ? 'Saving…' : 'Save active draft'}</button>
