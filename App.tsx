@@ -1074,7 +1074,7 @@ function App() {
               <div className="page-intro"><div><span className="eyebrow muted">COMPUTER-AIDED DESIGN</span><h1>CAD & 3D workspace</h1><p>Project-centred 2D drafting, DXF exchange and interactive 3D geometry inspection.</p></div></div>
               {!activeProject ? <ChooseProject projects={projects} onChoose={openProject} /> : <>
                 <div className="active-project-strip"><span><Box size={17} /> {activeProject.title}</span><span className="status-pill">{drawingDoc ? 'Saved version ' + drawingDoc.version : 'Unsaved drawing'}</span></div>
-                <Cad3DEnginePanel initialData={drawingDoc?.data} gisFeatures={gisDoc?.data?.featureCollection?.features ?? []} onSave={data => saveDocument('drawing', data)} />
+                <Cad3DEnginePanel projectId={activeProject.id} initialData={drawingDoc?.data} gisFeatures={gisDoc?.data?.featureCollection?.features ?? []} onSave={data => saveDocument('drawing', data)} />
               </>}
             </div>
           )}
