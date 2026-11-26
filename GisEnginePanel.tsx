@@ -140,11 +140,12 @@ async function findLeastCostRoute(start: number[], end: number[], obstacles: Fea
 
 export default function GisEnginePanel({ projectId, projectTitle, initialData, hydraulicNetwork, hydraulicSimulation, onSave, onSendToEpanet }: {
   projectId: string; projectTitle?: string; initialData?: any; hydraulicNetwork?: any; hydraulicSimulation?: any;
-  onSave: (data: any) => void | Promise<void>; onSendToEpanet?: (features: any[]) => void;
+  onSave: (data: any) => void | Promise<void>; onSendToEpanet?: (features: any[], metadata?: any) => void;
 }) {
   const [features, setFeatures] = useState<Feature[]>([]);
   const [drafts, setDrafts] = useState<any[]>([]);
   const [activeDraftId, setActiveDraftId] = useState('');
+  const [draftMetadata, setDraftMetadata] = useState<any>(initialData?.epanetMetadata || null);
   const [draftBusy, setDraftBusy] = useState(false);
   const [draftNameInput, setDraftNameInput] = useState('GIS draft 1');
   const [draftsLoaded, setDraftsLoaded] = useState(false);
@@ -177,6 +178,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
   const [overlayMetric, setOverlayMetric] = useState<'compliance'|'pressure'|'flow'|'velocity'|'headloss'|'quality'|'tankLevel'>('compliance');
   const [overlayStep, setOverlayStep] = useState(-1);
   const fileRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { setDraftMetadata(initialData?.epanetMetadata || null); }, [projectId, initialData?.epanetMetadata]);
   const selected = features.find(feature => feature.id === selectedId);
   const summary = useMemo(() => ({ points: features.filter(f => f.type === 'Point').length, lines: features.filter(f => f.type === 'LineString').length, polygons: features.filter(f => f.type === 'Polygon').length }), [features]);
   const snapshots = hydraulicSimulation?.snapshots || [];
@@ -439,6 +441,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
         tank_max_level_m: node.kind === 'T' ? node.maxLevel : undefined,
         tank_diameter_m: node.kind === 'T' ? node.diameter : undefined,
         tank_min_volume_m3: node.kind === 'T' ? node.minVolume : undefined,
+        tank_volume_curve: node.kind === 'T' ? node.volumeCurve : undefined,
       };
       synchronized.push({ id, type: 'Point', name: previous?.name || node.id, category: node.kind === 'R' ? 'Reservoir' : node.kind === 'T' ? 'Tank' : 'Junction', coordinates: coordinate, properties });
     });
@@ -466,6 +469,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
         valve_type: link.valveType,
         valve_setting: link.setting,
         pump_curve: link.pumpCurve,
+        pump_power_hp: link.pumpPower,
       };
       synchronized.push({ id, type: 'LineString', name: previous?.name || link.id, category: link.kind === 'pump' ? 'Pump' : link.kind === 'valve' ? 'Valve' : 'Pipeline', coordinates, properties });
     });
@@ -481,7 +485,9 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
     setMessage('Synchronized ' + synchronized.length + ' hydraulic components from EPANET while retaining unrelated GIS layers.');
     if (persist) {
       const collection = { type: 'FeatureCollection', features: merged.map(featureToGeoJSON) };
-      void onSave({ format: 'GeoJSON', crs: 'OGC:CRS84 (longitude, latitude)', featureCollection: collection, savedAt: new Date().toISOString(), synchronizedFromEpanet: true });
+      const epanetMetadata = { settings: hydraulicNetwork.settings, inpExtras: hydraulicNetwork.inpExtras };
+      setDraftMetadata(epanetMetadata);
+      void onSave({ format: 'GeoJSON', crs: 'OGC:CRS84 (longitude, latitude)', featureCollection: collection, epanetMetadata, savedAt: new Date().toISOString(), synchronizedFromEpanet: true });
     }
   }
 
@@ -495,8 +501,10 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
     if (!onSendToEpanet) { setMessage('EPANET transfer is unavailable in this workspace.'); return; }
     setDraftBusy(true); setMessage('Opening EPANET and saving the current GIS layers…');
     try {
-      const savePromise = onSave({ format: 'GeoJSON', crs: 'OGC:CRS84 (longitude, latitude)', featureCollection: collection, savedAt: new Date().toISOString() });
-      onSendToEpanet(collection.features);
+      const data = draftData();
+      const metadata = data.epanetMetadata;
+      const savePromise = onSave({ ...data, featureCollection: collection });
+      onSendToEpanet(collection.features, metadata);
       await savePromise;
     } catch (error) {
       setMessage('EPANET opened, but the GIS backup save failed: '+(error instanceof Error ? error.message : 'unknown save error')+'.');
@@ -568,7 +576,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
     setMessage('GeoJSON export prepared.');
   }
   function draftData() {
-    return { format: 'GeoJSON', crs: 'OGC:CRS84 (longitude, latitude)', featureCollection: { type: 'FeatureCollection', features: features.map(featureToGeoJSON) }, savedAt: new Date().toISOString() };
+    return { format: 'GeoJSON', crs: 'OGC:CRS84 (longitude, latitude)', featureCollection: { type: 'FeatureCollection', features: features.map(featureToGeoJSON) }, epanetMetadata: hydraulicNetwork ? { settings: hydraulicNetwork.settings, inpExtras: hydraulicNetwork.inpExtras } : draftMetadata || undefined, savedAt: new Date().toISOString() };
   }
   async function createDraft(copyCurrent = false) {
     const draftName = draftNameInput.trim() || 'GIS draft ' + (drafts.length + 1);
@@ -600,6 +608,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
       setDrafts(response.data.drafts || []);
       setActiveDraftId(latest.draftId);
       setFeatures(fromGeoJSON(latest.data));
+      setDraftMetadata(latest.data?.epanetMetadata || null);
       lastSavedDataRef.current = JSON.stringify(latest.data);
       setSelectedId(''); setPendingLine([]); setPendingPolygon([]);
       setMessage('Opened saved draft: ' + latest.name);
