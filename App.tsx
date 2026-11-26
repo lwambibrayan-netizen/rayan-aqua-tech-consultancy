@@ -93,6 +93,7 @@ function App() {
   const [openedId, setOpenedId] = useState('');
   const [gisImportToken, setGisImportToken] = useState(0);
   const [pendingGisFeatures, setPendingGisFeatures] = useState<any[] | null>(null);
+  const [pendingGisMetadata, setPendingGisMetadata] = useState<any>(null);
   const documentLoadRef = useRef(0);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -440,6 +441,7 @@ function App() {
     documentLoadRef.current += 1;
     setGisImportToken(0);
     setPendingGisFeatures(null);
+    setPendingGisMetadata(null);
     setHydraulicDoc(null);
     setGisDoc(null);
     setBoqDoc(null);
@@ -453,7 +455,7 @@ function App() {
     setErrorMessage('');
   }
 
-  function openLinkedEpanet(currentFeatures?: any[]) {
+  function openLinkedEpanet(currentFeatures?: any[], metadata?: any) {
     if (!activeProject) return;
     const savedFeatures = gisDoc?.data?.featureCollection?.features ?? [];
     const featuresToImport = Array.isArray(currentFeatures) && currentFeatures.length
@@ -465,6 +467,7 @@ function App() {
       return;
     }
     setPendingGisFeatures(featuresToImport);
+    setPendingGisMetadata(metadata || null);
     setGisImportToken(value => value + 1);
     setSection('Engineering tools');
     setMobileNav(false);
@@ -1235,6 +1238,7 @@ function App() {
                 initialData={hydraulicDoc?.data?.network ? { ...hydraulicDoc.data.network, simulation: hydraulicDoc.data.simulation ?? null } : undefined}
                 gisFeatures={pendingGisFeatures ?? gisDoc?.data?.featureCollection?.features ?? []}
                 gisImportToken={gisImportToken}
+                gisMetadata={pendingGisMetadata}
                 onSave={data => saveDocument('hydraulic', data)}
               />
               </>}
