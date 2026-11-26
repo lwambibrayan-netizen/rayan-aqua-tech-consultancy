@@ -24,6 +24,11 @@ describe('EPANET unit conversion', () => {
     }
   });
 
+  it('converts US pressure settings in psi to metres of water head', () => {
+    expect(getEpanetUnitFactors('GPM').pressureToM).toBeCloseTo(0.7032496149, 8);
+    expect(getEpanetUnitFactors('LPS').pressureToM).toBe(1);
+  });
+
   it('converts emitter coefficients for both flow and head units', () => {
     const f = getEpanetUnitFactors('GPM');
     expect(convertEmitterCoefficient(1, f.flowToLps, f.lengthToM)).toBeCloseTo(0.1143, 4);
