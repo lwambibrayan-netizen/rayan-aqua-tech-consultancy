@@ -173,16 +173,20 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
   const [routeStartId,setRouteStartId]=useState(''); const [routeEndId,setRouteEndId]=useState(''); const [routeBusy,setRouteBusy]=useState(false); const [routeSlopeWeight,setRouteSlopeWeight]=useState('8');
   const [showSatellite, setShowSatellite] = useState(false);
   const [overlayMetric, setOverlayMetric] = useState<'compliance'|'pressure'|'flow'|'velocity'|'headloss'>('compliance');
+  const [overlayStep, setOverlayStep] = useState(-1);
   const fileRef = useRef<HTMLInputElement>(null);
   const selected = features.find(feature => feature.id === selectedId);
   const summary = useMemo(() => ({ points: features.filter(f => f.type === 'Point').length, lines: features.filter(f => f.type === 'LineString').length, polygons: features.filter(f => f.type === 'Polygon').length }), [features]);
+  const snapshots = hydraulicSimulation?.snapshots || [];
+  const selectedSnapshot = snapshots.length ? snapshots[Math.max(0,Math.min(snapshots.length-1,overlayStep<0?snapshots.length-1:overlayStep))] : null;
+  const overlayData = overlayMetric === 'compliance' ? hydraulicSimulation : selectedSnapshot || hydraulicSimulation;
   const overlayValues = useMemo(() => {
-    if (overlayMetric === 'pressure') return (hydraulicSimulation?.nodes || []).map((r: any) => Number(r.pressure)).filter(Number.isFinite);
-    if (overlayMetric === 'flow') return (hydraulicSimulation?.links || []).map((r: any) => Math.abs(Number(r.flow))).filter(Number.isFinite);
-    if (overlayMetric === 'velocity') return (hydraulicSimulation?.links || []).filter((r: any) => r.kind === 'pipe').map((r: any) => Math.abs(Number(r.velocity))).filter(Number.isFinite);
-    if (overlayMetric === 'headloss') return (hydraulicSimulation?.links || []).map((r: any) => Math.abs(Number(r.headloss))).filter(Number.isFinite);
+    if (overlayMetric === 'pressure') return (overlayData?.nodes || []).map((r: any) => Number(r.pressure)).filter(Number.isFinite);
+    if (overlayMetric === 'flow') return (overlayData?.links || []).map((r: any) => Math.abs(Number(r.flow))).filter(Number.isFinite);
+    if (overlayMetric === 'velocity') return (overlayData?.links || []).filter((r: any) => r.kind === 'pipe').map((r: any) => Math.abs(Number(r.velocity))).filter(Number.isFinite);
+    if (overlayMetric === 'headloss') return (overlayData?.links || []).map((r: any) => Math.abs(Number(r.headloss))).filter(Number.isFinite);
     return [];
-  }, [hydraulicSimulation, overlayMetric]);
+  }, [overlayData, overlayMetric]);
   const overlayRange = useMemo(() => ({ min: overlayValues.length ? Math.min(...overlayValues) : 0, max: overlayValues.length ? Math.max(...overlayValues) : 0 }), [overlayValues]);
   const overlayColor = (value: number | undefined) => {
     if (value === undefined || !Number.isFinite(value)) return '#87969a';
@@ -678,11 +682,12 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
       {hydraulicSimulation && <div className="gis-tool-group" style={{margin:'0 0 12px',padding:12,border:'1px solid var(--line, #d8e1e8)',borderRadius:10,background:'var(--panel, #fff)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
           <strong style={{fontSize:13}}>EPANET simulation result overlays</strong>
+          {snapshots.length>0 && <label className="gis-label">Simulation time<select className="gis-input" value={String(overlayStep<0?snapshots.length-1:overlayStep)} onChange={e=>setOverlayStep(Number(e.target.value))}>{snapshots.map((shot:any,i:number)=><option key={i} value={i}>Period {i+1} · {Number(shot.timeHours).toFixed(2)} h</option>)}</select></label>}
           <label className="gis-label">Map result<select className="gis-input" value={overlayMetric} onChange={e=>setOverlayMetric(e.target.value as typeof overlayMetric)}><option value="compliance">Engineering compliance</option><option value="pressure">Junction pressure (m)</option><option value="flow">Link flow (L/s)</option><option value="velocity">Pipe velocity (m/s)</option><option value="headloss">Link headloss (EPANET units)</option></select></label>
           <span style={{fontSize:11,opacity:.7}}>{overlayMetric==='compliance'?'Red = outside configured criteria · green = pass':overlayValues.length?`Range ${overlayRange.min.toFixed(2)}–${overlayRange.max.toFixed(2)} · low to high`:'No matching simulation results'}</span>
         </div>
         {overlayMetric!=='compliance' && <div style={{display:'flex',gap:4,alignItems:'center',marginTop:8}}>{['#2563a6','#1595b5','#36a56b','#d4a72c','#c54f45'].map(c=><span key={c} style={{height:8,flex:1,background:c,borderRadius:4}}/>)}<small style={{fontSize:10,opacity:.7,marginLeft:5}}>Low → High</small></div>}
-        <small style={{display:'block',fontSize:10,opacity:.7,marginTop:6}}>Map values represent the final hydraulic simulation period; pressure is shown at junctions and link metrics on mapped pipes, pumps and valves.</small>
+        <small style={{display:'block',fontSize:10,opacity:.7,marginTop:6}}>Map values show the selected hydraulic time step; pressure is shown at junctions and link metrics on mapped pipes, pumps and valves.</small>
       </div>}
       <div className="gis-tool-group" style={{margin:'0 0 12px',padding:12,border:'1px solid var(--line, #d8e1e8)',borderRadius:10,background:'var(--panel, #fff)'}}>
         <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
@@ -807,7 +812,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
               const color = palette[feature.category] || palette.Other;
               if (feature.type === 'Point') {
                 const c = feature.coordinates as number[];
-                const result = hydraulicSimulation?.nodes?.find((item: any) => item.id === feature.properties?.epanetId);
+                const result = overlayData?.nodes?.find((item: any) => item.id === feature.properties?.epanetId);
                 const pressureFail = result && (result.minPressure < (hydraulicNetwork?.settings?.minPressure ?? 15) || result.maxPressure > (hydraulicNetwork?.settings?.maxPressure ?? 60));
                 const resultColor = overlayMetric === 'compliance'
                   ? result ? pressureFail ? '#c54f45' : '#16866b' : color
@@ -815,7 +820,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
                 return <CircleMarker key={feature.id} center={[c[1], c[0]]} radius={7} pathOptions={{color: resultColor, fillColor: resultColor, fillOpacity: 0.9}} eventHandlers={{click: () => setSelectedId(feature.id)}}/>;
               }
               if (feature.type === 'LineString') {
-                const result = hydraulicSimulation?.links?.find((item: any) => item.id === feature.properties?.epanetId);
+                const result = overlayData?.links?.find((item: any) => item.id === feature.properties?.epanetId);
                 const minVelocity = hydraulicNetwork?.settings?.minVelocity ?? 0.3;
                 const maxVelocity = hydraulicNetwork?.settings?.maxVelocity ?? 2;
                 const metric = overlayMetric === 'flow' ? Math.abs(Number(result?.flow))
