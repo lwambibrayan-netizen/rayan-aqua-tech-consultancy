@@ -72,9 +72,23 @@ async function request<T = any>(method: string, path: string, body?: unknown): P
   if (!response.ok) throw new Error(typeof payload.error === 'string' ? payload.error : `Request failed (${response.status}).`);
   return { data: payload as T };
 }
+async function downloadFile(path: string): Promise<{ blob: Blob; filename: string }> {
+  if (!supabase) throw new Error('Backend is not configured. Set the Supabase public URL and anon key.');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Your sign-in session has expired. Please sign in again.');
+  const response = await fetch(path, { headers: { Authorization: `Bearer ${session.access_token}` } });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(typeof payload.error === 'string' ? payload.error : `Download failed (${response.status}).`);
+  }
+  const disposition = response.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  return { blob: await response.blob(), filename: match?.[1] || 'rayanaqua-terrain-output' };
+}
 export const api = {
   get: <T = any>(path: string) => request<T>('GET', path),
   post: <T = any>(path: string, body?: unknown) => request<T>('POST', path, body),
   put: <T = any>(path: string, body?: unknown) => request<T>('PUT', path, body),
   delete: <T = any>(path: string) => request<T>('DELETE', path),
+  download: downloadFile,
 };
