@@ -66,7 +66,7 @@ function deriveItems(network: any, gisFeatures: any[]): { items: Item[]; notes: 
   }));
   if (pipes.length) {
     const adjacency = new Map<string, Array<{ neighbour: any; link: any }>>();
-    const nodeById = new Map(nodes.map((node: any) => [node.id, node]));
+    const nodeById = new Map<string, any>(nodes.map((node: any) => [String(node.id), node] as [string, any]));
     pipes.forEach((pipe: any) => {
       if (!adjacency.has(pipe.from)) adjacency.set(pipe.from, []);
       if (!adjacency.has(pipe.to)) adjacency.set(pipe.to, []);
