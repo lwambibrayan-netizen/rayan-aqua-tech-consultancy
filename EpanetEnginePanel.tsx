@@ -213,7 +213,7 @@ export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=
    const leakAcc:Record<string,{coefficient:number;flowHours:number;peak:number;volumeM3:number;lastFlow:number}>={};
    net.nodes.filter(n=>n.kind==='J').forEach(n=>{min[n.id]=Infinity;max[n.id]=-Infinity;if((n.emitterCoefficient||0)>0)leakAcc[n.id]={coefficient:n.emitterCoefficient||0,flowHours:0,peak:0,volumeM3:0,lastFlow:0}});
    net.links.filter(l=>l.kind==='pump').forEach(l=>{pumpAcc[l.id]={flowHours:0,headHours:0,powerHours:0,energyKwh:0,peakPowerKw:0}});
-   let periods=0,dt=Infinity,totalHours=0,elapsedSeconds=0;const estimatedPeriods=Math.max(1,Math.ceil(net.settings.duration/Math.max(net.settings.step,0.001))+1),snapshotStride=Math.max(1,Math.ceil(estimatedPeriods/12));const snapshots:HydraulicSnapshot[]=[];
+   let periods=0,dt=Infinity,totalHours=0,elapsedSeconds=0;const estimatedPeriods=Math.max(1,Math.ceil(net.settings.duration/Math.max(net.settings.step,0.001))+1),snapshotBudget=Math.max(1,Math.min(12,Math.floor(1200/Math.max(1,net.nodes.length+net.links.length)))),snapshotStride=Math.max(1,Math.ceil(estimatedPeriods/snapshotBudget));const snapshots:HydraulicSnapshot[]=[];
    do{
     m.runH();periods++;
     net.nodes.forEach(n=>{const i=m!.getNodeIndex(n.id);nodeHeads[n.id]=m!.getNodeValue(i,NodeProperty.Head)});
