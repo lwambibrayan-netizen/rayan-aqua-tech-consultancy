@@ -45,7 +45,7 @@ describe('EPA Net3 EPANET benchmark import', () => {
     expect(patternedJunction?.demandPattern).not.toBe('');
     expect(model.settings.qualityMode).toBe('trace');
     expect(model.settings.qualityTraceNode).toBe('Lake');
-    expect((model.inpExtras?.STATUS ?? []).map(row => row.trim().replace(/\\s+/g, ' '))).toContain('10 Closed');
+    expect((model.inpExtras?.STATUS ?? []).map(row => row.trim().replace(/\s+/g, ' '))).toContain('10 Closed');
   });
 
   it('passes the importer validation checks', () => {
