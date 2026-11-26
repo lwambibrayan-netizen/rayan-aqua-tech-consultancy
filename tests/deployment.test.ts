@@ -48,9 +48,9 @@ describe('deployment and data-boundary configuration', () => {
   });
   it('calculates terrain profile chainage in metres and reports uphill grade', () => {
     const service = readFileSync(resolve(process.cwd(), 'app.py'), 'utf8');
-    expect(service).toContain('QgsDistanceArea');
-    expect(service).toContain('measure.measureLine(a,b)');
-    expect(service).toContain('pixel_resolution_m(layer)');
+    expect(service).toContain('QgsGeometry.fromPolylineXY(points)');
+    expect(service).toContain('length=geom.length()');
+    expect(service).toContain('chainage_m');
     expect(service).toContain('maximum_uphill_grade_percent');
     expect(service).not.toContain('"maximum_uphill_grade_percent":None');
   });
