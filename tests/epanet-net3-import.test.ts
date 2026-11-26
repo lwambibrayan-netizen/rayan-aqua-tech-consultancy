@@ -39,8 +39,8 @@ describe('EPA Net3 EPANET benchmark import', () => {
     const pump = model.links.find(l => l.id === '10');
     const patternedJunction = model.nodes.find(n => n.id === '15');
     expect(model.settings.duration).toBe(168);
-    expect(model.settings.timeControls.length).toBeGreaterThan(0);
-    expect(model.settings.tankControls.length).toBeGreaterThan(0);
+    expect(model.settings.timeControls?.length ?? 0).toBeGreaterThan(0);
+    expect(model.settings.tankControls?.length ?? 0).toBeGreaterThan(0);
     expect(pump?.pumpCurve).toContain('126.1804:28.0416');
     expect(patternedJunction?.demandPattern).not.toBe('');
     expect(model.settings.qualityMode).toBe('trace');
