@@ -576,7 +576,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
     setMessage('GeoJSON export prepared.');
   }
   function draftData() {
-    return { format: 'GeoJSON', crs: 'OGC:CRS84 (longitude, latitude)', featureCollection: { type: 'FeatureCollection', features: features.map(featureToGeoJSON) }, epanetMetadata: hydraulicNetwork ? { settings: hydraulicNetwork.settings, inpExtras: hydraulicNetwork.inpExtras } : draftMetadata || undefined, savedAt: new Date().toISOString() };
+    return { format: 'GeoJSON', crs: 'OGC:CRS84 (longitude, latitude)', featureCollection: { type: 'FeatureCollection', features: features.map(featureToGeoJSON) }, epanetMetadata: draftMetadata || (hydraulicNetwork ? { settings: hydraulicNetwork.settings, inpExtras: hydraulicNetwork.inpExtras } : undefined), savedAt: new Date().toISOString() };
   }
   async function createDraft(copyCurrent = false) {
     const draftName = draftNameInput.trim() || 'GIS draft ' + (drafts.length + 1);
