@@ -62,9 +62,12 @@ function deriveItems(network: any, gisFeatures: any[]): { items: Item[]; notes: 
       : group.diameter + ' mm pipeline · ' + group.material + ' · ' + group.pressureClass,
     unit: 'm', quantity: Number(group.quantity.toFixed(3)), rate: 0,
     source: 'EPANET pipe links (' + group.count + ' link(s)); summed model lengths',
-    review: group.material === 'Not specified' || group.pressureClass === 'Not specified' || group.diameter === 'Not specified',
+    review: group.material === 'Not specified' || group.pressureClass === 'Not specified' || group.diameter === 'Not specified' || group.quantity <= 0,
   }));
   if (pipes.length) {
+    if (pipes.some((pipe: any) => safeNumber(pipe.length) <= 0)) {
+      notes.push('One or more EPANET pipe links have zero or missing length. Their pipeline quantities are not suitable for procurement until the model lengths are completed.');
+    }
     const adjacency = new Map<string, Array<{ neighbour: any; link: any }>>();
     const nodeById = new Map<string, any>(nodes.map((node: any) => [String(node.id), node] as [string, any]));
     pipes.forEach((pipe: any) => {
@@ -76,6 +79,23 @@ function deriveItems(network: any, gisFeatures: any[]): { items: Item[]; notes: 
     adjacency.forEach((connections, nodeId) => {
       const node = nodeById.get(nodeId);
       const degree = connections.length;
+      // A change in connected main diameters needs a reducer/transition fitting.
+      // The count is an engineering take-off allowance and is deliberately flagged for review.
+      const connectedDiameters = connections
+        .map(({ link }) => safeNumber(link.diameter))
+        .filter((diameter: number) => diameter > 0);
+      const distinctDiameters = Array.from(new Set(connectedDiameters)).sort((a: number, b: number) => a - b);
+      if (distinctDiameters.length > 1) {
+        const reducerCount = distinctDiameters.length - 1;
+        items.push({
+          id: id(), section: 'Fittings – review', code: 'REDUCER-' + nodeId,
+          description: 'Diameter transition fitting at ' + nodeId + ' · connected sizes ' + distinctDiameters.join(' / ') + ' mm',
+          unit: 'No.', quantity: reducerCount, rate: 0,
+          source: 'EPANET pipe connectivity and nominal diameters; confirm reducer location, type and orientation',
+          review: true,
+        });
+        notes.push(nodeId + ': connected pipes have different nominal diameters (' + distinctDiameters.join(', ') + ' mm); confirm reducer/reducing-tee arrangement and count before procurement.');
+      }
       if (degree === 3) {
         items.push({ id: id(), section: 'Fittings', code: 'TEE', description: 'Tee fitting at network node ' + nodeId, unit: 'No.', quantity: 1, rate: 0, source: 'EPANET pipe topology: 3 incident pipe links' });
       } else if (degree === 4) {
