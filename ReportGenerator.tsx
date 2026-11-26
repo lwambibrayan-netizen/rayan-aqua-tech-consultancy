@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Download, FileText, Printer, Save } from 'lucide-react';
 
 type Props = {
@@ -27,6 +27,7 @@ const sectionTitle = (title: string) => <h2 className="generated-report-section-
 export default function ReportGenerator({ project, hydraulic, gis, boq, calculations, drawing, savedReport, onSave }: Props) {
   const [notes, setNotes] = useState(String(savedReport?.text || ''));
   const [saving, setSaving] = useState(false);
+  useEffect(() => { setNotes(String(savedReport?.text || '')); }, [project?.id, savedReport?.text]);
   const network = hydraulic?.network ?? hydraulic ?? {};
   const simulation = hydraulic?.simulation ?? hydraulic?.results ?? network?.simulation ?? null;
   const nodes = rows(network?.nodes);
