@@ -5,6 +5,7 @@ export type EpanetUnitFactors = {
   lengthToM: number;
   pipeDiameterToMm: number;
   tankVolumeToM3: number;
+  pressureToM: number;
 };
 
 const FLOW_TO_LPS: Record<EpanetFlowUnit, number> = {
@@ -35,6 +36,8 @@ export function getEpanetUnitFactors(rawUnit: string): EpanetUnitFactors {
     lengthToM,
     pipeDiameterToMm: US_UNITS.has(unit) ? 25.4 : 1,
     tankVolumeToM3: US_UNITS.has(unit) ? 0.028316846592 : 1,
+    // EPANET US customary pressure settings are psi, not feet of head.
+    pressureToM: US_UNITS.has(unit) ? 0.7032496149 : 1,
   };
 }
 
