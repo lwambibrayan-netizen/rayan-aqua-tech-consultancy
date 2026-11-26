@@ -120,7 +120,7 @@ export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=
  const [tool,setTool]=useState<'select'|'J'|'R'|'T'|'pipe'|'pump'|'valve'|'checkValve'>('select');
  const [selectedNode,setSelectedNode]=useState(''),[selectedLink,setSelectedLink]=useState(''),[linkStart,setLinkStart]=useState('');
  const [sim,setSim]=useState<Sim|null>(initialData?.simulation??null),[busy,setBusy]=useState(false),[saving,setSaving]=useState(false),[err,setErr]=useState(''),[note,setNote]=useState('Draw the network from scratch: place source and demand nodes, then connect them with links.');
- const [criteria,setCriteria]=useState(false);const [fileMessage,setFileMessage]=useState('');const fileRef=useRef<HTMLInputElement>(null);
+ const [criteria,setCriteria]=useState(false);const [analysisTab,setAnalysisTab]=useState<'quality'|'leakage'>('quality');const [fileMessage,setFileMessage]=useState('');const fileRef=useRef<HTMLInputElement>(null);
  useEffect(()=>{if(gisImportToken>0)return;if(initialData?.nodes&&initialData?.links){setNet(initialData);setSim(initialData.simulation??null)}},[initialData,gisImportToken]);
  const node=net.nodes.find(x=>x.id===selectedNode),link=net.links.find(x=>x.id===selectedLink),errors=useMemo(()=>validate(net),[net]);
  const updateN=(id:string,p:Partial<N>)=>{setNet(n=>({...n,nodes:n.nodes.map(x=>x.id===id?{...x,...p}:x)}));setSim(null)};
@@ -242,21 +242,25 @@ export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=
   {net.geo?.nodes&&Object.keys(net.geo.nodes).length>0?<p style={{fontSize:11,color:'#176b58',margin:'-5px 0 10px'}}>Geographic link retained · {Object.keys(net.geo.nodes).length} mapped nodes · {Object.keys(net.geo.routes).length} pipeline routes. Save the hydraulic design to preserve this GIS reference.</p>:null}
   <div style={{...card,marginTop:12,border:'2px solid #b9d8ce'}}>
    <strong style={{fontSize:15,color:'#145c55'}}>Water quality & leakage analysis</strong>
-   <p style={{fontSize:11,color:'#63797d',margin:'5px 0 12px'}}>Configure both analyses here before running EPANET. Results appear below the simulation results after a successful run.</p>
-   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,260px),1fr))',gap:14}}>
-    <div>
+   <p style={{fontSize:11,color:'#63797d',margin:'5px 0 12px'}}>Choose an analysis tool, configure it, then run EPANET to calculate results.</p>
+   <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+    <button type="button" onClick={()=>setAnalysisTab('quality')} aria-pressed={analysisTab==='quality'} style={{padding:'10px 14px',borderRadius:9,border:'1px solid '+(analysisTab==='quality'?'#16856b':'#d4e0dc'),background:analysisTab==='quality'?'#e2f2eb':'#fff',color:'#145c55',fontWeight:800,fontSize:13}}>Water Quality</button>
+    <button type="button" onClick={()=>setAnalysisTab('leakage')} aria-pressed={analysisTab==='leakage'} style={{padding:'10px 14px',borderRadius:9,border:'1px solid '+(analysisTab==='leakage'?'#16856b':'#d4e0dc'),background:analysisTab==='leakage'?'#e2f2eb':'#fff',color:'#145c55',fontWeight:800,fontSize:13}}>Leakage Detection</button>
+   </div>
+   <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr)',gap:14}}>
+    {analysisTab==='quality'?<div>
      <strong style={{fontSize:13,display:'block',marginBottom:7}}>Water quality simulation</strong>
      <label style={lab}>Analysis mode<select value={net.settings.qualityMode||'none'} onChange={e=>setNet(n=>({...n,settings:{...n.settings,qualityMode:e.target.value as S['qualityMode']}}))} style={css}><option value='none'>Off</option><option value='chemical'>Chemical residual (e.g. chlorine)</option><option value='age'>Water age</option><option value='trace'>Source tracing</option></select></label>
      {(net.settings.qualityMode||'none')==='chemical'?<><label style={lab}>Chemical name{txt(net.settings.qualityUnits||'Chlorine',v=>setNet(n=>({...n,settings:{...n.settings,qualityUnits:v}})))}</label><label style={lab}>Injection / source node<select value={net.settings.qualitySourceNode||''} onChange={e=>setNet(n=>({...n,settings:{...n.settings,qualitySourceNode:e.target.value}}))} style={css}><option value=''>No external injection source</option>{net.nodes.map(x=><option key={x.id} value={x.id}>{x.id}</option>)}</select></label><label style={lab}>Source concentration (mg/L){numInput(net.settings.qualitySourceConcentration??1,v=>setNet(n=>({...n,settings:{...n.settings,qualitySourceConcentration:v}})))}</label><label style={lab}>Minimum residual target (mg/L){numInput(net.settings.qualityMinResidual??0.2,v=>setNet(n=>({...n,settings:{...n.settings,qualityMinResidual:v}})))}</label><label style={lab}>Bulk reaction coefficient (/day){numInput(net.settings.qualityBulkReaction??-0.5,v=>setNet(n=>({...n,settings:{...n.settings,qualityBulkReaction:v}})))}</label><label style={lab}>Wall reaction coefficient (/day){numInput(net.settings.qualityWallReaction??-0.1,v=>setNet(n=>({...n,settings:{...n.settings,qualityWallReaction:v}})))}</label></>:null}
      {(net.settings.qualityMode||'none')==='trace'?<label style={lab}>Trace source node<select value={net.settings.qualityTraceNode||''} onChange={e=>setNet(n=>({...n,settings:{...n.settings,qualityTraceNode:e.target.value}}))} style={css}><option value=''>Select node</option>{net.nodes.map(x=><option key={x.id} value={x.id}>{x.id}</option>)}</select></label>:null}
      {(net.settings.qualityMode||'none')!=='none'?<label style={lab}>Quality timestep (minutes){numInput(net.settings.qualityStepMinutes??5,v=>setNet(n=>({...n,settings:{...n.settings,qualityStepMinutes:v}})))}<small style={{fontWeight:400,color:'#6c8185'}}>Native EPANET water-quality solver.</small></label>:null}
     </div>
-    <div>
-     <strong style={{fontSize:13,display:'block',marginBottom:7}}>Pressure-dependent leakage model</strong>
+    {analysisTab==='leakage'?<div>
+     <strong style={{fontSize:13,display:'block',marginBottom:7}}>Pressure-dependent leakage detection</strong>
      <p style={{fontSize:11,color:'#63797d'}}>Enter a positive emitter coefficient for each junction being assessed. Zero means no modelled leakage at that junction.</p>
      {net.nodes.filter(n=>n.kind==='J').length===0?<p style={{fontSize:11,color:'#a15c2b'}}>Add a junction to configure its leakage coefficient.</p>:<div style={{display:'grid',gap:7}}>{net.nodes.filter(n=>n.kind==='J').map(n=><label key={n.id} style={{...lab,display:'grid',gridTemplateColumns:'minmax(65px,0.7fr) minmax(120px,1.3fr)',alignItems:'center',gap:8}}><span>{n.id} coefficient</span>{numInput(n.emitterCoefficient||0,v=>updateN(n.id,{emitterCoefficient:v}))}</label>)}</div>}
      <small style={{fontSize:10,color:'#6c8185',display:'block',marginTop:8}}>This is EPANET emitter-based leakage estimation, not live acoustic leak-location detection or SCADA telemetry.</small>
-    </div>
+    </div>:null}
    </div>
   </div>
   <div style={{...card,overflowX:'auto'}}><div style={{display:'flex',justifyContent:'space-between',gap:8,marginBottom:8}}><strong style={{fontSize:13}}>Network drawing · {net.nodes.length} nodes · {net.links.length} links</strong><small style={{color:'#72868a'}}>Sketch canvas</small></div>
