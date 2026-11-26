@@ -257,7 +257,7 @@ export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=
    setSim(result);setNote('EPANET solved '+periods+' hydraulic period(s)'+(waterQuality?' and '+waterQuality.periods+' water-quality periods':'')+'. Review leakage and quality results.');
   }catch(e){if(m&&qopen){try{m.closeQ()}catch{}}if(m&&hopen){try{m.closeH()}catch{}}if(m&&opened){try{m.close()}catch{}}setErr(e instanceof Error?e.message:'EPANET failed to solve the network.');setNote('')}finally{setBusy(false)}
  }
- async function save(){if(!projectTitle){setErr('Select a project before saving this design.');return}setSaving(true);setErr('');try{await onSave({type:'rayan-aqua-hydraulic-network',version:6,network:net,simulation:sim,generatedAt:new Date().toISOString()});setNote('Network and results saved to '+projectTitle+'.')}catch(e){setErr(e instanceof Error?e.message:'Save failed.')}finally{setSaving(false)}}
+ async function save(){if(!projectTitle){setErr('Select a project before saving this design.');return}setSaving(true);setErr('');try{await onSave({type:'rayan-aqua-hydraulic-network',version:7,network:net,simulation:sim,generatedAt:new Date().toISOString()});setNote('Network and results saved to '+projectTitle+'.')}catch(e){setErr(e instanceof Error?e.message:'Save failed.')}finally{setSaving(false)}}
  const numInput=(v:number,fn:(v:number)=>void)=><input type="number" step="any" value={nval(v)} onChange={e=>fn(Number(e.target.value))} style={css}/>;
  const txt=(v:string,fn:(v:string)=>void)=><input value={v} onChange={e=>fn(e.target.value)} style={css}/>;
  const colour=(id:string)=>{const r=sim?.nodes.find(x=>x.id===id);return !r?'#758d91':r.minPressure<net.settings.minPressure||r.maxPressure>net.settings.maxPressure?'#c54f45':'#16866b'};
