@@ -166,6 +166,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
   const [elevationBusy, setElevationBusy] = useState(false);
   const [terrainBusy, setTerrainBusy] = useState(false);
   const [terrainResults, setTerrainResults] = useState<any>(null);
+  const [savedTerrainOutputs, setSavedTerrainOutputs] = useState<any[]>([]);
   const [terrainServiceStatus, setTerrainServiceStatus] = useState<any>(null);
   const [terrainStatusBusy, setTerrainStatusBusy] = useState(false);
   const [contourInterval, setContourInterval] = useState('5');
@@ -280,6 +281,28 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
     }
   }
 
+  async function refreshSavedTerrainOutputs() {
+    try {
+      const response = await api.get('/api/projects/' + projectId + '/gis-terrain/outputs');
+      setSavedTerrainOutputs(response.data.outputs || []);
+    } catch (error) {
+      setMessage(error instanceof Error ? 'Saved terrain outputs could not be listed: ' + error.message : 'Saved terrain outputs could not be listed.');
+    }
+  }
+
+  async function downloadTerrainOutput(outputId: string) {
+    try {
+      const file = await api.download('/api/projects/' + projectId + '/gis-terrain/outputs/' + outputId);
+      const url = URL.createObjectURL(file.blob);
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = file.filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      URL.revokeObjectURL(url);
+      setMessage('Downloaded saved PyQGIS output: ' + file.filename);
+    } catch (error) {
+      setMessage(error instanceof Error ? 'Terrain output download failed: ' + error.message : 'Terrain output download failed.');
+    }
+  }
+
   async function runTerrainOperation(operation: 'profile' | 'compare' | 'least-cost' | 'contours' | 'slope' | 'analyze', payload: Record<string, unknown>) {
     setTerrainBusy(true); setTerrainResults(null);
     try {
@@ -288,6 +311,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
       setTerrainResults({ operation, ...result, generatedAt: new Date().toISOString() });
       if (result.contours?.features?.length) setFeatures(rows => [...rows, ...fromGeoJSON(result.contours)]);
       setMessage('PyQGIS processing completed using ' + (result.dem?.source || 'terrain service') + '. Verify terrain resolution and survey data before design use.');
+      await refreshSavedTerrainOutputs();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'PyQGIS terrain processing failed. Check service connection and retry.');
     } finally { setTerrainBusy(false); }
@@ -326,6 +350,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
       route.properties={routing_method:result.routing_method||'PyQGIS/GDAL DEM Dijkstra',dem_source:result.dem_source,dem_resolution_m:result.dem_resolution_m,terrain_cost:result.terrain_cost,route_length_m:result.length_m,max_sampled_slope_percent:result.max_slope_percent,total_ascent_m:result.total_ascent_m,slope_weight:result.slope_weight,grid_cells:Number(result.grid_rows||0)*Number(result.grid_columns||0)};
       setFeatures(rows=>[...rows,route]); setSelectedId(route.id);
       setTerrainResults({operation:'least-cost',...response.data,generatedAt:new Date().toISOString()});
+      await refreshSavedTerrainOutputs();
       setMessage('PyQGIS least-cost route generated from '+(result.dem_source||'the terrain DEM')+'. Review the route against survey data and construction constraints before design.');
     } catch(e){setMessage(e instanceof Error?'PyQGIS least-cost routing failed: '+e.message:'PyQGIS least-cost routing failed.');} finally{setRouteBusy(false);}
   }
@@ -342,6 +367,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
       const lon = bounds ? (bounds.west + bounds.east) / 2 : defaultCenter[1];
       const response = await api.post('/api/projects/' + projectId + '/gis-terrain/status', { lat, lon });
       setTerrainServiceStatus(response.data);
+      await refreshSavedTerrainOutputs();
       const dem = response.data?.demAvailability;
       setMessage(dem?.recommended_resolution_m
         ? 'PyQGIS is online. Copernicus DEM coverage is available at approximately ' + dem.recommended_resolution_m + ' m for this project area.'
@@ -708,6 +734,17 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
           {terrainServiceStatus.error ? 'PyQGIS status: '+terrainServiceStatus.error :
             'PyQGIS '+(terrainServiceStatus.service?.status==='ok'?'online':'unavailable')+' · GLO-30 '+(terrainServiceStatus.demAvailability?.copernicus_glo30_available?'available':'not available')+' · GLO-90 '+(terrainServiceStatus.demAvailability?.copernicus_glo90_available?'available':'not available')+' · tile '+terrainServiceStatus.demAvailability?.tile}
         </small>}
+        <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--line, #d8e1e8)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <strong style={{fontSize:12}}>Saved PyQGIS project outputs · {savedTerrainOutputs.length}</strong>
+            <button className="secondary-button" onClick={()=>void refreshSavedTerrainOutputs()}>Refresh saved outputs</button>
+          </div>
+          {savedTerrainOutputs.map((output:any)=><div key={output.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',padding:'7px 0',borderBottom:'1px solid var(--line, #e3e9ed)'}}>
+            <span style={{fontSize:11}}><strong>{String(output.operation||'Terrain output').replace('-',' ')}</strong> · {output.format==='image/tiff'?'GeoTIFF raster':'JSON / GeoJSON'} · {output.created_at?new Date(output.created_at).toLocaleString():'Saved'}</span>
+            <button className="secondary-button" onClick={()=>void downloadTerrainOutput(output.id)}>Download output</button>
+          </div>)}
+          {!savedTerrainOutputs.length&&<small style={{fontSize:11,opacity:.7}}>Run a PyQGIS operation, then refresh to see its project-scoped saved output.</small>}
+        </div>
         {terrainResults&&<div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--line, #d8e1e8)'}}>
           <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
             <strong>{terrainResults.operation==='compare'?'Pipeline route comparison':terrainResults.operation==='profile'?'Pipeline ground profile':'Terrain analysis results'}</strong>
