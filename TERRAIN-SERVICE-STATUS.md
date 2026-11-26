@@ -1,27 +1,37 @@
 # QGIS / PyQGIS terrain integration status
 
-## Implemented in the feature branch
-- `app.py` is the dedicated Flask + PyQGIS terrain API.
-- The Docker image builds the QGIS 3.40 service and provisions `TERRAIN_OUTPUT_DIR=/data/terrain-outputs`.
-- The backend forwards authenticated, project-owned requests to PyQGIS using server-only `PYQGIS_API_URL` and `PYQGIS_API_KEY`.
-- The service requires its own `PYQGIS_API_KEY` and a mounted, georeferenced DEM configured through `TERRAIN_DEM_PATH`. It returns an error when the DEM is absent; it does not invent terrain.
-- Ground profiles, route comparisons, contours, least-cost route results and slope rasters are now written to a user- and project-scoped output directory. Authenticated list and retrieval endpoints prevent cross-project output access.
-- Profile and route outputs are persisted as JSON; contours are persisted as GeoJSON inside the output record; slope analysis is persisted as GeoTIFF.
-- Hydraulic result overlays now include pressure, flow, velocity and headloss selectors. EPANET simulations capture a bounded set of hydraulic time-step snapshots for time selection in GIS.
-- EPANET INP import preserves unrecognised sections and unsupported control/rule blocks for export instead of silently discarding them.
-- Terrain profile chainage and raster pixel resolution are measured in metres using QGIS distance/ellipsoid calculations. Profile results include maximum uphill grade.
+## Existing Railway infrastructure
+- Railway project: **RayanAqua GIS Infrastructure**.
+- Existing services observed online: **RayanAqua PyQGIS Processing API**, **QGIS Server**, and **PostGIS**.
+- The PyQGIS service has a 500 MB persistent volume mounted at `/io/data`; its existing processor stores DEM and derived terrain files under a project-specific hashed folder at `/io/data/processing`.
+- The current live processor downloads Copernicus DEM GLO-30 tiles with GLO-90 fallback, reprojects/clips them for analysis, and exposes a passing `/selftest` health check.
+- Existing live processing operations: ground profile, route comparison, contours, slope statistics, and DEM-grid least-cost route analysis.
 
-## Deployment requirements — not yet verified live
-- The PyQGIS container must be deployed separately, with a **persistent volume mounted at** `/data/terrain-outputs`. Docker `VOLUME` declares the mount point; the hosting platform must attach durable storage to retain files across redeployments.
-- Configure `PYQGIS_API_KEY` in the PyQGIS service and `PYQGIS_API_URL` plus `PYQGIS_API_KEY` in the authenticated Vercel API.
-- Mount a verified, georeferenced DEM and set `TERRAIN_DEM_PATH`. Confirm its datum, CRS, resolution and survey suitability.
-- Live health, DEM, profile, contours, least-cost, raster persistence and authenticated retrieval requests must be tested against the deployed service before relying on outputs.
-- The least-cost route uses a DEM-derived corridor and slope-weighted Dijkstra. Review obstacles and route constructability; it is not a detailed pipeline alignment approval.
-- The current QGIS Server WMS/WFS integration remains separate and requires `QGIS_SERVER_URL` plus a published QGIS project/layers.
+## Feature-branch implementation
+- The feature branch now contains the same Copernicus-backed PyQGIS service implementation as the live processor, with project-scoped output manifests and authenticated output retrieval added.
+- Profile, route-comparison, contour, slope-analysis and least-cost results are saved under the authenticated user's project folder.
+- Slope calculations retain their derived GeoTIFF raster. The output archive exposes metadata listing and authenticated JSON/GeoJSON or GeoTIFF downloads.
+- The Vercel API adds project-ownership-checked routes for listing and downloading those outputs. The browser download uses the user's existing Supabase access token.
+- The GIS workspace shows saved PyQGIS outputs and supports downloading them.
+- The Dockerfile now uses the same QGIS Server LTR runtime as the existing Railway service and mounts `/io/data` as persistent storage.
+- Hydraulic map overlays support pressure, flow, velocity and headloss, with a time-step selector using bounded EPANET simulation snapshots.
+- EPANET import/export now preserves unrecognised INP sections and unsupported control/rule blocks rather than silently dropping them.
 
-## Engineering acceptance checks still required
-1. Deploy the PyQGIS service with durable storage and a verified project DEM.
-2. Test a known surveyed pipeline route against expected chainage/elevation values.
-3. Verify saved contour GeoJSON and slope GeoTIFF survive service restarts and can only be retrieved by the owning project.
-4. Validate pressure/flow/velocity/headloss map overlays against the same EPANET result period and the hydraulic report.
-5. Run representative EPANET INP round-trip files in OWA-EPANET and compare node/link counts, settings, controls, rules and report results.
+## Deployment protection
+- A **staged Railway configuration change** has been prepared for the existing PyQGIS Processing API. It updates only that service's start command to the feature-branch processor.
+- The staged change is not live. The current Railway PyQGIS API, QGIS Server, PostGIS, and the production RayanAqua application have not been replaced or redeployed by this feature-branch work.
+- Accepting the staged change will redeploy the dedicated PyQGIS service. Its existing `/io/data` volume and `/selftest` health check are retained.
+- Until that staged service update is accepted and passes its health check, the saved-output listing/download endpoints are not available from the currently live PyQGIS service.
+
+## Engineering acceptance checks
+1. Accept the staged PyQGIS service update only after reviewing the feature preview.
+2. Confirm Railway deployment succeeds and `/selftest` passes.
+3. Run profile, compare, contours, slope and least-cost against a known route; verify the saved outputs survive a service restart.
+4. Verify one user's project cannot list or download another project's output.
+5. Compare hydraulic map values at selected time steps with the EPANET report and confirm GIS–EPANET coordinate and attribute synchronization.
+6. Round-trip representative EPANET INP files and compare node/link counts, pump and valve data, controls, rules and simulation results.
+
+## Engineering limitations
+- Copernicus GLO-30/GLO-90 is a digital surface model; it is not a substitute for project survey, pipe cover verification, geotechnical investigation or construction set-out.
+- Least-cost routing is a slope-weighted DEM corridor analysis. Obstacles and engineering constraints require review; the result is not a certified pipeline alignment.
+- Hydraulic pressure/velocity criteria are editable screening limits. Confirm applicable design standards and project requirements before approval.
