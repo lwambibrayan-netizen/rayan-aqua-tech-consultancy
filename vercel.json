@@ -1,8 +1,9 @@
 {
   "functions": {
-    "api/*.ts": { "maxDuration": 30 }
+    "api/[...path].ts": { "maxDuration": 30 }
   },
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "buildCommand": "npm run build",
