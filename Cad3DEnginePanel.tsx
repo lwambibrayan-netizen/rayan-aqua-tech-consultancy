@@ -277,8 +277,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
-    const { raw, snapped } = pointerPosition(event);
-    setCursorPoint(snapped?.point || pointerPosition(event).point);
+    const { point, snapped } = pointerPosition(event);
+    setCursorPoint(point);
     setSnapMarker(snapped);
   }
 
