@@ -24,6 +24,8 @@ import {
   Gauge,
   Layers3,
   LogOut,
+  Mail,
+  MessageCircle,
   MapPinned,
   Menu,
   Plus,
