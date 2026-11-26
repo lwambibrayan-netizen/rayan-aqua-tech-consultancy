@@ -9,6 +9,7 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
     const source = readFileSync(resolve(process.cwd(), 'tests/fixtures/Net3.inp'), 'utf8');
     const imported = fromInp(source);
     const appInp = toInp(imported);
+    expect(appInp).toMatch(/QUALITY TIMESTEP\s+0:05/);
     const workspace = new Workspace();
     await workspace.loadModule();
     const project = new Project(workspace);
@@ -111,7 +112,9 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
       project.closeQ();
       qualityOpen = false;
 
-      expect(qualityPeriods).toBeGreaterThan(2000);
+      // EN_nextQ advances to hydraulic events; EPANET performs quality routing internally at the configured 5-minute quality step.
+      expect(qualityPeriods).toBe(hydraulicPeriods);
+      expect(qualityPeriods).toBeGreaterThanOrEqual(168);
       expect(Number.isFinite(lakeTrace)).toBe(true);
       expect(lakeTrace).toBeCloseTo(100, 3);
 
