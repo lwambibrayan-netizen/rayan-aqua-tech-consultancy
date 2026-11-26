@@ -8,7 +8,9 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
   it('solves the imported-and-exported Net3 model hydraulically and traces source water for 168 hours', async () => {
     const source = readFileSync(resolve(process.cwd(), 'tests/fixtures/Net3.inp'), 'utf8');
     const imported = fromInp(source);
+    expect(imported.settings.demandPattern.split(/[\\s,]+/).filter(Boolean).map(Number)).toEqual(expect.arrayContaining([1.34, 1.94, 1.46, 1.44]));
     const appInp = toInp(imported);
+    expect(appInp).toContain('RA_DEMAND 1.34 1.94 1.46 1.44');
     expect(appInp).toMatch(/QUALITY TIMESTEP\s+0:05/);
     const workspace = new Workspace();
     await workspace.loadModule();
