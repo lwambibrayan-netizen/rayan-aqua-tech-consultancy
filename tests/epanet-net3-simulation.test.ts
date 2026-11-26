@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { InitHydOption, LinkProperty, NodeProperty, Project, Workspace } from 'epanet-js';
 import { fromInp, toInp } from '../EpanetEnginePanel';
@@ -43,6 +43,7 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
       let sampleFlow = NaN;
       let sampleVelocity = NaN;
       let dt = Infinity;
+      const hourlySamples: Array<{timeHours:number;pressureAt101M:number;pipe60FlowLps:number;pipe60VelocityMps:number;tank1LevelM:number}> = [];
 
       do {
         project.runH();
@@ -71,6 +72,10 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
         if (Number.isFinite(tankLevel)) {
           minimumTankLevel = Math.min(minimumTankLevel, tankLevel);
           maximumTankLevel = Math.max(maximumTankLevel, tankLevel);
+        }
+        const currentHours = elapsedSeconds / 3600;
+        if (Math.abs(currentHours - Math.round(currentHours)) < 1e-7) {
+          hourlySamples.push({timeHours:currentHours,pressureAt101M:pressure,pipe60FlowLps:flow,pipe60VelocityMps:velocity,tank1LevelM:tankLevel});
         }
 
         dt = project.nextH();
@@ -121,6 +126,10 @@ describe('EPA Net3 seven-day EPANET solver benchmark', () => {
       expect(lakeTrace).toBeCloseTo(100, 3);
 
       const report = String(workspace.readFile('Net3-roundtrip.rpt', 'utf8') ?? '');
+      const artifactDir = resolve(process.cwd(), 'tests/.benchmark-output');
+      mkdirSync(artifactDir, {recursive:true});
+      writeFileSync(resolve(artifactDir,'Net3-roundtrip.inp'), appInp);
+      writeFileSync(resolve(artifactDir,'epanet-js-results.json'), JSON.stringify({hourlySamples},null,2));
       expect(report.length).toBeGreaterThan(100);
       console.info(JSON.stringify({
         benchmark: 'EPA Net3 / 168 hours',
