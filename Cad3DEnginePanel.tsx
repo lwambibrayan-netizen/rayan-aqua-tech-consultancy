@@ -176,10 +176,45 @@ function getSnapCandidates(shapes: Shape[], cursor: Point2D): Array<{ point: Poi
   return candidates;
 }
 
+function segmentIntersection(a: Point2D, b: Point2D, c: Point2D, d: Point2D): Point2D | null {
+  const denominator = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
+  if (Math.abs(denominator) < 1e-9) return null;
+  const determinantAB = a.x * b.y - a.y * b.x;
+  const determinantCD = c.x * d.y - c.y * d.x;
+  const x = (determinantAB * (c.x - d.x) - (a.x - b.x) * determinantCD) / denominator;
+  const y = (determinantAB * (c.y - d.y) - (a.y - b.y) * determinantCD) / denominator;
+  const within = (p: Point2D, q: Point2D, value: Point2D) =>
+    value.x >= Math.min(p.x, q.x) - 1e-7 && value.x <= Math.max(p.x, q.x) + 1e-7 &&
+    value.y >= Math.min(p.y, q.y) - 1e-7 && value.y <= Math.max(p.y, q.y) + 1e-7;
+  return within(a, b, { x, y }) && within(c, d, { x, y }) ? { x, y } : null;
+}
+
+function getSegments(shapes: Shape[]): Array<[Point2D, Point2D]> {
+  const segments: Array<[Point2D, Point2D]> = [];
+  shapes.forEach(shape => {
+    if (shape.type === 'line' || shape.type === 'polyline') {
+      for (let i = 0; i < shape.points.length - 1; i++) segments.push([shape.points[i], shape.points[i + 1]]);
+    } else if (shape.type === 'rect') {
+      const [a, b] = shape.points;
+      const corners = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
+      for (let i = 0; i < 4; i++) segments.push([corners[i], corners[(i + 1) % 4]]);
+    }
+  });
+  return segments;
+}
+
 function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled: boolean): SnapPoint | null {
   if (!enabled) return null;
   let best: SnapPoint | null = null;
-  getSnapCandidates(shapes, cursor).forEach(candidate => {
+  const candidates = getSnapCandidates(shapes, cursor);
+  const segments = getSegments(shapes);
+  for (let i = 0; i < segments.length; i++) {
+    for (let j = i + 1; j < segments.length; j++) {
+      const point = segmentIntersection(segments[i][0], segments[i][1], segments[j][0], segments[j][1]);
+      if (point) candidates.push({ point, kind: 'INTERSECTION' });
+    }
+  }
+  candidates.forEach(candidate => {
     const distance = screenDistance(svg, cursor, candidate.point);
     if (distance <= SNAP_PIXELS && (!best || distance < best.distance)) {
       best = { ...candidate, distance };
@@ -198,6 +233,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [busy, setBusy] = useState(false);
   const [units, setUnits] = useState('m');
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [orthoEnabled, setOrthoEnabled] = useState(false);
+  const [gridSnapEnabled, setGridSnapEnabled] = useState(false);
+  const [gridSize, setGridSize] = useState(10);
+  const [hiddenLayers, setHiddenLayers] = useState<string[]>([]);
   const [snapMarker, setSnapMarker] = useState<SnapPoint | null>(null);
   const [selectedShapeId, setSelectedShapeId] = useState('');
   const [cursorPoint, setCursorPoint] = useState<Point2D | null>(null);
@@ -216,15 +255,30 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     circles: shapes.filter(shape => shape.type === 'circle').length,
   }), [shapes]);
 
+  function resolveDraftPoint(svg: SVGSVGElement, raw: Point2D) {
+    const objectSnap = findSnap(svg, raw, shapes, snapEnabled);
+    let point = objectSnap?.point || raw;
+    if (!objectSnap && gridSnapEnabled && gridSize > 0) {
+      point = { x: Math.round(point.x / gridSize) * gridSize, y: Math.round(point.y / gridSize) * gridSize };
+    }
+    if (orthoEnabled && draft.length) {
+      const anchor = draft[draft.length - 1];
+      const dx = point.x - anchor.x;
+      const dy = point.y - anchor.y;
+      point = Math.abs(dx) >= Math.abs(dy) ? { x: point.x, y: anchor.y } : { x: anchor.x, y: point.y };
+    }
+    return { point, snapped: objectSnap };
+  }
+
   function pointerPosition(event: React.PointerEvent<SVGSVGElement>) {
     const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
-    const snapped = findSnap(event.currentTarget, raw, shapes, snapEnabled);
-    return { raw, snapped };
+    const resolved = resolveDraftPoint(event.currentTarget, raw);
+    return { raw, snapped: resolved.snapped, point: resolved.point };
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
     const { raw, snapped } = pointerPosition(event);
-    setCursorPoint(snapped?.point || raw);
+    setCursorPoint(snapped?.point || pointerPosition(event).point);
     setSnapMarker(snapped);
   }
 
@@ -241,8 +295,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       return;
     }
     const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
-    const snapped = findSnap(event.currentTarget, raw, shapes, snapEnabled);
-    const point = snapped?.point || raw;
+    const resolved = resolveDraftPoint(event.currentTarget, raw);
+    const snapped = resolved.snapped;
+    const point = resolved.point;
 
     if (mode === 'circle') {
       setShapes(current => [...current, {
@@ -487,7 +542,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     };
   }, [view, shapes]);
 
-  const renderedShapes = shapes.map(shape => {
+  const layerNames = Array.from(new Set(shapes.map(shape => shape.layer || '0'))).sort();
+  const visibleShapes = shapes.filter(shape => !hiddenLayers.includes(shape.layer || '0'));
+  const renderedShapes = visibleShapes.map(shape => {
     const color = shape.layer === 'WATER_NETWORK' ? '#167b78' : '#c08c3c';
     if (shape.type === 'circle') {
       return <circle data-shape-id={shape.id} key={shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius || 12} fill="none" stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 4 : 2.5} />;
@@ -521,6 +578,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <button className={view === '3d' ? 'primary-button' : 'secondary-button'} onClick={() => setView('3d')}>3D view</button>
           <label>Units <select value={units} onChange={event => setUnits(event.target.value)}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
           <button className={snapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setSnapEnabled(value => !value)}><Crosshair size={15} /> Object snap: {snapEnabled ? 'ON' : 'OFF'}</button>
+          <button className={orthoEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setOrthoEnabled(value => !value)}>Ortho: {orthoEnabled ? 'ON' : 'OFF'}</button>
+          <button className={gridSnapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setGridSnapEnabled(value => !value)}>Grid snap: {gridSnapEnabled ? 'ON' : 'OFF'}</button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>Grid step <input type="number" min="0.1" step="any" value={gridSize} onChange={event => setGridSize(Math.max(0.1, Number(event.target.value) || 10))} style={{ width: 66, padding: 6 }} /></label>
         </div>
       </div>
 
@@ -567,8 +627,12 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             )}
           </svg>
           <p className="muted" style={{ fontSize: 12 }}>
-            Object snap finds circle centres and nearest points on circle edges, line endpoints, polyline vertices and midpoints. Move the pointer close to a target; the red marker shows the snap point. Tap to place.
+            Precision drafting: object snaps include endpoints, centres, circle quadrants, nearest points, midpoints and line intersections. Ortho constrains the next segment horizontally or vertically; grid snap uses the selected drawing-unit interval.
           </p>
+          {layerNames.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center', marginTop: 8 }}>
+            <strong style={{ fontSize: 12 }}>Layers</strong>
+            {layerNames.map(name => <button key={name} className={hiddenLayers.includes(name) ? 'secondary-button' : 'primary-button'} onClick={() => setHiddenLayers(current => current.includes(name) ? current.filter(item => item !== name) : [...current, name])} style={{ padding: '6px 9px', fontSize: 11 }}>{hiddenLayers.includes(name) ? 'Show' : 'Hide'} {name}</button>)}
+          </div>}
           {snapMarker && mode !== 'select' && <p style={{ fontSize: 12, color: '#b94d43', margin: 0 }}>Snap: {snapMarker.kind}</p>}
         </div>
       ) : (
