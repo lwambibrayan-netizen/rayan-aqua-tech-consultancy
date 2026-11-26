@@ -38,6 +38,6 @@ export function getEpanetUnitFactors(rawUnit: string): EpanetUnitFactors {
   };
 }
 
-export function convertEmitterCoefficient(value: number, flowToLps: number, headToM: number): number {
-  return value * flowToLps / Math.sqrt(headToM);
+export function convertEmitterCoefficient(value: number, flowToLps: number, headToM: number, exponent = 0.5): number {
+  return value * flowToLps / Math.pow(headToM, exponent);
 }
