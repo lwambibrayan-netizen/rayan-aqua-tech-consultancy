@@ -167,6 +167,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
   const [terrainBusy, setTerrainBusy] = useState(false);
   const [terrainResults, setTerrainResults] = useState<any>(null);
   const [savedTerrainOutputs, setSavedTerrainOutputs] = useState<any[]>([]);
+  const [terrainOutputsAvailable, setTerrainOutputsAvailable] = useState(false);
   const [terrainServiceStatus, setTerrainServiceStatus] = useState<any>(null);
   const [terrainStatusBusy, setTerrainStatusBusy] = useState(false);
   const [contourInterval, setContourInterval] = useState('5');
@@ -285,8 +286,11 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
     try {
       const response = await api.get('/api/projects/' + projectId + '/gis-terrain/outputs');
       setSavedTerrainOutputs(response.data.outputs || []);
+      setTerrainOutputsAvailable(true);
     } catch (error) {
-      setMessage(error instanceof Error ? 'Saved terrain outputs could not be listed: ' + error.message : 'Saved terrain outputs could not be listed.');
+      setTerrainOutputsAvailable(false);
+      const detail = error instanceof Error ? error.message : 'Saved terrain outputs could not be listed.';
+      if (!/404|not found|unknown/i.test(detail)) setMessage('Saved terrain outputs could not be listed: ' + detail);
     }
   }
 
@@ -734,7 +738,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
           {terrainServiceStatus.error ? 'PyQGIS status: '+terrainServiceStatus.error :
             'PyQGIS '+(terrainServiceStatus.service?.status==='ok'?'online':'unavailable')+' · GLO-30 '+(terrainServiceStatus.demAvailability?.copernicus_glo30_available?'available':'not available')+' · GLO-90 '+(terrainServiceStatus.demAvailability?.copernicus_glo90_available?'available':'not available')+' · tile '+terrainServiceStatus.demAvailability?.tile}
         </small>}
-        <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--line, #d8e1e8)'}}>
+        {terrainOutputsAvailable ? <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--line, #d8e1e8)'}}>
           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
             <strong style={{fontSize:12}}>Saved PyQGIS project outputs · {savedTerrainOutputs.length}</strong>
             <button className="secondary-button" onClick={()=>void refreshSavedTerrainOutputs()}>Refresh saved outputs</button>
@@ -743,8 +747,11 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
             <span style={{fontSize:11}}><strong>{String(output.operation||'Terrain output').replace('-',' ')}</strong> · {output.format==='image/tiff'?'GeoTIFF raster':'JSON / GeoJSON'} · {output.created_at?new Date(output.created_at).toLocaleString():'Saved'}</span>
             <button className="secondary-button" onClick={()=>void downloadTerrainOutput(output.id)}>Download output</button>
           </div>)}
-          {!savedTerrainOutputs.length&&<small style={{fontSize:11,opacity:.7}}>Run a PyQGIS operation, then refresh to see its project-scoped saved output.</small>}
-        </div>
+          {!savedTerrainOutputs.length&&<small style={{fontSize:11,opacity:.7}}>No saved terrain outputs for this project yet.</small>}
+        </div> : <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--line, #d8e1e8)',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <small style={{fontSize:11,opacity:.7}}>Persistent terrain-output downloads become available after the staged PyQGIS service update is deployed.</small>
+          <button className="secondary-button" onClick={()=>void refreshSavedTerrainOutputs()}>Check output archive</button>
+        </div>}
         {terrainResults&&<div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--line, #d8e1e8)'}}>
           <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
             <strong>{terrainResults.operation==='compare'?'Pipeline route comparison':terrainResults.operation==='profile'?'Pipeline ground profile':'Terrain analysis results'}</strong>
