@@ -119,7 +119,7 @@ export function validate(net:Net){
  const cut=net.nodes.filter(n=>!seen.has(n.id));if(cut.length)e.push('Disconnected from a reservoir/tank: '+cut.map(n=>n.id).join(', ')+'.');
  return e;
 }
-function diagnose(net:Net,nodes:NR[],links:LR[]){
+export function diagnose(net:Net,nodes:NR[],links:LR[]){
  const s:string[]=[];
  nodes.filter(n=>n.minPressure<net.settings.minPressure).forEach(n=>s.push(n.id+': minimum pressure '+n.minPressure.toFixed(2)+' m is below the '+net.settings.minPressure+' m criterion. Review source hydraulic grade, node elevation, peak demand and cumulative upstream headloss. Test larger/parallel mains or a correctly selected booster pump as separate scenarios; verify pump duty and pipe pressure class before adopting changes.'));
  nodes.filter(n=>n.maxPressure>net.settings.maxPressure).forEach(n=>s.push(n.id+': maximum pressure '+n.maxPressure.toFixed(2)+' m exceeds the '+net.settings.maxPressure+' m criterion. Review static head, terrain profile and pressure zoning; assess a PRV or break-pressure tank after checking transient conditions.'));
