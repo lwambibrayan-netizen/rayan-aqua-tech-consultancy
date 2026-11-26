@@ -40,6 +40,16 @@ async function upstreamJson(url: URL, init?: RequestInit): Promise<any> {
   return body;
 }
 
+async function upstreamFile(url: URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(20000) });
+  if (!response.ok) {
+    const text = await response.text(); let body: any;
+    try { body = JSON.parse(text); } catch { body = { error: text.slice(0, 500) }; }
+    throw new Error(String(body.error || `External engineering service returned HTTP ${response.status}.`));
+  }
+  return response;
+}
+
 async function handleRequest(request: VercelRequest): Promise<Response> {
   try {
     const url = new URL(request.url);
@@ -143,6 +153,23 @@ async function handleRequest(request: VercelRequest): Promise<Response> {
           if (!data) return fail('GIS draft not found.', 404);
           return json({ deleted: true, draftId });
         }
+      }
+      if (path[2] === 'gis-terrain' && path[3] === 'outputs' && (path.length === 4 || path.length === 5) && method === 'GET') {
+        const service = process.env.PYQGIS_API_URL; const key = process.env.PYQGIS_API_KEY;
+        if (!service || !key) return fail('PyQGIS terrain service is not configured.', 503);
+        if (path.length === 5 && !/^[a-f0-9]{16}$/.test(path[4])) return fail('Invalid terrain output ID.');
+        const upstream = new URL(path.length === 4 ? '/terrain/outputs' : '/terrain/outputs/' + path[4], service);
+        upstream.searchParams.set('userId', userId); upstream.searchParams.set('projectId', projectId);
+        try {
+          const response = await upstreamFile(upstream, { headers: { Authorization: `Bearer ${key}` } });
+          if (path.length === 4) return json(await response.json());
+          const headers = new Headers();
+          headers.set('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
+          const disposition = response.headers.get('content-disposition');
+          if (disposition) headers.set('Content-Disposition', disposition);
+          headers.set('Cache-Control', 'private, no-store');
+          return new Response(await response.arrayBuffer(), { status: 200, headers });
+        } catch (error) { return fail(error instanceof Error ? error.message : 'Terrain output retrieval failed.', 502); }
       }
       if (path[2] === 'gis-terrain' && path.length === 4 && path[3] !== 'status' && method === 'POST') {
         const service = process.env.PYQGIS_API_URL; const key = process.env.PYQGIS_API_KEY;
