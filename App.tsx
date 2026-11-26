@@ -111,6 +111,7 @@ function App() {
   const [reportDoc, setReportDoc] = useState<Doc>(null);
   const [calculationDoc, setCalculationDoc] = useState<Doc>(null);
   const [drawingDoc, setDrawingDoc] = useState<Doc>(null);
+  const [gisDrafts, setGisDrafts] = useState<any[]>([]);
   const [flow, setFlow] = useState('12');
   const [diameter, setDiameter] = useState('160');
   const [length, setLength] = useState('1200');
@@ -409,6 +410,12 @@ function App() {
     loadDocument('report', openedId, requestId);
     loadDocument('calculations', openedId, requestId);
     loadDocument('drawing', openedId, requestId);
+    setGisDrafts([]);
+    api.get('/api/projects/' + openedId + '/gis-drafts').then(response => {
+      if (requestId === documentLoadRef.current) setGisDrafts(response.data.drafts ?? []);
+    }).catch(() => {
+      if (requestId === documentLoadRef.current) setGisDrafts([]);
+    });
   }, [openedId, user?.userId]);
 
   async function saveDocument(
@@ -1193,6 +1200,7 @@ function App() {
                     project={activeProject}
                     hydraulic={hydraulicDoc?.data}
                     gis={gisDoc?.data}
+                    gisDrafts={gisDrafts}
                     boq={boqDoc?.data}
                     calculations={calculationDoc?.data}
                     drawing={drawingDoc?.data}
