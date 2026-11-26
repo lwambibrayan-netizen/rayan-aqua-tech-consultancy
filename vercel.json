@@ -1,10 +1,17 @@
 {
   "functions": {
-    "api/projects.ts": { "maxDuration": 30 },
-    "api/[...path].ts": { "maxDuration": 30 }
+    "api/projects.ts": {
+      "maxDuration": 30
+    },
+    "api/[...path].ts": {
+      "maxDuration": 30
+    }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
   ],
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
