@@ -20,7 +20,7 @@ type QualityResult={mode:'chemical'|'age'|'trace';units:string;periods:number;no
 type TankResult={id:string;level:number;minimumLevel:number;maximumLevel:number;minAllowed:number;maxAllowed:number;assessment:'PASS'|'FAIL'};
 type HydraulicSnapshot={timeHours:number;nodes:Array<{id:string;pressure:number}>;tanks?:Array<{id:string;level:number}>;links:Array<{id:string;kind:string;flow:number;velocity:number;headloss:number;status:string}>};
 type Sim={at:string;periods:number;nodes:NR[];links:LR[];tankResults?:TankResult[];snapshots?:HydraulicSnapshot[];report:string;suggestions:string[];nodeHeads?:Record<string,number>;pumpEnergy?:PumpEnergy[];pumpEfficiency?:number;energyTariff?:number;operatingHoursPerDay?:number;simulationHours?:number;leakage?:{totalAverageLps:number;totalPeakLps:number;totalVolumeM3:number;emitters:LeakResult[]};waterQuality?:QualityResult};
-type Props={projectTitle?:string;initialData?:any;gisFeatures?:any[];gisImportToken?:number;gisMetadata?:any;onSave:(data:unknown)=>Promise<void>};
+type Props={projectTitle?:string;initialData?:any;gisFeatures?:any[];gisImportToken?:number;gisMetadata?:any;cadImportInp?:string;cadImportToken?:number;onSave:(data:unknown)=>Promise<void>};
 
 const blank:Net={nodes:[],links:[],settings:{duration:0,step:1,patternStep:1,demandPattern:'',minPressure:15,maxPressure:60,minVelocity:.3,maxVelocity:2,headloss:'H-W',pumpEfficiency:75,energyTariff:30,operatingHoursPerDay:12,qualityMode:'none',qualityUnits:'Chlorine',qualityStepMinutes:5,qualitySourceConcentration:1,qualityBulkReaction:-0.5,qualityWallReaction:-0.1,qualityMinResidual:0.2,maxWaterAgeHours:24,minSourceContributionPct:80,tankControls:[],timeControls:[],ruleControls:[]}};
 const css:React.CSSProperties={width:'100%',padding:9,border:'1px solid #d7e2df',borderRadius:8,fontSize:13,background:'#fff',color:'#193b43'};
@@ -136,13 +136,14 @@ export function diagnose(net:Net,nodes:NR[],links:LR[]){
  return s;
 }
 
-export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=[],gisImportToken=0,gisMetadata,onSave}:Props){
+export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=[],gisImportToken=0,gisMetadata,cadImportInp='',cadImportToken=0,onSave}:Props){
  const [net,setNet]=useState<Net>(initialData?.nodes&&initialData?.links?initialData:blank);
  const [tool,setTool]=useState<'select'|'J'|'R'|'T'|'pipe'|'pump'|'valve'|'checkValve'>('select');
  const [selectedNode,setSelectedNode]=useState(''),[selectedLink,setSelectedLink]=useState(''),[linkStart,setLinkStart]=useState('');
  const [sim,setSim]=useState<Sim|null>(initialData?.simulation??null),[busy,setBusy]=useState(false),[saving,setSaving]=useState(false),[err,setErr]=useState(''),[note,setNote]=useState('Draw the network from scratch: place source and demand nodes, then connect them with links.');
  const [criteria,setCriteria]=useState(false);const [analysisTab,setAnalysisTab]=useState<'quality'|'leakage'>('quality');const [fileMessage,setFileMessage]=useState('');const fileRef=useRef<HTMLInputElement>(null);
  useEffect(()=>{if(gisImportToken>0)return;if(initialData?.nodes&&initialData?.links){setNet(initialData);setSim(initialData.simulation??null)}},[initialData,gisImportToken]);
+ useEffect(()=>{if(cadImportToken<=0||!cadImportInp.trim())return;try{const imported=fromInp(cadImportInp);const issues=validate(imported);if(issues.length)throw new Error(issues.slice(0,4).join(' '));setNet(imported);setSim(null);setSelectedNode('');setSelectedLink('');setNote('Loaded the current project CAD network. Review engineering properties, run EPANET, then save to synchronize results back to CAD and GIS.');setFileMessage('CAD → EPANET transfer complete. Network geometry, node levels, pipe sizes, connectivity and supported hydraulic devices were read from the project drawing.');}catch(error){setErr(error instanceof Error?'CAD-to-EPANET transfer failed: '+error.message:'CAD-to-EPANET transfer failed.');}},[cadImportToken,cadImportInp]);
  const node=net.nodes.find(x=>x.id===selectedNode),link=net.links.find(x=>x.id===selectedLink),errors=useMemo(()=>validate(net),[net]);
  const updateN=(id:string,p:Partial<N>)=>{setNet(n=>({...n,nodes:n.nodes.map(x=>x.id===id?{...x,...p}:x)}));setSim(null)};
  const updateL=(id:string,p:Partial<L>)=>{setNet(n=>({...n,links:n.links.map(x=>x.id===id?{...x,...p}:x)}));setSim(null)};
@@ -257,7 +258,7 @@ export default function EpanetEnginePanel({projectTitle,initialData,gisFeatures=
    setSim(result);setNote('EPANET solved '+periods+' hydraulic period(s)'+(waterQuality?' and '+waterQuality.periods+' water-quality periods':'')+'. Review leakage and quality results.');
   }catch(e){if(m&&qopen){try{m.closeQ()}catch{}}if(m&&hopen){try{m.closeH()}catch{}}if(m&&opened){try{m.close()}catch{}}setErr(e instanceof Error?e.message:'EPANET failed to solve the network.');setNote('')}finally{setBusy(false)}
  }
- async function save(){if(!projectTitle){setErr('Select a project before saving this design.');return}setSaving(true);setErr('');try{await onSave({type:'rayan-aqua-hydraulic-network',version:7,network:net,simulation:sim,generatedAt:new Date().toISOString()});setNote('Network and results saved to '+projectTitle+'.')}catch(e){setErr(e instanceof Error?e.message:'Save failed.')}finally{setSaving(false)}}
+ async function save(){if(!projectTitle){setErr('Select a project before saving this design.');return}setSaving(true);setErr('');try{await onSave({type:'rayan-aqua-hydraulic-network',version:8,network:net,inp:toInp(net),simulation:sim,generatedAt:new Date().toISOString()});setNote('Network and results saved to '+projectTitle+'.')}catch(e){setErr(e instanceof Error?e.message:'Save failed.')}finally{setSaving(false)}}
  const numInput=(v:number,fn:(v:number)=>void)=><input type="number" step="any" value={nval(v)} onChange={e=>fn(Number(e.target.value))} style={css}/>;
  const txt=(v:string,fn:(v:string)=>void)=><input value={v} onChange={e=>fn(e.target.value)} style={css}/>;
  const colour=(id:string)=>{const r=sim?.nodes.find(x=>x.id===id);return !r?'#758d91':r.minPressure<net.settings.minPressure||r.maxPressure>net.settings.maxPressure?'#c54f45':'#16866b'};
