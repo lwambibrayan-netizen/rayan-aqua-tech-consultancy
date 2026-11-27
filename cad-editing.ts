@@ -364,3 +364,39 @@ export function scaleEntities<T extends CadEditableEntity>(
   });
 }
 
+/** Trim one straight segment of an open polyline against a finite linear cutting edge. */
+export function trimPolylineSegment<T extends CadEditableEntity>(
+  entity: T, cutter: CadEditableEntity, pickPoint: Point2D, segmentIndex: number,
+): T {
+  if (entity.type !== 'polyline' || cutter.type !== 'line' || !Number.isInteger(segmentIndex) ||
+      segmentIndex < 0 || segmentIndex >= entity.points.length - 1) {
+    throw new Error('TRIM polyline requires an open polyline segment and a linear cutting edge.');
+  }
+  assertPoint(pickPoint);
+  if (Math.abs(entity.bulges?.[segmentIndex] ?? 0) > 1e-12) throw new Error('TRIM of a curved polyline segment is not supported yet.');
+  const a=entity.points[segmentIndex],b=entity.points[segmentIndex+1];
+  const hit=segmentIntersection(a,b,cutter.points[0],cutter.points[1]);
+  if(!hit)throw new Error('TRIM failed: the selected polyline segment does not intersect the finite cutting edge.');
+  const points=entity.points.map(clonePoint);
+  if(dist(pickPoint,a)<=dist(pickPoint,b))points[segmentIndex]=hit;
+  else points[segmentIndex+1]=hit;
+  return {...entity,points};
+}
+
+/** Extend one endpoint of a straight polyline segment to a finite linear boundary. */
+export function extendPolylineSegment<T extends CadEditableEntity>(
+  entity: T, boundary: CadEditableEntity, endpoint: 0 | 1, segmentIndex: number,
+): T {
+  if(entity.type!=='polyline'||boundary.type!=='line'||!Number.isInteger(segmentIndex)||
+    segmentIndex<0||segmentIndex>=entity.points.length-1) {
+    throw new Error('EXTEND polyline requires an open polyline segment and a linear boundary.');
+  }
+  if(Math.abs(entity.bulges?.[segmentIndex]??0)>1e-12)throw new Error('EXTEND of a curved polyline segment is not supported yet.');
+  const segment:CadEditableEntity={id:entity.id,type:'line',points:[entity.points[segmentIndex],entity.points[segmentIndex+1]],layer:entity.layer};
+  const extended=extendLine(segment,boundary,endpoint);
+  const points=entity.points.map(clonePoint);
+  points[segmentIndex]=clonePoint(extended.points[0]);
+  points[segmentIndex+1]=clonePoint(extended.points[1]);
+  return {...entity,points};
+}
+
