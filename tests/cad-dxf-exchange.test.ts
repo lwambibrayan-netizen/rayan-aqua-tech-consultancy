@@ -111,6 +111,23 @@ describe('structured DXF exchange', () => {
     expect(imported.warnings.some(warning=>warning.includes('cyclic nested BLOCK reference'))).toBe(true);
   });
 
+
+  it('expands DXF MINSERT row and column arrays at their declared spacing', () => {
+    const source = ['0','SECTION','2','BLOCKS',
+      '0','BLOCK','8','0','2','PIPE_SYMBOL','10','0','20','0',
+      '0','LINE','8','0','10','0','20','0','11','1','21','0','0','ENDBLK','0','ENDSEC',
+      '0','SECTION','2','ENTITIES','0','INSERT','8','SYMBOLS','2','PIPE_SYMBOL','10','100','20','200',
+      '70','2','71','3','44','20','45','10','0','ENDSEC','0','EOF'].join('\n');
+    const imported = importDraftingDxf(source, 1);
+    expect(imported.shapes).toHaveLength(6);
+    const starts = imported.shapes.map(shape=>shape.points[0]).sort((a,b)=>a.y-b.y||a.x-b.x);
+    expect(starts).toEqual([
+      {x:100,y:200},{x:120,y:200},{x:140,y:200},
+      {x:100,y:210},{x:120,y:210},{x:140,y:210},
+    ]);
+    expect(imported.warnings).toEqual([]);
+  });
+
   it('converts SPLINE, ELLIPSE and polyline-boundary HATCH to editable polylines', () => {
     const source = ['0','SECTION','2','ENTITIES',
       '0','SPLINE','8','CURVES','11','0','21','0','11','5','21','8','11','10','21','0',
