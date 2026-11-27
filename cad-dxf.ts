@@ -225,6 +225,24 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
       const pts=item.points.map(model); out.push(...emitEntity('LWPOLYLINE',['8',item.layer,'90',pts.length,'70','0']));
       pts.forEach(p=>out.push('10',fmt(p.x),'20',fmt(p.y)));
       const last=pts[pts.length-1]; textEntity({x:last.x+0.5,y:last.y+0.5},item.text,item.textHeightMm*(Number(drafting.sheet.scale.split(':')[1])||100)/1000/metresPerDrawingUnit,item.layer);
+    } else if(item.kind==='radial'){
+      const center=model(item.center),radius=item.radiusM/metresPerDrawingUnit,angle=item.leaderAngleRad;
+      const edge={x:center.x+Math.cos(angle)*radius,y:center.y+Math.sin(angle)*radius};
+      out.push(...emitEntity('LINE',['8',item.layer,'10',fmt(center.x),'20',fmt(center.y),'11',fmt(edge.x),'21',fmt(edge.y)]));
+      const label=(item.dimensionType==='radius'?'R ':'Ø ')+(item.dimensionType==='radius'?item.radiusM:item.radiusM*2).toFixed(item.precision);
+      textEntity({x:edge.x+0.2,y:edge.y+0.2},label,2.5,item.layer);
+    } else if(item.kind==='angular'){
+      const vertex=model(item.vertex),rayA=model(item.rayA),rayB=model(item.rayB),start=Math.atan2(rayA.y-vertex.y,rayA.x-vertex.x);
+      const end=Math.atan2(rayB.y-vertex.y,rayB.x-vertex.x),tau=Math.PI*2;
+      let sweep=((end-start+Math.PI*3)%tau)-Math.PI;
+      const radius=item.offsetM/metresPerDrawingUnit,arcPoints=Array.from({length:25},(_,i)=>({x:vertex.x+Math.cos(start+sweep*i/24)*radius,y:vertex.y+Math.sin(start+sweep*i/24)*radius}));
+      out.push(...emitEntity('LINE',['8',item.layer,'10',fmt(vertex.x),'20',fmt(vertex.y),'11',fmt(rayA.x),'21',fmt(rayA.y)]));
+      out.push(...emitEntity('LINE',['8',item.layer,'10',fmt(vertex.x),'20',fmt(vertex.y),'11',fmt(rayB.x),'21',fmt(rayB.y)]));
+      out.push(...emitEntity('LWPOLYLINE',['8',item.layer,'90',String(arcPoints.length),'70','0']));
+      arcPoints.forEach(p=>out.push('10',fmt(p.x),'20',fmt(p.y)));
+      const degrees=Math.acos(Math.max(-1,Math.min(1,((rayA.x-vertex.x)*(rayB.x-vertex.x)+(rayA.y-vertex.y)*(rayB.y-vertex.y))/(Math.hypot(rayA.x-vertex.x,rayA.y-vertex.y)*Math.hypot(rayB.x-vertex.x,rayB.y-vertex.y)))))*180/Math.PI;
+      const middle=arcPoints[Math.floor(arcPoints.length/2)];
+      textEntity(middle,degrees.toFixed(item.precision)+'°',2.5,item.layer);
     } else {
       const a=model(item.a),b=model(item.b),dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len,off=item.offsetM/metresPerDrawingUnit;
       const p1={x:a.x+nx*off,y:a.y+ny*off},p2={x:b.x+nx*off,y:b.y+ny*off};
