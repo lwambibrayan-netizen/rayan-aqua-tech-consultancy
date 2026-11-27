@@ -63,6 +63,7 @@ export type WaterCadDocument = {
   units: 'm';
   verticalDatum: string;
   components: WaterCadComponent[];
+  connections?: { id: string; aPortId: string; bPortId: string }[];
 };
 export type WaterCadIssue = { componentId: string; severity: 'error' | 'warning'; code: string; message: string };
 
@@ -104,7 +105,7 @@ export function component3dLength(component: WaterCadComponent): number {
   }
   return length;
 }
-export function connectPipeEndpoints(document: WaterCadDocument, pipeId: string, fromNodeId: string, toNodeId: string): WaterCadDocument {
+export function connectPipeEndpoints(document: WaterCadDocument, pipeId: string, fromNodeId: string, toNodeId: string, toleranceM = 0.05): WaterCadDocument {
   const pipe = document.components.find(item => item.id === pipeId && item.kind === 'pipe');
   const from = document.components.find(item => item.id === fromNodeId);
   const to = document.components.find(item => item.id === toNodeId);
@@ -112,8 +113,16 @@ export function connectPipeEndpoints(document: WaterCadDocument, pipeId: string,
   if (!pipe || !from || !to) throw new Error('Select an existing pipe and two existing network nodes.');
   if (!allowed.has(from.kind) || !allowed.has(to.kind)) throw new Error('Pipe endpoints must connect to junctions, sources, tanks or reservoirs.');
   if (from.id === to.id) throw new Error('A pipe must connect two different nodes.');
+  if (!finite(toleranceM) || toleranceM < 0) throw new Error('Connection tolerance must be a non-negative metre value.');
+  if (pipe.geometry.length < 2 || !from.geometry[0] || !to.geometry[0]) throw new Error('Pipe and network nodes need valid endpoint geometry.');
+  const startDistance = distance2d(pipe.geometry[0], from.geometry[0]);
+  const endDistance = distance2d(pipe.geometry[pipe.geometry.length - 1], to.geometry[0]);
+  if (startDistance > toleranceM || endDistance > toleranceM) {
+    throw new Error('Pipe endpoints must coincide with the selected node locations within ' + toleranceM + ' m (start: ' + startDistance.toFixed(3) + ' m, end: ' + endDistance.toFixed(3) + ' m).');
+  }
   return { ...document, components: document.components.map(item => item.id === pipeId ? { ...item, fromNodeId, toNodeId } : item) };
 }
+
 export function pipeSlopePercent(component: WaterCadComponent): number | null {
   const length = componentPlanLength(component);
   const a = component.properties.invertInletM, b = component.properties.invertOutletM;
