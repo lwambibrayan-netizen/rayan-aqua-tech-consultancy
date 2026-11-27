@@ -560,7 +560,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         setShapes(current => [...current, ...data]);
         setMessage('Imported ' + data.length + ' drawing entities from JSON.');
       } else {
-        const imported = importDraftingDxf(text, calibratedMetresPerUnit || 1);
+        const imported = importDraftingDxf(text, calibratedMetresPerUnit || 1, Number(drafting.sheet.scale.split(':')[1]) || 100);
         setShapes(current => [...current, ...imported.shapes]);
         setDrafting(current => {
           const known = new Set(current.layers.map(item => item.name.toUpperCase()));
