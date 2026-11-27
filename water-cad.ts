@@ -35,7 +35,7 @@ export type WaterEngineeringProperties = {
   bendRadiusM?: number;
   branchDiameterMm?: number;
   outletDiameterMm?: number;
-  valveType?: 'gate' | 'butterfly' | 'check' | 'PRV' | 'PSV' | 'air-release' | 'washout' | 'control';
+  valveType?: 'gate' | 'butterfly' | 'check' | 'PRV' | 'PSV' | 'PBV' | 'FCV' | 'TCV' | 'GPV' | 'PCV' | 'air-release' | 'washout' | 'control';
   valveSetting?: number;
   pumpDutyFlowM3h?: number;
   pumpDutyHeadM?: number;
