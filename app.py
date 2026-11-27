@@ -290,7 +290,10 @@ class Handler(BaseHTTPRequestHandler):
    ds=gdal.Open(dem)
    profile_result=profile(ds,[[38.501,-3.399],[38.509,-3.391]],30)
    ds=None
-   report={"status":"passed","dem_source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"crs":"EPSG:"+str(epsg),"contour_features":len(contour_result["features"]),"slope_mean_degrees":slope_result["mean_slope_degrees"],"profile_sample_count":profile_result["sample_count"],"profile_valid_samples":profile_result["valid_sample_count"],"profile_min_elevation_m":profile_result["minimum_elevation_m"],"profile_max_elevation_m":profile_result["maximum_elevation_m"]}
+   cad_grid=terrain_grid(dem,32); grid_count=len(cad_grid["elevationsM"])
+   if grid_count!=cad_grid["width"]*cad_grid["height"] or cad_grid["cellSizeX"]<=0 or cad_grid["cellSizeY"]<=0:raise RuntimeError("CAD terrain-grid self-test failed its dimensions or cell-size checks.")
+   if sum(value is not None for value in cad_grid["elevationsM"])<4:raise RuntimeError("CAD terrain-grid self-test found insufficient valid elevation samples.")
+   report={"status":"passed","dem_source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"crs":"EPSG:"+str(epsg),"contour_features":len(contour_result["features"]),"slope_mean_degrees":slope_result["mean_slope_degrees"],"profile_sample_count":profile_result["sample_count"],"profile_valid_samples":profile_result["valid_sample_count"],"profile_min_elevation_m":profile_result["minimum_elevation_m"],"profile_max_elevation_m":profile_result["maximum_elevation_m"],"cad_grid_width":cad_grid["width"],"cad_grid_height":cad_grid["height"],"cad_grid_valid_samples":sum(value is not None for value in cad_grid["elevationsM"]),"cad_grid_crs":"EPSG:"+str(epsg),"cad_grid_vertical_datum":cad_grid["verticalDatum"]}
    print("PYQGIS_SELF_TEST "+json.dumps(report),flush=True)
    send(self,200,report)
   else:send(self,404,{"error":"Not found"})
