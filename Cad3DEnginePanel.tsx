@@ -403,7 +403,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [mode, setMode] = useState<'select' | 'line' | 'polyline' | 'rect' | 'circle'>('select');
   const [draft, setDraft] = useState<Point2D[]>([]);
   const [view, setView] = useState<'2d' | '3d'>('2d');
-  const [ribbonTab, setRibbonTab] = useState<'Home'|'Insert'|'Annotate'|'Layers'|'View'|'Output'>('Home');
+  const [ribbonTab, setRibbonTab] = useState<'Home'|'Insert'|'Annotate'|'Water Network'|'3D Modeling'|'Analyze'|'View'|'Output'|'Manage'>('Home');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [commandLine, setCommandLine] = useState('');
   const [layer, setLayer] = useState('WATER_NETWORK');
@@ -1608,27 +1608,115 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           </button>
         </div>
       </div>
+
       <div className="aquacad-ribbon">
-        <div className="aquacad-ribbon-tabs" role="tablist" aria-label="CAD ribbon">
-          {(['Home','Insert','Annotate','Layers','View','Output'] as const).map(tab => <button key={tab} role="tab" aria-selected={ribbonTab===tab} className={ribbonTab===tab?'active':''} onClick={()=>setRibbonTab(tab)}>{tab}<ChevronDown size={12}/></button>)}
+        <div className="aquacad-ribbon-tabs" role="tablist" aria-label="AquaCAD ribbon">
+          {(['Home','Insert','Annotate','Water Network','3D Modeling','Analyze','View','Output','Manage'] as const).map(tab => <button key={tab} role="tab" aria-selected={ribbonTab===tab} className={ribbonTab===tab?'active':''} onClick={()=>setRibbonTab(tab)}>{tab}</button>)}
         </div>
         <div className="aquacad-ribbon-content">
-        <input ref={fileRef} type="file" accept=".dxf,.json" hidden onChange={event => importFile(event.target.files?.[0])} />
-        <input ref={terrainFileRef} type="file" accept=".json,application/json" hidden onChange={event => importTerrainGridFile(event.target.files?.[0])} />
-        <input ref={epanetFileRef} type="file" accept=".inp,.txt,text/plain" hidden onChange={event => importEpanetFile(event.target.files?.[0],epanetImportMode)} />
-        <input ref={hydraulicResultsFileRef} type="file" accept=".json,application/json" hidden onChange={event => importHydraulicResultsFile(event.target.files?.[0])} />
-        <div className="aquacad-ribbon-groups">
-          {ribbonTab==='Home' && <>
-            <div className="aquacad-ribbon-group"><strong>Draw</strong><div>{(['select','line','polyline','rect','circle'] as const).map(tool=><button key={tool} className={mode===tool?'selected':''} onClick={()=>{setMode(tool);setDraft([]);}}>{tool==='rect'?'Rectangle':tool[0].toUpperCase()+tool.slice(1)}</button>)}</div></div>
-            <div className="aquacad-ribbon-group"><strong>Modify</strong><div><button onClick={()=>setHistory(current=>undoHistory(current))} disabled={!history.past.length}>Undo</button><button onClick={()=>setHistory(current=>redoHistory(current))} disabled={!history.future.length}>Redo</button><button onClick={()=>setSelectedShapeIds([])}>Clear selection</button></div></div>
-            <div className="aquacad-ribbon-group"><strong>Precision</strong><div><button className={snapEnabled?'selected':''} onClick={()=>setSnapEnabled(v=>!v)}>Object snap {snapEnabled?'On':'Off'}</button><button className={orthoEnabled?'selected':''} onClick={()=>setOrthoEnabled(v=>!v)}>Ortho {orthoEnabled?'On':'Off'}</button><button className={gridSnapEnabled?'selected':''} onClick={()=>setGridSnapEnabled(v=>!v)}>Grid snap</button></div></div>
-          </>}
-          {ribbonTab==='Insert' && <div className="aquacad-ribbon-group"><strong>Water network components</strong><div>{(['pipe','bend','tee','reducer','valve','pump','tank','chamber','hydrant','meter'] as WaterComponentKind[]).map(kind=><button key={kind} onClick={()=>addWaterComponent(kind)}>+ {kind}</button>)}<button onClick={()=>fileRef.current?.click()}><FileUp size={13}/> Import DXF</button><button onClick={importGisDraft}><Layers3 size={13}/> GIS draft</button></div></div>}
-          {ribbonTab==='Annotate' && <div className="aquacad-ribbon-group"><strong>Dimensions & notes</strong><div><button onClick={()=>{setDimensionKind('aligned');setDraftTool('dimension');setAnnotationDraft([]);setMessage('Select two points for an aligned dimension.');}}>Aligned dimension</button><button onClick={()=>{setDimensionKind('linear');setDraftTool('dimension');setAnnotationDraft([]);setMessage('Select two points for a linear dimension.');}}>Linear dimension</button><button onClick={()=>{setDraftTool('text');setMessage('Click the drawing to place text.');}}>Text</button><button onClick={()=>{setDraftTool('leader');setAnnotationDraft([]);setMessage('Click leader arrow point, then text landing point.');}}>Leader</button><button onClick={()=>setDraftTool('none')}>Cancel annotation</button></div></div>}
-          {ribbonTab==='Layers' && <div className="aquacad-ribbon-group"><strong>Layer management</strong><div><select value={layer} onChange={e=>setLayer(e.target.value)}>{drafting.layers.map(item=><option key={item.name} value={item.name} disabled={item.locked}>{item.name}</option>)}</select><select value={layerTemplate} onChange={e=>setLayerTemplate(e.target.value as LayerStandard)}><option value="WATER_UTILITY">Water utility</option><option value="CIVIL_SITE">Civil / site</option><option value="MECHANICAL">Mechanical</option></select><button onClick={applyLayerTemplate}>Apply layer standard</button><button onClick={runEngineeringAudit}>Drawing audit</button></div></div>}
-          {ribbonTab==='View' && <div className="aquacad-ribbon-group"><strong>View controls</strong><div><button className={view==='2d'?'selected':''} onClick={()=>setView('2d')}>2D Model</button><button className={view==='3d'?'selected':''} onClick={()=>setView('3d')}>3D Model</button><button className={panMode?'selected':''} onClick={()=>setPanMode(v=>!v)}>Pan</button><button onClick={()=>setViewBox({x:0,y:0,width:WIDTH,height:HEIGHT})}>Zoom extents / reset</button><button onClick={toggleCadFullscreen}>{isFullscreen?'Restore window':'Maximize window'}</button></div></div>}
-          {ribbonTab==='Output' && <div className="aquacad-ribbon-group"><strong>Drawing files & sheets</strong><div><button onClick={downloadDxf}><Download size={13}/> Export DXF</button><button onClick={()=>fileRef.current?.click()}><FileUp size={13}/> Import DXF / JSON</button><button onClick={()=>exportSheetSvg(true)}>Print / PDF</button><button className="primary" onClick={saveDrawing} disabled={busy}><Save size={13}/> {busy?'Saving…':'Save drawing'}</button></div></div>}
-        </div>
+          <input ref={fileRef} type="file" accept=".dxf,.json" hidden onChange={event => importFile(event.target.files?.[0])} />
+          <input ref={terrainFileRef} type="file" accept=".json,application/json" hidden onChange={event => importTerrainGridFile(event.target.files?.[0])} />
+          <input ref={epanetFileRef} type="file" accept=".inp,.txt,text/plain" hidden onChange={event => importEpanetFile(event.target.files?.[0],epanetImportMode)} />
+          <input ref={hydraulicResultsFileRef} type="file" accept=".json,application/json" hidden onChange={event => importHydraulicResultsFile(event.target.files?.[0])} />
+          <div className="aquacad-ribbon-groups">
+            {ribbonTab==='Home' && <>
+              <div className="aquacad-ribbon-group"><strong>Draw</strong><div className="aquacad-tool-grid">
+                {([['↖','Select','select'],['╱','Line','line'],['⌁','Polyline','polyline'],['▭','Rectangle','rect'],['○','Circle','circle']] as const).map(([icon,label,tool])=><button key={tool} title={label} className={mode===tool?'selected':''} onClick={()=>{setMode(tool);setDraft([]);}}><i>{icon}</i><span>{label}</span></button>)}
+              </div></div>
+              <div className="aquacad-ribbon-group"><strong>Modify</strong><div className="aquacad-tool-grid">
+                <button title="Undo" onClick={()=>setHistory(current=>undoHistory(current))} disabled={!history.past.length}><i>↶</i><span>Undo</span></button>
+                <button title="Redo" onClick={()=>setHistory(current=>redoHistory(current))} disabled={!history.future.length}><i>↷</i><span>Redo</span></button>
+                <button title="Delete selected" onClick={deleteSelectedShape} disabled={!selectedShapeIds.length}><i>⌫</i><span>Erase</span></button>
+                <button title="Clear selection" onClick={()=>setSelectedShapeIds([])}><i>⊡</i><span>Deselect</span></button>
+              </div></div>
+              <div className="aquacad-ribbon-group"><strong>Precision</strong><div className="aquacad-tool-grid">
+                <button className={snapEnabled?'selected':''} onClick={()=>setSnapEnabled(v=>!v)}><i>✣</i><span>Object Snap</span></button>
+                <button className={orthoEnabled?'selected':''} onClick={()=>setOrthoEnabled(v=>!v)}><i>⊥</i><span>Ortho</span></button>
+                <button className={gridSnapEnabled?'selected':''} onClick={()=>setGridSnapEnabled(v=>!v)}><i>▦</i><span>Grid Snap</span></button>
+                <button className={polarEnabled?'selected':''} onClick={()=>setPolarEnabled(v=>!v)}><i>∠</i><span>Polar</span></button>
+              </div></div>
+              <div className="aquacad-ribbon-group"><strong>Clipboard & Files</strong><div className="aquacad-tool-grid">
+                <button onClick={saveDrawing} disabled={busy}><i>▣</i><span>Save</span></button>
+                <button onClick={()=>fileRef.current?.click()}><i>⇩</i><span>Open / Import</span></button>
+                <button onClick={downloadDxf}><i>DXF</i><span>Export DXF</span></button>
+              </div></div>
+            </>}
+            {ribbonTab==='Insert' && <>
+              <div className="aquacad-ribbon-group"><strong>Blocks & References</strong><div className="aquacad-tool-grid">
+                <button onClick={()=>{setLibraryPlacementActive(true);setMessage('Choose a parametric library object below, then click the drawing to place it.')}}><i>▣</i><span>Insert Block</span></button>
+                <button onClick={()=>fileRef.current?.click()}><i>⇩</i><span>Import DXF</span></button>
+                <button onClick={importGisDraft}><i>⌖</i><span>GIS Draft</span></button>
+                <button onClick={()=>terrainFileRef.current?.click()}><i>▤</i><span>Terrain Grid</span></button>
+              </div></div>
+              <div className="aquacad-ribbon-group"><strong>Drawing Sheets</strong><div className="aquacad-tool-grid">
+                <button onClick={addDrawingSheet}><i>▧</i><span>New Sheet</span></button>
+                <button onClick={createOrRefreshPaperLayout}><i>▤</i><span>Paper Layout</span></button>
+                <button onClick={()=>exportSheetSvg(true)}><i>⎙</i><span>Print / PDF</span></button>
+              </div></div>
+            </>}
+            {ribbonTab==='Annotate' && <>
+              <div className="aquacad-ribbon-group"><strong>Dimensions</strong><div className="aquacad-tool-grid">
+                {(['aligned','linear','angular','radius','diameter','ordinate'] as const).map(kind=><button key={kind} className={draftTool==='dimension'&&dimensionKind===kind?'selected':''} onClick={()=>{setDimensionKind(kind);setDraftTool('dimension');setAnnotationDraft([]);setMessage('Select the required points to place a '+kind+' dimension.')}}><i>↔</i><span>{kind[0].toUpperCase()+kind.slice(1)}</span></button>)}
+              </div></div>
+              <div className="aquacad-ribbon-group"><strong>Text & Leaders</strong><div className="aquacad-tool-grid">
+                <button onClick={()=>{setDraftTool('text');setMessage('Click the drawing to place text.')}}><i>A</i><span>Text</span></button>
+                <button onClick={()=>{setDraftTool('leader');setAnnotationDraft([]);setMessage('Click leader arrow point, then text landing point.')}}><i>↗</i><span>Leader</span></button>
+                <button onClick={()=>setDraftTool('none')}><i>×</i><span>Cancel</span></button>
+              </div></div>
+            </>}
+            {ribbonTab==='Water Network' && <>
+              <div className="aquacad-ribbon-group"><strong>Pipes & Fittings</strong><div className="aquacad-tool-grid">
+                {([['━','Pipe','pipe'],['┐','Bend','bend'],['┬','Tee','tee'],['▷','Reducer','reducer']] as const).map(([icon,label,kind])=><button key={kind} onClick={()=>addWaterComponent(kind)}><i>{icon}</i><span>{label}</span></button>)}
+              </div></div>
+              <div className="aquacad-ribbon-group"><strong>Valves</strong><div className="aquacad-tool-grid">
+                {([['⋈','Gate Valve','valve'],['◇','PRV','valve'],['▶','Check Valve','valve']] as const).map(([icon,label,kind])=><button key={label} onClick={()=>addWaterComponent(kind)}><i>{icon}</i><span>{label}</span></button>)}
+              </div></div>
+              <div className="aquacad-ribbon-group"><strong>Equipment</strong><div className="aquacad-tool-grid">
+                {(['pump','tank','chamber','hydrant','meter'] as WaterComponentKind[]).map(kind=><button key={kind} onClick={()=>addWaterComponent(kind)}><i>{kind==='pump'?'⚙':kind==='tank'?'▣':kind==='hydrant'?'●':'◉'}</i><span>{kind[0].toUpperCase()+kind.slice(1)}</span></button>)}
+              </div></div>
+              <div className="aquacad-ribbon-group"><strong>Network Nodes</strong><div className="aquacad-tool-grid">
+                <button onClick={()=>addWaterComponent('junction' as WaterComponentKind)}><i>•</i><span>Junction</span></button>
+                <button onClick={()=>addWaterComponent('reservoir' as WaterComponentKind)}><i>◍</i><span>Reservoir</span></button>
+                <button onClick={()=>addWaterComponent('borehole' as WaterComponentKind)}><i>◌</i><span>Borehole</span></button>
+              </div></div>
+            </>}
+            {ribbonTab==='3D Modeling' && <div className="aquacad-ribbon-group"><strong>3D workspace</strong><div className="aquacad-tool-grid">
+              <button className={view==='3d'?'selected':''} onClick={()=>setView('3d')}><i>▣</i><span>3D Model</span></button>
+              <button className={view==='2d'?'selected':''} onClick={()=>setView('2d')}><i>▱</i><span>2D Wireframe</span></button>
+              <button onClick={()=>setMessage('3D editing tools are available in the 3D model workspace.')}><i>⤢</i><span>3D Tools</span></button>
+            </div></div>}
+            {ribbonTab==='Analyze' && <>
+              <div className="aquacad-ribbon-group"><strong>Hydraulic Analysis</strong><div className="aquacad-tool-grid">
+                <button className="primary" onClick={runProjectHydraulics} disabled={simulationBusy||!waterCad.components.length}><i>▶</i><span>{simulationBusy?'Running…':'Run EPANET'}</span></button>
+                <button onClick={()=>{setEpanetImportMode('replace');epanetFileRef.current?.click()}}><i>⇩</i><span>Import INP</span></button>
+                <button onClick={downloadEpanetInput}><i>⇧</i><span>Export INP</span></button>
+                <button onClick={()=>hydraulicResultsFileRef.current?.click()}><i>▤</i><span>Load Results</span></button>
+              </div></div>
+              <div className="aquacad-ribbon-group"><strong>Review Results</strong><div className="aquacad-tool-grid">
+                <button onClick={()=>setMessage(hydraulicOverlay?'Overlay metric: '+hydraulicOverlay.metric:'Run a simulation to view hydraulic results.')}><i>▥</i><span>Results</span></button>
+                <button onClick={()=>{const issues=buildTerrainIssues(waterCad);setMessage(issues.map(x=>x.message).join(' · ')||'No terrain issues found.')}}><i>⚠</i><span>Warnings</span></button>
+                <button onClick={runEngineeringAudit}><i>✓</i><span>Drawing Audit</span></button>
+              </div></div>
+            </>}
+            {ribbonTab==='View' && <div className="aquacad-ribbon-group"><strong>Navigate & Display</strong><div className="aquacad-tool-grid">
+              <button onClick={()=>setPanMode(v=>!v)} className={panMode?'selected':''}><i>✋</i><span>Pan</span></button>
+              <button onClick={()=>setViewBox({x:0,y:0,width:WIDTH,height:HEIGHT})}><i>⌕</i><span>Zoom Extents</span></button>
+              <button onClick={toggleCadFullscreen}><i>⛶</i><span>{isFullscreen?'Restore':'Maximize'}</span></button>
+              <button onClick={()=>setMessage('Use the right-side project palette to inspect network objects.')}><i>▤</i><span>Palettes</span></button>
+            </div></div>}
+            {ribbonTab==='Output' && <div className="aquacad-ribbon-group"><strong>Plot, Export & Reports</strong><div className="aquacad-tool-grid">
+              <button onClick={()=>exportSheetSvg(true)}><i>⎙</i><span>Plot / PDF</span></button>
+              <button onClick={downloadDxf}><i>DXF</i><span>Export DXF</span></button>
+              <button onClick={downloadEpanetInput}><i>INP</i><span>Export EPANET</span></button>
+              <button onClick={()=>setMessage('Use the engineering schedules and audit panel below for project reports.')}><i>▤</i><span>Reports</span></button>
+            </div></div>}
+            {ribbonTab==='Manage' && <div className="aquacad-ribbon-group"><strong>Drawing Standards & Settings</strong><div className="aquacad-tool-grid">
+              <label>Layer <select value={layer} onChange={e=>setLayer(e.target.value)}>{drafting.layers.map(item=><option key={item.name} value={item.name}>{item.name}</option>)}</select></label>
+              <label>Standard <select value={layerTemplate} onChange={e=>setLayerTemplate(e.target.value as LayerStandard)}><option value="WATER_UTILITY">Water utility</option><option value="CIVIL_SITE">Civil / site</option><option value="MECHANICAL">Mechanical</option></select></label>
+              <button onClick={applyLayerTemplate}><i>≡</i><span>Apply Standard</span></button>
+              <button onClick={runEngineeringAudit}><i>✓</i><span>Audit</span></button>
+            </div></div>}
+          </div>
         </div>
         <div className="aquacad-quickbar"><span>Model: {view.toUpperCase()}</span><span>{shapes.length} entities</span><span>{waterCad.components.length} water objects</span><span>{units}</span><span>{snapEnabled?'OSNAP ON':'OSNAP OFF'}</span></div>
 
