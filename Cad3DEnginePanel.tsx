@@ -796,20 +796,51 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
   function exportSheetSvg() {
     const { widthMm, heightMm } = sheetDimensionsMm(drafting.sheet);
-    const scale = Number(drafting.sheet.scale.split(':')[1]) || 100;
-    const modelWidth = widthMm * scale / 1000 / (calibratedMetresPerUnit || 1);
-    const modelHeight = heightMm * scale / 1000 / (calibratedMetresPerUnit || 1);
-    const visible = drafting.layers.filter(item => item.visible && item.plot);
-    const allowed = new Set(visible.map(item => item.name));
-    const drawing = shapes.filter(shape => allowed.has(shape.layer || '0')).map(shape => {
-      if (shape.type === 'line') return '<line x1="'+shape.points[0].x+'" y1="'+shape.points[0].y+'" x2="'+shape.points[1].x+'" y2="'+shape.points[1].y+'" stroke="'+(drafting.layers.find(x=>x.name===shape.layer)?.color||'#222')+'"/>';
-      if (shape.type === 'circle') return '<circle cx="'+shape.points[0].x+'" cy="'+shape.points[0].y+'" r="'+(shape.radius||1)+'" fill="none" stroke="'+(drafting.layers.find(x=>x.name===shape.layer)?.color||'#222')+'"/>';
-      const pts = shape.type === 'rect' ? [shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]] : shape.points;
-      return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="'+(drafting.layers.find(x=>x.name===shape.layer)?.color||'#222')+'"/>';
+    const denominator = Number(drafting.sheet.scale.split(':')[1]) || 100;
+    const metresPerUnit = calibratedMetresPerUnit || 1;
+    const factor = metresPerUnit * 1000 / denominator;
+    const margin = 10, titleBlockHeight = 32, usableWidth = widthMm - margin * 2, usableHeight = heightMm - margin * 2 - titleBlockHeight;
+    const allPoints = shapes.flatMap(shape => shape.points)
+      .concat(waterCad.components.flatMap(item => item.geometry.map(p => ({ x: p.x / metresPerUnit, y: p.y / metresPerUnit }))))
+      .concat(drafting.annotations.flatMap(item => item.kind === 'text' ? [{x:item.at.x/metresPerUnit,y:item.at.y/metresPerUnit}] : item.kind === 'leader' ? item.points.map(p=>({x:p.x/metresPerUnit,y:p.y/metresPerUnit})) : [{x:item.a.x/metresPerUnit,y:item.a.y/metresPerUnit},{x:item.b.x/metresPerUnit,y:item.b.y/metresPerUnit}]));
+    const minX = allPoints.length ? Math.min(...allPoints.map(p=>p.x)) : 0;
+    const maxX = allPoints.length ? Math.max(...allPoints.map(p=>p.x)) : 1;
+    const minY = allPoints.length ? Math.min(...allPoints.map(p=>p.y)) : 0;
+    const maxY = allPoints.length ? Math.max(...allPoints.map(p=>p.y)) : 1;
+    const tx = margin + (usableWidth - (maxX-minX)*factor)/2 - minX*factor;
+    const ty = margin + (usableHeight - (maxY-minY)*factor)/2 + maxY*factor;
+    const mapPoint = (p: {x:number;y:number}) => ({ x: tx + p.x*factor, y: ty - p.y*factor });
+    const layer = (name:string) => drafting.layers.find(x=>x.name===name);
+    const allowed = new Set(drafting.layers.filter(x=>x.visible&&x.plot).map(x=>x.name));
+    const safe = (value:string) => value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const drawing = shapes.filter(shape=>allowed.has(shape.layer||'0')).map(shape=>{
+      const style=layer(shape.layer||'0'), color=style?.color||'#222222', weight=style?.lineWeightMm||0.18;
+      if(shape.type==='line'){const a=mapPoint(shape.points[0]),b=mapPoint(shape.points[1]);return '<line x1="'+a.x+'" y1="'+a.y+'" x2="'+b.x+'" y2="'+b.y+'" stroke="'+color+'" stroke-width="'+weight+'"/>';}
+      if(shape.type==='circle'){const a=mapPoint(shape.points[0]);return '<circle cx="'+a.x+'" cy="'+a.y+'" r="'+(shape.radius||1)*factor+'" fill="none" stroke="'+color+'" stroke-width="'+weight+'"/>';}
+      const pts=shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]]:shape.points;
+      return '<polyline points="'+pts.map(p=>{const q=mapPoint(p);return q.x+','+q.y;}).join(' ')+'" fill="none" stroke="'+color+'" stroke-width="'+weight+'"/>';
     }).join('');
-    const title = [drafting.sheet.company,drafting.sheet.title,drafting.sheet.drawingNumber,'REV '+drafting.sheet.revision,drafting.sheet.status,drafting.sheet.designer,drafting.sheet.checker,drafting.sheet.date].filter(Boolean).join(' | ');
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+widthMm+'mm" height="'+heightMm+'mm" viewBox="0 0 '+modelWidth+' '+modelHeight+'"><rect x="0" y="0" width="'+modelWidth+'" height="'+modelHeight+'" fill="white" stroke="black" stroke-width="'+(modelWidth/500)+'"/><g transform="translate(0 '+modelHeight+') scale(1 -1)">'+drawing+'</g><text x="'+(modelWidth*.04)+'" y="'+(modelHeight*.96)+'" font-size="'+(modelHeight*.012)+'">'+title.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</text></svg>';
+    const water = waterCad.components.filter(item=>allowed.has(item.kind==='pipe'?'WATER_PIPE':'WATER_FITTING')).map(item=>{
+      const pts=item.geometry.map(p=>mapPoint({x:p.x/metresPerUnit,y:p.y/metresPerUnit}));
+      if(!pts.length)return '';
+      if(item.kind==='pipe'&&pts.length>1)return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="#087e83" stroke-width="0.35"/>';
+      return '<circle cx="'+pts[0].x+'" cy="'+pts[0].y+'" r="1.5" fill="none" stroke="#087e83" stroke-width="0.35"/><text x="'+(pts[0].x+2)+'" y="'+(pts[0].y-2)+'" font-size="2.5">'+safe(item.properties.tag)+'</text>';
+    }).join('');
+    const annotations=drafting.annotations.filter(item=>allowed.has(item.layer)).map(item=>{
+      const color=layer(item.layer)?.color||'#222222';
+      if(item.kind==='text'){const p=mapPoint({x:item.at.x/metresPerUnit,y:item.at.y/metresPerUnit});return '<text x="'+p.x+'" y="'+p.y+'" font-size="'+item.heightMm+'" fill="'+color+'">'+safe(item.text)+'</text>';}
+      if(item.kind==='leader'){const pts=item.points.map(p=>mapPoint({x:p.x/metresPerUnit,y:p.y/metresPerUnit}));const last=pts[pts.length-1];return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="'+color+'" stroke-width="0.18"/><text x="'+(last.x+1)+'" y="'+(last.y-1)+'" font-size="'+item.textHeightMm+'" fill="'+color+'">'+safe(item.text)+'</text>';}
+      const a=mapPoint({x:item.a.x/metresPerUnit,y:item.a.y/metresPerUnit}),b=mapPoint({x:item.b.x/metresPerUnit,y:item.b.y/metresPerUnit});
+      const label=item.textOverride||formatDimension(measureDimension(item),item.precision,drafting.sheet.units);
+      return '<line x1="'+a.x+'" y1="'+a.y+'" x2="'+b.x+'" y2="'+b.y+'" stroke="'+color+'" stroke-width="0.18"/><text x="'+((a.x+b.x)/2)+'" y="'+((a.y+b.y)/2-1.5)+'" text-anchor="middle" font-size="2.5" fill="'+color+'">'+safe(label)+'</text>';
+    }).join('');
+    const titleX=widthMm-170,titleY=heightMm-32;
+    const titleBlock='<rect x="'+titleX+'" y="'+titleY+'" width="160" height="22" fill="white" stroke="black" stroke-width="0.25"/><line x1="'+titleX+'" y1="'+(titleY+8)+'" x2="'+(titleX+160)+'" y2="'+(titleY+8)+'" stroke="black" stroke-width="0.18"/><line x1="'+(titleX+105)+'" y1="'+titleY+'" x2="'+(titleX+105)+'" y2="'+(titleY+22)+'" stroke="black" stroke-width="0.18"/><text x="'+(titleX+2)+'" y="'+(titleY+5.5)+'" font-size="3.2">'+safe(drafting.sheet.company)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+14)+'" font-size="3">'+safe(drafting.sheet.title)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+19)+'" font-size="2.5">'+safe(drafting.sheet.status)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+5.5)+'" font-size="2.5">DWG '+safe(drafting.sheet.drawingNumber)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+11)+'" font-size="2.5">REV '+safe(drafting.sheet.revision)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+16)+'" font-size="2.5">SCALE '+safe(drafting.sheet.scale)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+20)+'" font-size="2.5">'+safe(drafting.sheet.date)+'</text>';
+    const border='<rect x="5" y="5" width="'+(widthMm-10)+'" height="'+(heightMm-10)+'" fill="none" stroke="black" stroke-width="0.5"/>';
+    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+widthMm+'mm" height="'+heightMm+'mm" viewBox="0 0 '+widthMm+' '+heightMm+'"><rect width="100%" height="100%" fill="white"/>'+border+titleBlock+'<g>'+drawing+water+annotations+'</g></svg>';
     downloadWaterFile((drafting.sheet.drawingNumber||'drawing')+'.svg',svg,'image/svg+xml');
+    const fits=(maxX-minX)*factor<=usableWidth&&(maxY-minY)*factor<=usableHeight;
+    setMessage(fits?'Drawing sheet SVG exported at '+drafting.sheet.scale+'. Review title block and plotted scale before issue.':'Sheet exported, but geometry exceeds the selected sheet at '+drafting.sheet.scale+'. Choose a larger sheet or smaller scale.');
   }
 
   function downloadDxf() {
