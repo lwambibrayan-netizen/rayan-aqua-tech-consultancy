@@ -1,10 +1,14 @@
 {
   "functions": {
-    "api/**/*.ts": { "runtime": "nodejs22.x", "maxDuration": 30 }
+    "api/projects.ts": { "maxDuration": 30 },
+    "api/projects/[projectId]/docs/[kind].ts": { "maxDuration": 30 },
+    "api/projects/[projectId]/gis-drafts.ts": { "maxDuration": 30 },
+    "api/projects/[projectId]/gis-drafts/[draftId].ts": { "maxDuration": 30 },
+    "api/projects/[projectId]/gis-terrain/[operation].ts": { "maxDuration": 60 },
+    "api/[...path].ts": { "maxDuration": 30 }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "buildCommand": "npm run build",
   "outputDirectory": "dist",

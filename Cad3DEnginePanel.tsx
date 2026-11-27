@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
+import { api } from './client';
 
 type Point2D = { x: number; y: number };
 type Shape = {
@@ -12,6 +13,7 @@ type Shape = {
   layer: string;
 };
 type Props = {
+  projectId: string;
   initialData?: any;
   gisFeatures?: any[];
   onSave: (data: any) => Promise<void> | void;
@@ -30,6 +32,19 @@ function exportDxf(shapes: Shape[]) {
     '0', 'SECTION', '2', 'ENTITIES',
   ];
   shapes.forEach(shape => {
+    // A rectangle is four edges, not a two-vertex diagonal polyline.
+    if (shape.type === 'rect') {
+      const [a, b] = shape.points;
+      const corners = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
+      for (let i = 0; i < 4; i++) {
+        const start = corners[i];
+        const end = corners[(i + 1) % 4];
+        output.push('0', 'LINE', '8', shape.layer || '0',
+          '10', String(start.x), '20', String(start.y),
+          '11', String(end.x), '21', String(end.y));
+      }
+      return;
+    }
     output.push(
       '0',
       shape.type === 'line' ? 'LINE' : shape.type === 'circle' ? 'CIRCLE' : 'LWPOLYLINE',
@@ -174,10 +189,45 @@ function getSnapCandidates(shapes: Shape[], cursor: Point2D): Array<{ point: Poi
   return candidates;
 }
 
+function segmentIntersection(a: Point2D, b: Point2D, c: Point2D, d: Point2D): Point2D | null {
+  const denominator = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
+  if (Math.abs(denominator) < 1e-9) return null;
+  const determinantAB = a.x * b.y - a.y * b.x;
+  const determinantCD = c.x * d.y - c.y * d.x;
+  const x = (determinantAB * (c.x - d.x) - (a.x - b.x) * determinantCD) / denominator;
+  const y = (determinantAB * (c.y - d.y) - (a.y - b.y) * determinantCD) / denominator;
+  const within = (p: Point2D, q: Point2D, value: Point2D) =>
+    value.x >= Math.min(p.x, q.x) - 1e-7 && value.x <= Math.max(p.x, q.x) + 1e-7 &&
+    value.y >= Math.min(p.y, q.y) - 1e-7 && value.y <= Math.max(p.y, q.y) + 1e-7;
+  return within(a, b, { x, y }) && within(c, d, { x, y }) ? { x, y } : null;
+}
+
+function getSegments(shapes: Shape[]): Array<[Point2D, Point2D]> {
+  const segments: Array<[Point2D, Point2D]> = [];
+  shapes.forEach(shape => {
+    if (shape.type === 'line' || shape.type === 'polyline') {
+      for (let i = 0; i < shape.points.length - 1; i++) segments.push([shape.points[i], shape.points[i + 1]]);
+    } else if (shape.type === 'rect') {
+      const [a, b] = shape.points;
+      const corners = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
+      for (let i = 0; i < 4; i++) segments.push([corners[i], corners[(i + 1) % 4]]);
+    }
+  });
+  return segments;
+}
+
 function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled: boolean): SnapPoint | null {
   if (!enabled) return null;
   let best: SnapPoint | null = null;
-  getSnapCandidates(shapes, cursor).forEach(candidate => {
+  const candidates = getSnapCandidates(shapes, cursor);
+  const segments = getSegments(shapes);
+  for (let i = 0; i < segments.length; i++) {
+    for (let j = i + 1; j < segments.length; j++) {
+      const point = segmentIntersection(segments[i][0], segments[i][1], segments[j][0], segments[j][1]);
+      if (point) candidates.push({ point, kind: 'INTERSECTION' });
+    }
+  }
+  candidates.forEach(candidate => {
     const distance = screenDistance(svg, cursor, candidate.point);
     if (distance <= SNAP_PIXELS && (!best || distance < best.distance)) {
       best = { ...candidate, distance };
@@ -186,7 +236,7 @@ function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled:
   return best;
 }
 
-export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave }: Props) {
+export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures = [], onSave }: Props) {
   const [shapes, setShapes] = useState<Shape[]>(initialData?.shapes || []);
   const [mode, setMode] = useState<'select' | 'line' | 'polyline' | 'rect' | 'circle'>('select');
   const [draft, setDraft] = useState<Point2D[]>([]);
@@ -196,6 +246,10 @@ export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave
   const [busy, setBusy] = useState(false);
   const [units, setUnits] = useState('m');
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [orthoEnabled, setOrthoEnabled] = useState(false);
+  const [gridSnapEnabled, setGridSnapEnabled] = useState(false);
+  const [gridSize, setGridSize] = useState(10);
+  const [hiddenLayers, setHiddenLayers] = useState<string[]>([]);
   const [snapMarker, setSnapMarker] = useState<SnapPoint | null>(null);
   const [selectedShapeId, setSelectedShapeId] = useState('');
   const [cursorPoint, setCursorPoint] = useState<Point2D | null>(null);
@@ -214,15 +268,30 @@ export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave
     circles: shapes.filter(shape => shape.type === 'circle').length,
   }), [shapes]);
 
+  function resolveDraftPoint(svg: SVGSVGElement, raw: Point2D) {
+    const objectSnap = findSnap(svg, raw, shapes, snapEnabled);
+    let point = objectSnap?.point || raw;
+    if (!objectSnap && gridSnapEnabled && gridSize > 0) {
+      point = { x: Math.round(point.x / gridSize) * gridSize, y: Math.round(point.y / gridSize) * gridSize };
+    }
+    if (orthoEnabled && draft.length) {
+      const anchor = draft[draft.length - 1];
+      const dx = point.x - anchor.x;
+      const dy = point.y - anchor.y;
+      point = Math.abs(dx) >= Math.abs(dy) ? { x: point.x, y: anchor.y } : { x: anchor.x, y: point.y };
+    }
+    return { point, snapped: objectSnap };
+  }
+
   function pointerPosition(event: React.PointerEvent<SVGSVGElement>) {
     const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
-    const snapped = findSnap(event.currentTarget, raw, shapes, snapEnabled);
-    return { raw, snapped };
+    const resolved = resolveDraftPoint(event.currentTarget, raw);
+    return { raw, snapped: resolved.snapped, point: resolved.point };
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
-    const { raw, snapped } = pointerPosition(event);
-    setCursorPoint(snapped?.point || raw);
+    const { point, snapped } = pointerPosition(event);
+    setCursorPoint(point);
     setSnapMarker(snapped);
   }
 
@@ -239,8 +308,9 @@ export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave
       return;
     }
     const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
-    const snapped = findSnap(event.currentTarget, raw, shapes, snapEnabled);
-    const point = snapped?.point || raw;
+    const resolved = resolveDraftPoint(event.currentTarget, raw);
+    const snapped = resolved.snapped;
+    const point = resolved.point;
 
     if (mode === 'circle') {
       setShapes(current => [...current, {
@@ -294,40 +364,82 @@ export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave
     if (fileRef.current) fileRef.current.value = '';
   }
 
-  function importGisDraft() {
-    const features = gisFeatures.filter(feature =>
-      feature.geometry?.type === 'Point' || feature.geometry?.type === 'LineString'
-    );
-    if (!features.length) {
-      setMessage('No saved GIS points or pipeline routes were found in this project.');
+  async function importGisDraft() {
+    let sourceFeatures = gisFeatures;
+    try {
+      const response = await api.get('/api/projects/' + projectId + '/gis-drafts');
+      const drafts = response.data.drafts || [];
+      const newest = drafts.slice().sort((a: any, b: any) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
+      const savedFeatures = newest?.data?.featureCollection?.features;
+      if (Array.isArray(savedFeatures) && savedFeatures.length) sourceFeatures = savedFeatures;
+    } catch (error) {
+      setMessage(error instanceof Error ? 'Could not load saved GIS drafts: ' + error.message : 'Could not load saved GIS drafts.');
       return;
     }
-    const coordinates: number[][] = [];
-    features.forEach(feature => {
-      if (feature.geometry.type === 'Point') coordinates.push(feature.geometry.coordinates);
-      else feature.geometry.coordinates.forEach((coordinate: number[]) => coordinates.push(coordinate));
-    });
-    const minX = Math.min(...coordinates.map(point => point[0]));
-    const maxX = Math.max(...coordinates.map(point => point[0]));
-    const minY = Math.min(...coordinates.map(point => point[1]));
-    const maxY = Math.max(...coordinates.map(point => point[1]));
+    const features = sourceFeatures.filter(feature =>
+      ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon'].includes(feature.geometry?.type)
+    );
+    if (!features.length) {
+      setMessage('No supported saved GIS features were found. Save the GIS draft first, then retry CAD import.');
+      return;
+    }
+    // GeoJSON geometries are nested to different depths. Flatten coordinates only
+    // for extents, then preserve each line/ring as its own CAD polyline.
+    const coordinatePairs: number[][] = [];
+    const collectPairs = (value: unknown): void => {
+      if (!Array.isArray(value)) return;
+      if (value.length >= 2 && typeof value[0] === 'number' && typeof value[1] === 'number') {
+        if (Number.isFinite(value[0]) && Number.isFinite(value[1])) coordinatePairs.push([value[0], value[1]]);
+        return;
+      }
+      value.forEach(collectPairs);
+    };
+    features.forEach(feature => collectPairs(feature.geometry.coordinates));
+    if (!coordinatePairs.length) {
+      setMessage('The saved GIS draft contains no valid coordinate pairs to import.');
+      return;
+    }
+    const minX = Math.min(...coordinatePairs.map(point => point[0]));
+    const maxX = Math.max(...coordinatePairs.map(point => point[0]));
+    const minY = Math.min(...coordinatePairs.map(point => point[1]));
+    const maxY = Math.max(...coordinatePairs.map(point => point[1]));
     const span = Math.max(maxX - minX, maxY - minY, 0.0001);
     const convert = (coordinate: number[]) => ({
       x: 80 + ((coordinate[0] - minX) / span) * 800,
       y: 570 - ((coordinate[1] - minY) / span) * 500,
     });
-    const added: Shape[] = features.map(feature => feature.geometry.type === 'Point'
-      ? {
-          id: makeId(), type: 'circle', points: [convert(feature.geometry.coordinates)],
-          radius: 5, layer: String(feature.properties?.category || 'GIS').toUpperCase(),
-        }
-      : {
-          id: makeId(), type: 'polyline',
-          points: feature.geometry.coordinates.map(convert),
-          layer: String(feature.properties?.category || 'GIS').toUpperCase(),
+    const added: Shape[] = [];
+    const layerFor = (feature: any) => String(feature.properties?.category || 'GIS').toUpperCase();
+    const addLine = (coords: unknown, layer: string) => {
+      if (!Array.isArray(coords)) return;
+      const points = coords.filter((point: any) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]))).map(convert);
+      if (points.length >= 2) added.push({ id: makeId(), type: 'polyline', points, layer });
+    };
+    features.forEach(feature => {
+      const geometry = feature.geometry;
+      const layer = layerFor(feature);
+      if (geometry.type === 'Point') {
+        added.push({ id: makeId(), type: 'circle', points: [convert(geometry.coordinates)], radius: 5, layer });
+      } else if (geometry.type === 'MultiPoint') {
+        geometry.coordinates.forEach((point: number[]) => added.push({ id: makeId(), type: 'circle', points: [convert(point)], radius: 5, layer }));
+      } else if (geometry.type === 'LineString') {
+        addLine(geometry.coordinates, layer);
+      } else if (geometry.type === 'MultiLineString') {
+        geometry.coordinates.forEach((line: unknown) => addLine(line, layer));
+      } else if (geometry.type === 'Polygon') {
+        geometry.coordinates.forEach((ring: unknown) => addLine(ring, layer));
+      } else if (geometry.type === 'MultiPolygon') {
+        geometry.coordinates.forEach((polygon: unknown) => {
+          if (Array.isArray(polygon)) polygon.forEach((ring: unknown) => addLine(ring, layer));
         });
+      }
+    });
+    if (!added.length) {
+      setMessage('The saved GIS draft contains no CAD-compatible points or lines.');
+      return;
+    }
     setShapes(current => [...current, ...added]);
-    setMessage('Imported ' + added.length + ' GIS features. The CAD view is a drawing-space conversion, not survey-control coordinates.');
+    setMessage('Imported ' + added.length + ' CAD elements from the saved GIS draft. Coordinates are normalized drawing space, not survey-control coordinates.');
   }
 
   const selectedShape: SelectedShape = shapes.find(shape => shape.id === selectedShapeId) || null;
@@ -443,7 +555,9 @@ export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave
     };
   }, [view, shapes]);
 
-  const renderedShapes = shapes.map(shape => {
+  const layerNames = Array.from(new Set(shapes.map(shape => shape.layer || '0'))).sort();
+  const visibleShapes = shapes.filter(shape => !hiddenLayers.includes(shape.layer || '0'));
+  const renderedShapes = visibleShapes.map(shape => {
     const color = shape.layer === 'WATER_NETWORK' ? '#167b78' : '#c08c3c';
     if (shape.type === 'circle') {
       return <circle data-shape-id={shape.id} key={shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius || 12} fill="none" stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 4 : 2.5} />;
@@ -477,6 +591,9 @@ export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave
           <button className={view === '3d' ? 'primary-button' : 'secondary-button'} onClick={() => setView('3d')}>3D view</button>
           <label>Units <select value={units} onChange={event => setUnits(event.target.value)}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
           <button className={snapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setSnapEnabled(value => !value)}><Crosshair size={15} /> Object snap: {snapEnabled ? 'ON' : 'OFF'}</button>
+          <button className={orthoEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setOrthoEnabled(value => !value)}>Ortho: {orthoEnabled ? 'ON' : 'OFF'}</button>
+          <button className={gridSnapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setGridSnapEnabled(value => !value)}>Grid snap: {gridSnapEnabled ? 'ON' : 'OFF'}</button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>Grid step <input type="number" min="0.1" step="any" value={gridSize} onChange={event => setGridSize(Math.max(0.1, Number(event.target.value) || 10))} style={{ width: 66, padding: 6 }} /></label>
         </div>
       </div>
 
@@ -523,8 +640,12 @@ export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave
             )}
           </svg>
           <p className="muted" style={{ fontSize: 12 }}>
-            Object snap finds circle centres and nearest points on circle edges, line endpoints, polyline vertices and midpoints. Move the pointer close to a target; the red marker shows the snap point. Tap to place.
+            Precision drafting: object snaps include endpoints, centres, circle quadrants, nearest points, midpoints and line intersections. Ortho constrains the next segment horizontally or vertically; grid snap uses the selected drawing-unit interval.
           </p>
+          {layerNames.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center', marginTop: 8 }}>
+            <strong style={{ fontSize: 12 }}>Layers</strong>
+            {layerNames.map(name => <button key={name} className={hiddenLayers.includes(name) ? 'secondary-button' : 'primary-button'} onClick={() => setHiddenLayers(current => current.includes(name) ? current.filter(item => item !== name) : [...current, name])} style={{ padding: '6px 9px', fontSize: 11 }}>{hiddenLayers.includes(name) ? 'Show' : 'Hide'} {name}</button>)}
+          </div>}
           {snapMarker && mode !== 'select' && <p style={{ fontSize: 12, color: '#b94d43', margin: 0 }}>Snap: {snapMarker.kind}</p>}
         </div>
       ) : (
