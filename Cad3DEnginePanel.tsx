@@ -947,7 +947,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       });
       geometry.centerMark.forEach(line => pushLine(line.a, line.b));
       pushLine(geometry.leader.a, geometry.leader.b);
-      if (kind === 'diameter') pushLine({ x: centre.x - radiusM, y: centre.y }, geometry.leader.a);
+      if (kind === 'diameter') pushLine(edge, { x: centre.x - radiusM, y: centre.y });
       const value = kind === 'radius' ? radiusM : radiusM * 2;
       const annotation: DraftAnnotation = {
         id: makeId(), kind: 'text', layer: 'DIMENSIONS', at: geometry.labelPoint,
