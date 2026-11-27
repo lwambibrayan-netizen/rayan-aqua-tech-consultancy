@@ -7,7 +7,7 @@ import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
 import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
 import { createDraftingDocument, makeAlignedDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
-import { exportDraftingDxf, importDraftingDxf } from './cad-dxf';
+import { exportDraftingDxf, importDraftingDxf, type DxfShape } from './cad-dxf';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
@@ -411,7 +411,6 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   function pointerPosition(event: React.PointerEvent<SVGSVGElement>) {
-    if (drafting.layers.find(item => item.name === layer)?.locked) { setMessage('The current layer is locked. Choose an unlocked layer before drawing.'); return; }
     const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
     const resolved = resolveDraftPoint(event.currentTarget, raw);
     return { raw, snapped: resolved.snapped, point: resolved.point };
@@ -507,6 +506,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       setMessage(id ? 'Entity selected. Hold Shift to add/remove entities from the selection.' : 'No entity selected.');
       return;
     }
+    if (drafting.layers.find(item => item.name === layer)?.locked) { setMessage('The current layer is locked. Choose an unlocked layer before drawing.'); return; }
     const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
     const resolved = resolveDraftPoint(event.currentTarget, raw);
     const snapped = resolved.snapped;
@@ -848,7 +848,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
 
   function downloadDxf() {
     const metresPerUnit = calibratedMetresPerUnit || 1;
-    const waterDrawing = waterCad.components.flatMap((component, index) => {
+    const waterDrawing: DxfShape[] = waterCad.components.flatMap((component, index): DxfShape[] => {
       const toDrawingPoints = (points: {x:number;y:number}[]) => points.map(point => ({ x: point.x / metresPerUnit, y: point.y / metresPerUnit }));
       if (component.kind === 'pipe') return [{ id: 'W-' + component.id, type: 'polyline' as const, points: toDrawingPoints(component.geometry), layer: 'WATER_PIPE' }];
       if (component.kind === 'bend') return [{ id: 'W-' + component.id, type: 'polyline' as const, points: toDrawingPoints(buildBendCentreline(component, 24)), layer: 'WATER_FITTING' }];
