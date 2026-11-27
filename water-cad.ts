@@ -58,6 +58,8 @@ export type WaterCadComponent = {
   fromNodeId?: string;
   toNodeId?: string;
   connectedNodeIds?: string[];
+  /** Exact transformed ports from inserted engineering-library symbols, in project metres. */
+  customPorts?: Array<{ id: string; point: WaterPoint; role: 'inlet' | 'outlet' | 'run' | 'branch' | 'node'; diameterMm?: number }>;
 };
 export type WaterCadDocument = {
   schemaVersion: 1;
