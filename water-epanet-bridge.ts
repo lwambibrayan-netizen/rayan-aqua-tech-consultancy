@@ -24,17 +24,17 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const flowUnit=(unitLine?.values[1]??'LPS').toUpperCase();
   const flowToM3h=(value:number)=>flowUnit==='LPS'?value*3.6:flowUnit==='GPM'?value*0.2271247:flowUnit==='CFS'?value*101.940647:flowUnit==='CMS'?value*3600:flowUnit==='MGD'?value*157.72549:value*3.6;
   const nodes=new Map<string,WaterCadComponent>();
-  const addNode=(idRaw:string,kind:WaterComponentKind,elevation:number,extra?:{flow?:number;level?:number;diameter?:number})=>{
+  const addNode=(idRaw:string,kind:WaterComponentKind,elevation:number,extra?:{flow?:number;level?:number;diameter?:number;head?:number})=>{
     const id=safe(idRaw); if(nodes.has(id)){warnings.push('Duplicate node '+id+' at import line; duplicate skipped.');return;}
     const xy=coordinates.get(id)??{x:nodes.size*10,y:0};
-    const c=createWaterComponent(kind,id,xy.x,xy.y); c.geometry[0].z=elevation;
+    const c=createWaterComponent(kind,id,xy.x,xy.y); c.properties.hydraulicElevationM=elevation; if(extra?.head!==undefined)c.properties.hydraulicHeadM=extra.head;
     if(extra?.flow!==undefined)c.properties.flowM3h=extra.flow;
     if(extra?.level!==undefined)c.properties.tankOperatingLevelM=extra.level;
     if(extra?.diameter!==undefined)c.properties.tankDiameterM=extra.diameter;
     nodes.set(id,c);
   };
   bySection('JUNCTIONS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed junction at line '+r.line+'.');return;}addNode(r.values[0],'junction',num(r.values[1]),{flow:flowToM3h(num(r.values[2]))});});
-  bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',num(r.values[1]));});
+  bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',num(r.values[1]),{head:num(r.values[1])});});
   bySection('TANKS').forEach(r=>{if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}addNode(r.values[0],'tank',num(r.values[1]),{level:num(r.values[2]),diameter:num(r.values[5])});});
   const components=[...nodes.values()];
   const addLink=(idRaw:string,kind:WaterComponentKind,fromRaw:string,toRaw:string,diameterMm:number,props:Partial<WaterCadComponent['properties']>={})=>{
@@ -83,8 +83,9 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const referenced=new Set(rows.filter(r=>['PIPES','PUMPS','VALVES'].includes(r.section)).flatMap(r=>r.values.slice(1,3)).map(safe));
   const missingCoordinates=[...referenced].filter(id=>!coordinates.has(id));
   if(missingCoordinates.length)warnings.push('No [COORDINATES] entry for '+missingCoordinates.length+' network node(s). Synthetic layout positions were assigned; spatial geometry must be surveyed or imported before engineering 3D use.');
+  if(coordinates.size)warnings.push('EPANET [COORDINATES] have no guaranteed CRS or unit metadata. They are retained as unreferenced plan coordinates; assign or transform the project CRS before terrain overlay or metric 3D routing. EPANET node elevations are retained separately as hydraulic elevations, not treated as pipe inverts.');
   if(!components.length)warnings.push('No supported hydraulic nodes were found.');
-  return {document:{schemaVersion:1,units:'m',verticalDatum,components},warnings};
+  return {document:{schemaVersion:1,units:'m',verticalDatum,horizontalCrs:'UNREFERENCED',horizontalUnits:'unknown',components},warnings};
 }
 export type HydraulicNodeResult={id:string;pressureM?:number;headM?:number;demandLps?:number;quality?:number};
 export type HydraulicLinkResult={id:string;flowLps?:number;velocityMs?:number;headlossM?:number;status?:string};
