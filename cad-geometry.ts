@@ -222,7 +222,7 @@ export function panViewport(viewport: CadViewport, deltaScreen: Point2D): CadVie
   };
 }
 
-export type SnapKind = 'ENDPOINT' | 'MIDPOINT' | 'CENTER' | 'QUADRANT' | 'NEAREST' | 'INTERSECTION';
+export type SnapKind = 'ENDPOINT' | 'MIDPOINT' | 'CENTER' | 'QUADRANT' | 'NEAREST' | 'INTERSECTION' | 'PERPENDICULAR' | 'TANGENT';
 export type SnapCandidate = { point: Point2D; kind: SnapKind };
 
 /** Closest point on a finite segment, including endpoints. */
@@ -239,29 +239,47 @@ export function nearestPointOnSegment(point: Point2D, a: Point2D, b: Point2D): P
   return { x: a.x + t * dx, y: a.y + t * dy };
 }
 
-/** Build deterministic object-snap candidates from line segments and circles. */
+/**
+ * Build deterministic object-snap candidates for linear and circular geometry.
+ * referencePoint is the previous construction point used for perpendicular and tangent snaps.
+ * Segment and circle intersections are exact within the supplied geometric tolerance.
+ */
 export function objectSnapCandidates(
   cursor: Point2D,
   segments: Array<[Point2D, Point2D]>,
   circles: Array<{ center: Point2D; radius: number }> = [],
+  referencePoint?: Point2D,
+  tolerance = 1e-9,
 ): SnapCandidate[] {
   assertFinite(cursor.x, 'Cursor X');
   assertFinite(cursor.y, 'Cursor Y');
+  if (referencePoint) {
+    assertFinite(referencePoint.x, 'Reference point X');
+    assertFinite(referencePoint.y, 'Reference point Y');
+  }
+  if (!Number.isFinite(tolerance) || tolerance < 0) throw new Error('Snap tolerance must be non-negative.');
   const candidates: SnapCandidate[] = [];
   segments.forEach(([a, b]) => {
+    [a, b].forEach(p => { assertFinite(p.x, 'Segment X'); assertFinite(p.y, 'Segment Y'); });
     candidates.push({ point: { ...a }, kind: 'ENDPOINT' }, { point: { ...b }, kind: 'ENDPOINT' });
     candidates.push({ point: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, kind: 'MIDPOINT' });
-    candidates.push({ point: nearestPointOnSegment(cursor, a, b), kind: 'NEAREST' });
+    const nearest = nearestPointOnSegment(cursor, a, b);
+    candidates.push({ point: nearest, kind: 'NEAREST' });
+    if (referencePoint) {
+      const perpendicular = nearestPointOnSegment(referencePoint, a, b);
+      const dx=b.x-a.x, dy=b.y-a.y, length=Math.hypot(dx,dy);
+      if (length > tolerance && distance(perpendicular, referencePoint) > tolerance) {
+        candidates.push({ point: perpendicular, kind: 'PERPENDICULAR' });
+      }
+    }
   });
   circles.forEach(({ center, radius }) => {
     assertFinite(center.x, 'Circle centre X');
     assertFinite(center.y, 'Circle centre Y');
     if (!Number.isFinite(radius) || radius <= 0) throw new Error('Circle radius must be greater than zero.');
     candidates.push({ point: { ...center }, kind: 'CENTER' });
-    const dx = cursor.x - center.x;
-    const dy = cursor.y - center.y;
-    const length = Math.hypot(dx, dy);
-    if (length > 0) candidates.push({
+    const dx = cursor.x - center.x, dy = cursor.y - center.y, length = Math.hypot(dx, dy);
+    if (length > tolerance) candidates.push({
       point: { x: center.x + dx / length * radius, y: center.y + dy / length * radius },
       kind: 'NEAREST',
     });
@@ -269,12 +287,44 @@ export function objectSnapCandidates(
       point: { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius },
       kind: 'QUADRANT',
     }));
+    if (referencePoint) {
+      const vx=referencePoint.x-center.x, vy=referencePoint.y-center.y, d2=vx*vx+vy*vy;
+      if (d2 > radius*radius + tolerance) {
+        const base=Math.atan2(vy,vx), offset=Math.acos(Math.min(1,radius/Math.sqrt(d2)));
+        [base+offset,base-offset].forEach(angle=>candidates.push({
+          point:{x:center.x+radius*Math.cos(angle),y:center.y+radius*Math.sin(angle)},kind:'TANGENT',
+        }));
+      }
+    }
   });
   for (let i = 0; i < segments.length; i++) {
     for (let j = i + 1; j < segments.length; j++) {
-      const point = segmentIntersection(segments[i][0], segments[i][1], segments[j][0], segments[j][1]);
+      const point = segmentIntersection(segments[i][0], segments[i][1], segments[j][0], segments[j][1], tolerance);
       if (point) candidates.push({ point, kind: 'INTERSECTION' });
     }
+    for (const circle of circles) {
+      const [a,b]=segments[i], dx=b.x-a.x, dy=b.y-a.y, fx=a.x-circle.center.x, fy=a.y-circle.center.y;
+      const A=dx*dx+dy*dy, B=2*(fx*dx+fy*dy), C=fx*fx+fy*fy-circle.radius*circle.radius;
+      if (A <= tolerance*tolerance) continue;
+      const discriminant=B*B-4*A*C;
+      if (discriminant < -tolerance) continue;
+      const root=Math.sqrt(Math.max(0,discriminant));
+      for (const t of [(-B-root)/(2*A),(-B+root)/(2*A)]) {
+        if (t >= -tolerance && t <= 1+tolerance) candidates.push({
+          point:{x:a.x+t*dx,y:a.y+t*dy},kind:'INTERSECTION',
+        });
+      }
+    }
+  }
+  for(let i=0;i<circles.length;i++) for(let j=i+1;j<circles.length;j++) {
+    const a=circles[i],b=circles[j],dx=b.center.x-a.center.x,dy=b.center.y-a.center.y,d=Math.hypot(dx,dy);
+    if(d<=tolerance||d>a.radius+b.radius+tolerance||d<Math.abs(a.radius-b.radius)-tolerance) continue;
+    const along=(a.radius*a.radius-b.radius*b.radius+d*d)/(2*d);
+    const height=Math.sqrt(Math.max(0,a.radius*a.radius-along*along));
+    const base={x:a.center.x+along*dx/d,y:a.center.y+along*dy/d};
+    const offset={x:-dy*height/d,y:dx*height/d};
+    candidates.push({point:{x:base.x+offset.x,y:base.y+offset.y},kind:'INTERSECTION'});
+    if(height>tolerance)candidates.push({point:{x:base.x-offset.x,y:base.y-offset.y},kind:'INTERSECTION'});
   }
   return candidates;
 }
