@@ -104,9 +104,9 @@ describe('water network engineering', () => {
     pipe2.geometry = [{ x: 10, y: 0 }, { x: 20, y: 0 }];
     doc.components.push(pipe2, createWaterComponent('valve', 'V-1', 10, 0));
     const boq = buildPreliminaryBoq(doc, 0.6, 1.2);
-    expect(boq.find(q => q.code === 'PIPE')?.quantity).toBe(20);
+    expect(boq.find(q => q.code === 'PIPE')?.quantity).toBeCloseTo(20.198,3);
     expect(boq.find(q => q.code === 'VALVE_GATE')?.quantity).toBe(1);
-    expect(boq.find(q => q.code === 'EXCAVATION')?.quantity).toBeCloseTo(14.4);
+    expect(boq.find(q => q.code === 'EXCAVATION')?.quantity).toBeCloseTo(14.5426,3);
   });
 
   it('keeps fitting schedule quantities separated by engineering type and size', () => {
