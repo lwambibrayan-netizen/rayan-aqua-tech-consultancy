@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createWaterComponent, type WaterCadDocument } from '../water-cad';
-import { sampleTerrainElevation, sampleGroundProfile, applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, type TerrainGrid } from '../water-terrain-engineering';
+import { sampleTerrainElevation, sampleGroundProfile, samplePipeCentrelineElevation, applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, type TerrainGrid } from '../water-terrain-engineering';
 import { importEpanetInp, mergeEpanetRoundTrip } from '../water-epanet-bridge';
 import { exportWaterNetworkToEpanet, type NetworkDocument } from '../water-network-engineering';
 import { buildHydraulicOverlay } from '../water-hydraulic-overlays';
@@ -19,6 +19,11 @@ describe('terrain-aware water engineering',()=>{
   expect(profile[2].groundLevelM).toBe(101);
   const corner=sampleGroundProfile(terrain,[{x:0,y:0},{x:10,y:0},{x:10,y:10}],5);
   expect(corner.find(point=>point.chainageM===10)).toMatchObject({x:10,y:0});
+ });
+ it('derives the 3D pipe centreline below the DEM surface using crown cover and pipe OD',()=>{
+  const pipe=createWaterComponent('pipe','P-3',0,0);
+  expect(samplePipeCentrelineElevation(pipe,{x:0,y:0},terrain,1.2)).toBeCloseTo(98.745);
+  expect(samplePipeCentrelineElevation(pipe,{x:40,y:0},terrain,1.2)).toBeNull();
  });
  it('routes a pipe below sampled terrain using crown cover and pipe OD',()=>{
   const pipe=createWaterComponent('pipe','P-1',0,0);
