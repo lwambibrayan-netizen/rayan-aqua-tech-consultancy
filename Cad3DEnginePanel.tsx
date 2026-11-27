@@ -1308,10 +1308,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       return { x: tx + p.x * factor, y: ty - p.y * factor };
     };
     const layer = (name:string) => drafting.layers.find(x=>x.name===name);
+     const plotColor = (value:string) => value.toLowerCase() === '#ffffff' ? '#111111' : value;
     const allowed = new Set(drafting.layers.filter(x=>x.visible&&x.plot).map(x=>x.name));
     const safe = (value:string) => value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const drawing = shapes.filter(shape=>allowed.has(shape.layer||'0')).map(shape=>{
-      const style=layer(shape.layer||'0'), color=style?.color||'#222222', weight=style?.lineWeightMm||0.18;
+      const style=layer(shape.layer||'0'), color=plotColor(style?.color||'#111111'), weight=style?.lineWeightMm||0.18;
       if(shape.type==='line'){const a=mapPoint(shape.points[0]),b=mapPoint(shape.points[1]);return '<line x1="'+a.x+'" y1="'+a.y+'" x2="'+b.x+'" y2="'+b.y+'" stroke="'+color+'" stroke-width="'+weight+'"/>';}
       if(shape.type==='circle'){const a=mapPoint(shape.points[0]);return '<circle cx="'+a.x+'" cy="'+a.y+'" r="'+(shape.radius||1)*factor+'" fill="none" stroke="'+color+'" stroke-width="'+weight+'"/>';}
       const pts=shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]]:shape.points;
@@ -1336,7 +1337,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       return '<circle cx="'+pts[0].x+'" cy="'+pts[0].y+'" r="1.5" fill="none" stroke="'+colour+'" stroke-width="0.35"/><text x="'+(pts[0].x+2)+'" y="'+(pts[0].y-2)+'" font-size="2.5" fill="'+colour+'">'+safe(item.properties.tag)+resultLabel+'</text>';
     }).join('');
     const annotations=drafting.annotations.filter(item=>allowed.has(item.layer)).map(item=>{
-      const color=layer(item.layer)?.color||'#222222';
+      const color=plotColor(layer(item.layer)?.color||'#111111');
       if(item.kind==='text'){const p=mapPoint({x:item.at.x/metresPerUnit,y:item.at.y/metresPerUnit});return '<text x="'+p.x+'" y="'+p.y+'" font-size="'+item.heightMm+'" fill="'+color+'">'+safe(item.text)+'</text>';}
       if(item.kind==='leader'){const pts=item.points.map(p=>mapPoint({x:p.x/metresPerUnit,y:p.y/metresPerUnit}));const last=pts[pts.length-1];return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="'+color+'" stroke-width="0.18"/><text x="'+(last.x+1)+'" y="'+(last.y-1)+'" font-size="'+item.textHeightMm+'" fill="'+color+'">'+safe(item.text)+'</text>';}
       const a=mapPoint({x:item.a.x/metresPerUnit,y:item.a.y/metresPerUnit}),b=mapPoint({x:item.b.x/metresPerUnit,y:item.b.y/metresPerUnit});
@@ -2310,14 +2311,14 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               width: '100%',
               height: 'min(62vh, 650px)',
               minHeight: 340,
-              backgroundColor: '#fbfdfc',
-              border: '1px solid #dce5e2',
+              backgroundColor: '#1e252b',
+              border: '1px solid #46515b',
               borderRadius: 8,
               cursor: panMode ? 'grab' : (mode !== 'select' || draftTool !== 'none') ? 'crosshair' : 'default',
               touchAction: 'none',
             }}
           >
-            <defs><pattern id="cad-grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse"><path d={`M ${gridSize} 0 L 0 0 0 ${gridSize}`} fill="none" stroke="#e5ece9" strokeWidth={Math.max(viewBox.width / 1000, 0.2)} /></pattern></defs>
+            <defs><pattern id="cad-grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse"><path d={`M ${gridSize} 0 L 0 0 0 ${gridSize}`} fill="none" stroke="#35414b" strokeWidth={Math.max(viewBox.width / 1000, 0.2)} /></pattern></defs>
             <rect x={viewBox.x} y={viewBox.y} width={viewBox.width} height={viewBox.height} fill="url(#cad-grid)" pointerEvents="none" />
             {renderedShapes}
             {selectedShapes.map(shape => <g key={'grips-'+shape.id} pointerEvents="none">
