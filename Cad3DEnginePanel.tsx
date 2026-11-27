@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createHistory, pushHistory, undoHistory, redoHistory, objectSnapCandidates } from './cad-geometry';
+import { createHistory, pushHistory, undoHistory, redoHistory, objectSnapCandidates, constrainPointToAngle } from './cad-geometry';
 import { moveEntities, copyEntities, rotateEntities, mirrorEntities, stretchEntities, rectangularArray, trimLine, extendLine, offsetLine, offsetPolyline, selectEntitiesInWindow, chamferPolylineCorner, filletPolylineCorner, editEntityGrip, scaleEntities, validateCadEntities, trimPolylineSegment, extendPolylineSegment } from './cad-editing';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -398,6 +398,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   );
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [orthoEnabled, setOrthoEnabled] = useState(false);
+  const [polarEnabled, setPolarEnabled] = useState(false);
+  const [polarIncrement, setPolarIncrement] = useState(15);
   const [gridSnapEnabled, setGridSnapEnabled] = useState(false);
   const [gridSize, setGridSize] = useState(10);
   const [hiddenLayers, setHiddenLayers] = useState<string[]>([]);
@@ -470,11 +472,13 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (!objectSnap && gridSnapEnabled && gridSize > 0) {
       point = { x: Math.round(point.x / gridSize) * gridSize, y: Math.round(point.y / gridSize) * gridSize };
     }
-    if (orthoEnabled && draft.length) {
-      const anchor = draft[draft.length - 1];
+    const anchor = draft.length ? draft[draft.length - 1] : waterDraft.length ? waterDraft[waterDraft.length - 1] : null;
+    if (!objectSnap && anchor && orthoEnabled) {
       const dx = point.x - anchor.x;
       const dy = point.y - anchor.y;
       point = Math.abs(dx) >= Math.abs(dy) ? { x: point.x, y: anchor.y } : { x: anchor.x, y: point.y };
+    } else if (!objectSnap && anchor && polarEnabled) {
+      point = constrainPointToAngle(anchor, point, polarIncrement);
     }
     return { point, snapped: objectSnap };
   }
@@ -1596,6 +1600,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <label>Measurement units <select value={units} disabled={!calibratedMetresPerUnit} onChange={event => setUnits(event.target.value)}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
           <button className={snapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setSnapEnabled(value => !value)}><Crosshair size={15} /> Object snap: {snapEnabled ? 'ON' : 'OFF'}</button>
           <button className={orthoEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setOrthoEnabled(value => !value)}>Ortho: {orthoEnabled ? 'ON' : 'OFF'}</button>
+          <button className={polarEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setPolarEnabled(value => !value)}>Polar: {polarEnabled ? 'ON' : 'OFF'}</button>
+          <label style={{fontSize:12}}>Polar step <select value={polarIncrement} onChange={e=>setPolarIncrement(Number(e.target.value))}><option value={5}>5°</option><option value={10}>10°</option><option value={15}>15°</option><option value={22.5}>22.5°</option><option value={30}>30°</option><option value={45}>45°</option><option value={90}>90°</option></select></label>
           <button className={gridSnapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setGridSnapEnabled(value => !value)}>Grid snap: {gridSnapEnabled ? 'ON' : 'OFF'}</button>
           <button className={panMode ? 'primary-button' : 'secondary-button'} onClick={() => setPanMode(value => !value)}>Pan: {panMode ? 'ON' : 'OFF'}</button>
           <button className="secondary-button" onClick={() => setViewBox({ x: 0, y: 0, width: WIDTH, height: HEIGHT })}>Reset view</button>
