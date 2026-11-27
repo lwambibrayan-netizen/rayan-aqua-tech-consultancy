@@ -90,7 +90,7 @@ describe('structured DXF exchange', () => {
     doc.annotations.push({ id:'D1', kind:'aligned', layer:'DIMENSIONS', a:{x:0,y:0}, b:{x:3,y:4}, offsetM:1, precision:2, textOverride:'5.00 m' });
     const dxf = exportDraftingDxf([], doc, 1);
     expect(dxf).toContain('5.00 m');
-    expect(dxf).toContain('40\\n0.3');
-    expect((dxf.match(/\\nLINE\\n/g) || []).length).toBeGreaterThanOrEqual(7);
+    expect(dxf).toContain('40\n0.3');
+    expect((dxf.match(/\nLINE\n/g) || []).length).toBeGreaterThanOrEqual(7);
   });
 });
