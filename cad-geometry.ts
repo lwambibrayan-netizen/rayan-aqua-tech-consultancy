@@ -326,7 +326,14 @@ export function objectSnapCandidates(
     candidates.push({point:{x:base.x+offset.x,y:base.y+offset.y},kind:'INTERSECTION'});
     if(height>tolerance)candidates.push({point:{x:base.x-offset.x,y:base.y-offset.y},kind:'INTERSECTION'});
   }
-  return candidates;
+  const unique: SnapCandidate[] = [];
+  candidates.forEach(candidate => {
+    if (!unique.some(existing => existing.kind === candidate.kind &&
+      Math.hypot(existing.point.x-candidate.point.x, existing.point.y-candidate.point.y) <= tolerance)) {
+      unique.push(candidate);
+    }
+  });
+  return unique;
 }
 
 export type HistoryState<T> = {
