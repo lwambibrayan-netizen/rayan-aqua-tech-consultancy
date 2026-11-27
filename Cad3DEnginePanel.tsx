@@ -847,7 +847,16 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   function downloadDxf() {
-    const dxf = exportDraftingDxf(shapes, drafting, calibratedMetresPerUnit || 1);
+    const metresPerUnit = calibratedMetresPerUnit || 1;
+    const waterDrawing = waterCad.components.flatMap((component, index) => {
+      const toDrawingPoints = (points: {x:number;y:number}[]) => points.map(point => ({ x: point.x / metresPerUnit, y: point.y / metresPerUnit }));
+      if (component.kind === 'pipe') return [{ id: 'W-' + component.id, type: 'polyline' as const, points: toDrawingPoints(component.geometry), layer: 'WATER_PIPE' }];
+      if (component.kind === 'bend') return [{ id: 'W-' + component.id, type: 'polyline' as const, points: toDrawingPoints(buildBendCentreline(component, 24)), layer: 'WATER_FITTING' }];
+      if (component.kind === 'reducer') return [{ id: 'W-' + component.id, type: 'polyline' as const, points: toDrawingPoints(buildReducerCentreline(component)), layer: 'WATER_FITTING' }];
+      if (component.kind === 'tee') return buildTeeCentreline(component).map((points, branch) => ({ id: 'W-' + component.id + '-' + branch, type: 'polyline' as const, points: toDrawingPoints(points), layer: 'WATER_FITTING' }));
+      return [{ id: 'W-' + component.id + '-' + index, type: 'circle' as const, points: toDrawingPoints(component.geometry.slice(0, 1)), radius: 0.15 / metresPerUnit, layer: 'WATER_FITTING' }];
+    });
+    const dxf = exportDraftingDxf([...shapes, ...waterDrawing], drafting, metresPerUnit);
     const url = URL.createObjectURL(new Blob([dxf], { type: 'application/dxf' }));
     const anchor = document.createElement('a');
     anchor.href = url;
