@@ -839,7 +839,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   function removeAnnotation(id: string) {
     setDrafting(current => ({ ...current, annotations: current.annotations.filter(item => item.id !== id) }));
   }
-  function exportSheetSvg() {
+  function exportSheetSvg(printToPdf = false) {
     const { widthMm, heightMm } = sheetDimensionsMm(drafting.sheet);
     const denominator = Number(drafting.sheet.scale.split(':')[1]) || 100;
     const metresPerUnit = calibratedMetresPerUnit || 1;
@@ -886,6 +886,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const border='<rect x="5" y="5" width="'+(widthMm-10)+'" height="'+(heightMm-10)+'" fill="none" stroke="black" stroke-width="0.5"/>';
     const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+widthMm+'mm" height="'+heightMm+'mm" viewBox="0 0 '+widthMm+' '+heightMm+'"><rect width="100%" height="100%" fill="white"/>'+border+titleBlock+'<g>'+drawing+water+annotations+'</g></svg>';
     downloadWaterFile((drafting.sheet.drawingNumber||'drawing')+'.svg',svg,'image/svg+xml');
+    if (printToPdf) { const printWindow = window.open('', '_blank'); if (printWindow) { printWindow.document.open(); printWindow.document.write('<!doctype html><html><head><title>'+safe(drafting.sheet.drawingNumber)+'</title><style>@page{size:'+widthMm+'mm '+heightMm+'mm;margin:0}html,body{margin:0;padding:0}svg{display:block;width:100%;height:auto}</style></head><body>'+svg+'</body></html>'); printWindow.document.close(); printWindow.onload = () => printWindow.print(); } else setMessage('Print window was blocked. Allow pop-ups for this app, then retry Print / Save as PDF.'); }
     const fits=(maxX-minX)*factor<=usableWidth&&(maxY-minY)*factor<=usableHeight;
     setMessage(fits?'Drawing sheet SVG exported at '+drafting.sheet.scale+'. Review title block and plotted scale before issue.':'Sheet exported, but geometry exceeds the selected sheet at '+drafting.sheet.scale+'. Choose a larger sheet or smaller scale.');
   }
@@ -1107,12 +1108,13 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           {draftTool !== "none" && <button className="secondary-button" onClick={() => { setDraftTool("none"); setAnnotationDraft([]); }}>Cancel annotation</button>}
           <label>Text / note <input value={annotationText} onChange={e => setAnnotationText(e.target.value)} style={{ width: 180 }}/></label>
           <label>Dimension offset (m) <input type="number" step="any" value={dimensionOffset} onChange={e => setDimensionOffset(Number(e.target.value))} style={{ width: 75 }}/></label>
-          <label>Precision <select value={dimensionPrecision} onChange={e => setDimensionPrecision(Number(e.target.value))}><option value={0}>0</option><option value={1}>0.0</option><option value={2}>0.00</option><option value={3}>0.000</option><option value={4}>0.0000</option></select></label>
+          <label>Precision <select value={dimensionPrecision} onChange={e => { const precision = Number(e.target.value); setDimensionPrecision(precision); setDimensionStyle(current => ({ ...current, precision })); }}><option value={0}>0</option><option value={1}>0.0</option><option value={2}>0.00</option><option value={3}>0.000</option><option value={4}>0.0000</option></select></label>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 9, marginTop: 12 }}>
-          <label>Standard <select value={drafting.standard} onChange={e => setDrafting(v => ({ ...v, standard: e.target.value as DraftingDocument["standard"] }))}><option value="ISO">ISO / EN</option><option value="BS">British Standards</option><option value="ANSI">ANSI / ASME</option></select></label>
+          <label>Standard <select value={drafting.standard} onChange={e => { const standard = e.target.value as DraftingDocument["standard"]; setDrafting(v => ({ ...v, standard })); setDimensionStyle(DIMENSION_STYLES[standard]); }}><option value="ISO">ISO / EN</option><option value="BS">British Standards</option><option value="ANSI">ANSI / ASME</option></select></label>
           <label>Sheet set <select value={drafting.activeSheetIndex} onChange={e => selectDrawingSheet(Number(e.target.value))}>{drafting.sheets.map((sheet,index) => <option key={index} value={index}>{sheet.drawingNumber} · {sheet.title}</option>)}</select></label><button className="secondary-button" onClick={addDrawingSheet}>Add sheet</button>
           <label>Sheet <select value={drafting.sheet.size} onChange={e => updateDrawingSheet({ size: e.target.value as DraftingDocument["sheet"]["size"] })}>{["A0","A1","A2","A3","A4","CUSTOM"].map(x => <option key={x}>{x}</option>)}</select></label>
+          {drafting.sheet.size === "CUSTOM" && <><label>Custom width (mm) <input type="number" min="50" max="5000" value={drafting.sheet.widthMm ?? 297} onChange={e => updateDrawingSheet({ widthMm: Number(e.target.value) })}/></label><label>Custom height (mm) <input type="number" min="50" max="5000" value={drafting.sheet.heightMm ?? 420} onChange={e => updateDrawingSheet({ heightMm: Number(e.target.value) })}/></label></>}
           <label>Orientation <select value={drafting.sheet.orientation} onChange={e => updateDrawingSheet({ orientation: e.target.value as "landscape"|"portrait" })}><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
           <label>Plot scale <select value={drafting.sheet.scale} onChange={e => updateDrawingSheet({ scale: e.target.value })}>{["1:20","1:25","1:50","1:75","1:100","1:150","1:200","1:250","1:500","1:1000","1:2000"].map(x => <option key={x}>{x}</option>)}</select></label>
           <label>Units <select value={drafting.sheet.units} onChange={e => updateDrawingSheet({ units: e.target.value as "m"|"mm" })}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
@@ -1129,12 +1131,35 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
           <button className="secondary-button" onClick={validateDrafting}>Validate drafting</button>
           <button className="secondary-button" onClick={exportSheetSvg}>Export sheet SVG</button>
+          <button className="secondary-button" onClick={() => exportSheetSvg(true)}>Print / Save as PDF</button>
           <span className="muted" style={{ fontSize: 12 }}>{sheetDimensionsMm(drafting.sheet).widthMm} × {sheetDimensionsMm(drafting.sheet).heightMm} mm · {drafting.annotations.length} annotations</span>
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+          <label>Layer template <select value={layerTemplate} onChange={e => setLayerTemplate(e.target.value as LayerStandard)}><option value="WATER_UTILITY">Water utility</option><option value="CIVIL_SITE">Civil / site</option><option value="MECHANICAL">Mechanical</option></select></label><button className="secondary-button" onClick={applyLayerTemplate}>Apply template</button>
           <input placeholder="New layer name" value={newLayerName} onChange={e => setNewLayerName(e.target.value)} style={{ width: 150 }}/><button className="secondary-button" onClick={addDraftLayer}>Add layer</button>
           {drafting.layers.map(item => <span key={item.name} style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid #ccd5d2", padding: 4, borderRadius: 5, fontSize: 11, flexWrap: "wrap" }}><input type="color" value={item.color} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, color: e.target.value } : l) }))} style={{ width: 22, height: 20, padding: 0 }}/><button onClick={() => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, visible: !l.visible } : l) }))}>{item.visible ? "●" : "○"} {item.name}</button><label><input type="checkbox" checked={item.locked} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, locked: e.target.checked } : l) }))}/>Lock</label><label><input type="checkbox" checked={item.plot} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, plot: e.target.checked } : l) }))}/>Plot</label><select value={item.lineType} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, lineType: e.target.value as typeof item.lineType } : l) }))}><option>CONTINUOUS</option><option>DASHED</option><option>CENTER</option><option>HIDDEN</option><option>PHANTOM</option></select><input aria-label="Lineweight mm" type="number" min="0" max="2.11" step="0.05" value={item.lineWeightMm} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, lineWeightMm: Number(e.target.value) } : l) }))} style={{ width: 48 }}/></span>)}
         </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginTop: 10 }}>
+          <label>Dimension text height (mm)<input type="number" min="0.5" step="0.1" value={dimensionStyle.textHeightMm} onChange={e => setDimensionStyle(v => ({ ...v, textHeightMm: Number(e.target.value) }))}/></label>
+          <label>Arrow size (mm)<input type="number" min="0.5" step="0.1" value={dimensionStyle.arrowSizeMm} onChange={e => setDimensionStyle(v => ({ ...v, arrowSizeMm: Number(e.target.value) }))}/></label>
+          <label>Extension offset (mm)<input type="number" min="0" step="0.1" value={dimensionStyle.extensionOffsetMm} onChange={e => setDimensionStyle(v => ({ ...v, extensionOffsetMm: Number(e.target.value) }))}/></label>
+          <label>Extension beyond (mm)<input type="number" min="0.1" step="0.1" value={dimensionStyle.extensionBeyondMm} onChange={e => setDimensionStyle(v => ({ ...v, extensionBeyondMm: Number(e.target.value) }))}/></label>
+          <label>Dimension unit<select value={dimensionStyle.unit} onChange={e => setDimensionStyle(v => ({ ...v, unit: e.target.value as "m"|"mm" }))}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
+          <label>Zero suppression<select value={dimensionStyle.zeroSuppress} onChange={e => setDimensionStyle(v => ({ ...v, zeroSuppress: e.target.value as DimensionStyle["zeroSuppress"] }))}><option value="none">None</option><option value="leading">Leading</option><option value="trailing">Trailing</option><option value="both">Both</option></select></label>
+          <label>Tolerance mode<select value={dimensionStyle.tolerance.mode} onChange={e => setDimensionStyle(v => ({ ...v, tolerance: { ...v.tolerance, mode: e.target.value as DimensionStyle["tolerance"]["mode"] } }))}><option value="none">None</option><option value="symmetric">Symmetric</option><option value="deviation">Deviation</option></select></label>
+          <label>Upper / symmetric tolerance<input type="number" min="0" step="any" value={dimensionStyle.tolerance.upper} onChange={e => setDimensionStyle(v => ({ ...v, tolerance: { ...v.tolerance, upper: Number(e.target.value), lower: v.tolerance.mode === "symmetric" ? Number(e.target.value) : v.tolerance.lower } }))}/></label>
+          <label>Lower tolerance<input type="number" min="0" step="any" value={dimensionStyle.tolerance.lower} onChange={e => setDimensionStyle(v => ({ ...v, tolerance: { ...v.tolerance, lower: Number(e.target.value) } }))}/></label>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginTop: 12 }}>
+          <label>New revision<input value={revisionDraft.revision} onChange={e => setRevisionDraft(v => ({ ...v, revision: e.target.value }))} placeholder="P02 / C01"/></label>
+          <label>Revision date<input type="date" value={revisionDraft.date} onChange={e => setRevisionDraft(v => ({ ...v, date: e.target.value }))}/></label>
+          <label>Change description<input value={revisionDraft.description} onChange={e => setRevisionDraft(v => ({ ...v, description: e.target.value }))} placeholder="Describe drawing changes"/></label>
+          <label>Drawn by<input value={revisionDraft.drawnBy} onChange={e => setRevisionDraft(v => ({ ...v, drawnBy: e.target.value }))}/></label>
+          <label>Checked by<input value={revisionDraft.checkedBy} onChange={e => setRevisionDraft(v => ({ ...v, checkedBy: e.target.value }))}/></label>
+          <label>Approved by<input value={revisionDraft.approvedBy} onChange={e => setRevisionDraft(v => ({ ...v, approvedBy: e.target.value }))}/></label>
+          <button className="secondary-button" onClick={addRevisionEntry}>Add revision record</button>
+        </div>
+        {drafting.revisionHistory?.length > 0 && <div style={{ overflowX: "auto", marginTop: 8 }}><strong>Revision history</strong><table style={{ width: "100%", fontSize: 11 }}><thead><tr>{["Rev","Date","Description","Drawn","Checked","Approved","Status"].map(x => <th key={x}>{x}</th>)}</tr></thead><tbody>{drafting.revisionHistory.map((r,i) => <tr key={r.revision+i}><td>{r.revision}</td><td>{r.date}</td><td>{r.description}</td><td>{r.drawnBy}</td><td>{r.checkedBy}</td><td>{r.approvedBy}</td><td>{r.status}</td></tr>)}</tbody></table></div>}
         {drafting.annotations.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>{drafting.annotations.map(item => <button key={item.id} className="secondary-button" onClick={() => removeAnnotation(item.id)}>Delete {item.kind} · {item.id.slice(0,6)}</button>)}</div>}
       </div>
 
