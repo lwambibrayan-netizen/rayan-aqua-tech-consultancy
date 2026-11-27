@@ -41,10 +41,10 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const patternMap=new Map<string,number[]>();
   bySection('PATTERNS').forEach(r=>{const id=safe(r.values[0]);const values=patternMap.get(id)??[];values.push(...r.values.slice(1).map(Number).filter(Number.isFinite));patternMap.set(id,values);});
   const nodes=new Map<string,WaterCadComponent>();
-  const addNode=(idRaw:string,kind:WaterComponentKind,elevation:number,extra?:{flow?:number;level?:number;diameter?:number;head?:number;demandPatternId?:string})=>{
+  const addNode=(idRaw:string,kind:WaterComponentKind,elevation:number,extra?:{flow?:number;level?:number;diameter?:number;head?:number;demandPatternId?:string;headPatternId?:string})=>{
     const id=safe(idRaw); if(nodes.has(id)){warnings.push('Duplicate node '+id+' at import line; duplicate skipped.');return;}
     const xy=coordinates.get(id)??{x:nodes.size*10,y:0};
-    const c=createWaterComponent(kind,id,xy.x,xy.y); c.properties.hydraulicElevationM=elevation; if(extra?.head!==undefined)c.properties.hydraulicHeadM=extra.head; if(extra?.demandPatternId)c.properties.demandPatternId=safe(extra.demandPatternId);
+    const c=createWaterComponent(kind,id,xy.x,xy.y); c.properties.hydraulicElevationM=elevation; if(extra?.head!==undefined)c.properties.hydraulicHeadM=extra.head; if(extra?.demandPatternId)c.properties.demandPatternId=safe(extra.demandPatternId); if(extra?.headPatternId)c.properties.hydraulicHeadPatternId=safe(extra.headPatternId);
     if(extra?.flow!==undefined)c.properties.flowM3h=extra.flow;
     if(extra?.level!==undefined)c.properties.tankOperatingLevelM=extra.level;
     if(extra?.diameter!==undefined)c.properties.tankDiameterM=extra.diameter;
@@ -53,7 +53,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   bySection('JUNCTIONS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed junction at line '+r.line+'.');return;}addNode(r.values[0],'junction',headToM(num(r.values[1])),{flow:flowToM3h(num(r.values[2])),demandPatternId:r.values[3]});});
   bySection('DEMANDS').forEach(r=>{const node=nodes.get(safe(r.values[0]));if(!node||r.values.length<2){warnings.push('Secondary demand at line '+r.line+' references a missing node or is malformed.');return;}const demand={flowM3h:flowToM3h(num(r.values[1])),patternId:r.values[2]?safe(r.values[2]):undefined};node.properties.additionalDemands=[...(node.properties.additionalDemands??[]),demand];});
   bySection('EMITTERS').forEach(r=>{const node=nodes.get(safe(r.values[0]));if(!node||r.values.length<2){warnings.push('Emitter at line '+r.line+' references a missing node or is malformed.');return;}node.properties.emitterCoefficient=emitterToLpsSqrtM(num(r.values[1]));});
-  bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',headToM(num(r.values[1])),{head:headToM(num(r.values[1]))});});
+  bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',headToM(num(r.values[1])),{head:headToM(num(r.values[1])),headPatternId:r.values[2]});});
   bySection('TANKS').forEach(r=>{
     if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}
     addNode(r.values[0],'tank',headToM(num(r.values[1])),{level:headToM(num(r.values[2])),diameter:usUnits?num(r.values[5])*0.3048:num(r.values[5])});
@@ -109,6 +109,8 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     if(curveId&&!points?.length)warnings.push('Pump '+r.values[0]+' references missing curve '+curveId+'; add or repair its pump curve before simulation.');
     if(!curveId&&powerIndex<0)warnings.push('Pump '+r.values[0]+' uses a non-HEAD/POWER or unsupported pump definition; manual pump model review is required.');
   });
+  const usedPumpCurves=new Set(bySection('PUMPS').map(r=>{const index=r.values.findIndex(value=>value.toUpperCase()==='HEAD');return index>=0?safe(r.values[index+1]??''):'';}));
+  [...pumpCurves.keys()].filter(id=>!usedPumpCurves.has(id)).forEach(id=>warnings.push('Curve '+id+' is not referenced by a supported HEAD pump; curve type and data were not preserved.'));
   bySection('VALVES').forEach(r=>{
     if(r.values.length<5){warnings.push('Malformed valve at line '+r.line+'.');return;}
     const type=r.values[4].toUpperCase();const map:Record<string,WaterCadComponent['properties']['valveType']>={PRV:'PRV',PSV:'PSV',PBV:'PBV',FCV:'FCV',TCV:'TCV',GPV:'GPV',PCV:'PCV'};
@@ -120,7 +122,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const missingCoordinates=[...referenced].filter(id=>!coordinates.has(id));
   if(missingCoordinates.length)warnings.push('No [COORDINATES] entry for '+missingCoordinates.length+' network node(s). Synthetic layout positions were assigned; spatial geometry must be surveyed or imported before engineering 3D use.');
   if(coordinates.size)warnings.push('EPANET [COORDINATES] have no guaranteed CRS or unit metadata. They are retained as unreferenced plan coordinates; assign or transform the project CRS before terrain overlay or metric 3D routing. EPANET node elevations are retained separately as hydraulic elevations, not treated as pipe inverts.');
-  const referencedPatterns=components.flatMap(component=>[component.properties.demandPatternId,component.properties.pumpSpeedPattern]).filter((value):value is string=>!!value);
+  const referencedPatterns=components.flatMap(component=>[component.properties.demandPatternId,component.properties.pumpSpeedPattern,component.properties.hydraulicHeadPatternId]).filter((value):value is string=>!!value);
   referencedPatterns.forEach(id=>{if(!patternMap.has(id))warnings.push('Pattern '+id+' is referenced but its [PATTERNS] definition is missing.');});
   if(!components.length)warnings.push('No supported hydraulic nodes were found.');
   return {document:{schemaVersion:1,units:'m',verticalDatum,horizontalCrs:'UNREFERENCED',horizontalUnits:'unknown',components,epanetPatterns:[...patternMap].map(([id,multipliers])=>({id,multipliers})),epanetHeadlossFormula:headlossFormula,epanetSpecificGravity:num(optionValue('SPECIFIC GRAVITY','1'),1),epanetViscosity:num(optionValue('VISCOSITY','1'),1),epanetTrials:num(optionValue('TRIALS','40'),40),epanetAccuracy:num(optionValue('ACCURACY','0.001'),0.001),epanetTimes},warnings};
