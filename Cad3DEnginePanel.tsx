@@ -14,7 +14,7 @@ import { auditEngineeringDrawing, type EngineeringDrawingAudit } from './cad-eng
 import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringBlock, instantiateEngineeringPorts, type BlockInsert } from './cad-object-library';
 import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
 import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension, calculateBaselineDimensions, calculateChainDimensions } from './cad-dimension-geometry';
-import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology, type EpanetIdMap } from './water-network-engineering';
+import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 import { applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, sampleGroundProfile, sampleTerrainElevation, type TerrainGrid } from './water-terrain-engineering';
 import { importEpanetInp, type HydraulicResults } from './water-epanet-bridge';
 import { buildHydraulicOverlay, type HydraulicOverlay, type HydraulicOverlayMetric } from './water-hydraulic-overlays';
@@ -947,8 +947,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       if (exported.warnings.length && !window.confirm('The EPANET export has '+exported.warnings.length+' warning(s). Some CAD components may not be represented in the hydraulic model. Review the warnings before proceeding. Run the model anyway?\n\n'+exported.warnings.slice(0,8).join('\n'))) return;
       const output = await runEpanetHydraulicSimulation(exported.input);
       if (!output.results.length) throw new Error('EPANET completed without returning hydraulic timesteps.');
-      const idMap=new Map(exported.idMap.map(item=>[item.epanetId,item.cadId]));
-      const mappedResults=output.results.map(result=>({...result,nodes:result.nodes.map(node=>({...node,id:idMap.get(node.id)??node.id})),links:result.links.map(link=>({...link,id:idMap.get(link.id)??link.id}))}));
+      const nodeIdMap=new Map(exported.idMap.filter(item=>item.kind==='node').map(item=>[item.epanetId,item.cadId]));
+      const linkIdMap=new Map(exported.idMap.filter(item=>item.kind==='link').map(item=>[item.epanetId,item.cadId]));
+      const mappedResults=output.results.map(result=>({...result,nodes:result.nodes.map(node=>({...node,id:nodeIdMap.get(node.id)??node.id})),links:result.links.map(link=>({...link,id:linkIdMap.get(link.id)??link.id}))}));
       const finalIndex=mappedResults.length-1;
       const finalResult=mappedResults[finalIndex];
       setHydraulicResultSeries(mappedResults);
@@ -973,8 +974,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     try {
       const results = JSON.parse(await file.text()) as HydraulicResults;
       if (!Number.isFinite(results.timeSeconds) || !Array.isArray(results.nodes) || !Array.isArray(results.links)) throw new Error('Results JSON must include timeSeconds, nodes[] and links[].');
-      const idMap=new Map(exportWaterNetworkToEpanet(waterCad).idMap.map(item=>[item.epanetId,item.cadId]));
-      const mappedResults={...results,nodes:results.nodes.map(node=>({...node,id:idMap.get(node.id)??node.id})),links:results.links.map(link=>({...link,id:idMap.get(link.id)??link.id}))};
+      const exportedIds=exportWaterNetworkToEpanet(waterCad).idMap;
+      const nodeIdMap=new Map(exportedIds.filter(item=>item.kind==='node').map(item=>[item.epanetId,item.cadId]));
+      const linkIdMap=new Map(exportedIds.filter(item=>item.kind==='link').map(item=>[item.epanetId,item.cadId]));
+      const mappedResults={...results,nodes:results.nodes.map(node=>({...node,id:nodeIdMap.get(node.id)??node.id})),links:results.links.map(link=>({...link,id:linkIdMap.get(link.id)??link.id}))};
       setHydraulicResults(mappedResults);
       setHydraulicResultSeries([mappedResults]);
       setHydraulicTimeIndex(0);
