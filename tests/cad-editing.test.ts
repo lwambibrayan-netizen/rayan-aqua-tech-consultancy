@@ -115,6 +115,8 @@ describe('CAD editing geometry operations', () => {
     expect(result.points).toHaveLength(4);
     expect(result.bulges?.[1]).toBeCloseTo(Math.tan(Math.PI/8));
     expect(() => filletPolylineCorner(poly, 1, 11)).toThrow(/too large/);
+    const curved:CadEditableEntity={...poly,bulges:[0.5,0]};
+    expect(()=>chamferPolylineCorner(curved,1,1)).toThrow(/straight adjacent/);
   });
 
   it('selects crossing geometry by exact segment/window intersection, not bounding boxes', () => {
