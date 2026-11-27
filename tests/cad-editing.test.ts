@@ -169,6 +169,12 @@ describe('CAD editing geometry operations', () => {
     expect(editEntityGrip(circle, 0, {x: 5, y: 6}).points[0]).toEqual({x: 5, y: 6});
     expect(editEntityGrip(circle, 1, {x: 2, y: 8}).radius).toBe(5);
     expect(() => editEntityGrip(circle, 2, {x: 0, y: 0})).toThrow(/grip index/);
+    const rectangle: CadEditableEntity = { id: 'r1', type: 'rect', points: [{x:0,y:0},{x:10,y:8}], layer: 'WATER' };
+    expect(editEntityGrip(rectangle, 0, {x:-2,y:-3}).points).toEqual([{x:-2,y:-3},{x:10,y:8}]);
+    expect(editEntityGrip(rectangle, 1, {x:12,y:-2}).points).toEqual([{x:0,y:-2},{x:12,y:8}]);
+    expect(editEntityGrip(rectangle, 2, {x:12,y:9}).points).toEqual([{x:0,y:0},{x:12,y:9}]);
+    expect(editEntityGrip(rectangle, 3, {x:-2,y:9}).points).toEqual([{x:-2,y:0},{x:10,y:9}]);
+    expect(() => editEntityGrip(rectangle, 4, {x:0,y:0})).toThrow(/Rectangle grip index/);
   });
 
   it('scales geometry accurately and preserves circular arc orientation', () => {
