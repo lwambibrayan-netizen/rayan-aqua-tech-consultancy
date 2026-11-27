@@ -91,7 +91,7 @@ export function findAssociativeAnchor(point: DraftPoint, entities: Array<{ id: s
   }
   return best?.ref;
 }
-export function resolveAssociativeDimension<T extends Extract<DraftAnnotation, { kind: 'linear' | 'aligned' }>(
+export function resolveAssociativeDimension<T extends Extract<DraftAnnotation, { kind: 'linear' | 'aligned' }>>(
   annotation: T,
   entities: Array<{ id: string; type: string; points: DraftPoint[] }>,
   metresPerDrawingUnit: number
