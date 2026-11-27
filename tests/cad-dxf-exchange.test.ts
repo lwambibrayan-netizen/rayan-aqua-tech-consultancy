@@ -176,7 +176,7 @@ describe('structured DXF exchange', () => {
     ], createDraftingDocument(), 0.001);
     expect(dxf).toContain('$ACADVER\n1\nAC1015');
     expect(dxf).toContain('$HANDSEED\n5\n10000');
-    expect(dxf).toContain('0\nLAYER\n5\n15');
+    expect(dxf).toContain('0\nLAYER\n5\n100');
     expect(dxf).toContain('100\nAcDbSymbolTableRecord\n100\nAcDbLayerTableRecord');
     expect(dxf).toContain('100\nAcDbEntity\n8\nWATER_PIPE\n100\nAcDbLine');
     expect(dxf).toContain('100\nAcDbEntity\n8\nWATER_PIPE\n100\nAcDbPolyline');
