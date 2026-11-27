@@ -153,7 +153,7 @@ describe('structured DXF exchange', () => {
   it('reads standard external DXF INSUNITS metadata when no project calibration override is supplied', () => {
     const externalDrawing = ['0','SECTION','2','HEADER','9','$ACADVER','1','AC1018','9','$INSUNITS','70','4','0','ENDSEC',
       '0','SECTION','2','ENTITIES','0','LINE','8','WATER_PIPE','10','0','20','0','11','1500','21','2500',
-      '0','CIRCLE','8','VALVES','10','1500','20','2500','40','100','0','ENDSEC','0','EOF'].join('\\n');
+      '0','CIRCLE','8','VALVES','10','1500','20','2500','40','100','0','ENDSEC','0','EOF'].join('\n');
     const imported = importDraftingDxf(externalDrawing);
     expect(imported.shapes[0].points[1]).toEqual({x:1.5,y:2.5});
     expect(imported.shapes[1].points[0]).toEqual({x:1.5,y:2.5});
