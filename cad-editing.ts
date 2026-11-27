@@ -417,7 +417,17 @@ export function editEntityGrip<T extends CadEditableEntity>(entity: T, gripIndex
     return {...entity,points:[{x:point.x,y:a.y},{x:b.x,y:point.y}]};
   }
   if (gripIndex >= entity.points.length) throw new Error('Grip index is outside the entity vertex range.');
-  const points = entity.points.map((current, index) => index === gripIndex ? clonePoint(point) : clonePoint(current));
+  const points = entity.points.map(clonePoint);
+  const lastIndex = points.length - 1;
+  const isClosedPolyline = entity.type === 'polyline' && lastIndex > 1 &&
+    dist(points[0], points[lastIndex]) <= 1e-9;
+  points[gripIndex] = clonePoint(point);
+  // A closed LWPOLYLINE stores its first vertex again as the final vertex.
+  // Keep that closure invariant when either representation of the shared vertex is gripped.
+  if (isClosedPolyline && (gripIndex === 0 || gripIndex === lastIndex)) {
+    points[0] = clonePoint(point);
+    points[lastIndex] = clonePoint(point);
+  }
   return { ...entity, points };
 }
 
