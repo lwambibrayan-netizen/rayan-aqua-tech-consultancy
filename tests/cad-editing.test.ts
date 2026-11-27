@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  chamferPolylineCorner, copyEntities, extendLine, filletPolylineCorner,
+  chamferPolylineCorner, copyEntities, editEntityGrip, extendLine, filletPolylineCorner,
   mirrorEntities, moveEntities, offsetLine, offsetPolyline, rectangularArray, rotateEntities,
-  stretchEntities, trimLine, selectEntitiesInWindow, type CadEditableEntity,
+  stretchEntities, trimLine, selectEntitiesInWindow, scaleEntities, validateCadEntities, type CadEditableEntity,
 } from '../cad-editing';
 
 const line: CadEditableEntity = { id: 'l1', type: 'line', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], layer: 'WATER' };
@@ -142,6 +142,34 @@ describe('CAD editing geometry operations', () => {
     const result = rectangularArray([line], 2, 2, 5, 5, () => 'generated-' + ++n);
     expect(new Set(result.map(item => item.id)).size).toBe(result.length);
   });
+  it('edits vertex and circle grips without mutating source geometry', () => {
+    const moved = editEntityGrip(line, 1, { x: 12, y: 3 });
+    expect(moved.points[1]).toEqual({ x: 12, y: 3 });
+    expect(line.points[1]).toEqual({ x: 10, y: 0 });
+    const circle: CadEditableEntity = { id: 'c1', type: 'circle', points: [{x: 2, y: 3}], radius: 4, layer: 'WATER' };
+    expect(editEntityGrip(circle, 0, {x: 5, y: 6}).points[0]).toEqual({x: 5, y: 6});
+    expect(editEntityGrip(circle, 1, {x: 2, y: 8}).radius).toBe(5);
+    expect(() => editEntityGrip(circle, 2, {x: 0, y: 0})).toThrow(/grip index/);
+  });
+
+  it('scales geometry accurately and preserves circular arc orientation', () => {
+    expect(scaleEntities([line], {x: 0, y: 0}, 2)[0].points[1]).toEqual({x: 20, y: 0});
+    const circle: CadEditableEntity = { id: 'c1', type: 'circle', points: [{x: 1, y: 1}], radius: 3, layer: 'WATER' };
+    expect(scaleEntities([circle], {x: 0, y: 0}, 2)[0].radius).toBe(6);
+    const arc: CadEditableEntity = { id: 'a1', type: 'polyline', points: [{x:0,y:0},{x:4,y:0}], bulges: [0.5], layer: 'WATER' };
+    expect(scaleEntities([arc], {x:0,y:0}, -1)[0].bulges?.[0]).toBe(-0.5);
+    expect(() => scaleEntities([circle], {x:0,y:0}, 2, 1)).toThrow(/Non-uniform scaling/);
+    expect(() => scaleEntities([arc], {x:0,y:0}, 2, 1)).toThrow(/Non-uniform scaling/);
+  });
+
+  it('validates entity structure and reports duplicate IDs and malformed circles', () => {
+    const malformed: CadEditableEntity = { id: 'bad', type: 'circle', points: [{x:0,y:0}], radius: 0, layer: '0' };
+    const issues = validateCadEntities([line, {...line}, malformed]);
+    expect(issues.some(issue => issue.includes('duplicate entity ID'))).toBe(true);
+    expect(issues.some(issue => issue.includes('positive finite radius'))).toBe(true);
+    expect(validateCadEntities([line])).toEqual([]);
+  });
+
   it('rejects degenerate geometry and invalid array dimensions', () => {
     expect(() => mirrorEntities([line], { x: 1, y: 1 }, { x: 1, y: 1 })).toThrow(/non-zero/);
     expect(() => rectangularArray([line], 0, 2, 1, 1)).toThrow(/positive integers/);
