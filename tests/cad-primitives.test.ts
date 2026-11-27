@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arcFromThreePoints, circleFromCenterRadius, circleFromDiameter, circleFromThreePoints, ellipseFromBounds } from '../cad-primitives';
+import { arcFromCenterStartAngle, arcFromThreePoints, circleFromCenterRadius, circleFromDiameter, circleFromThreePoints, ellipseFromBounds } from '../cad-primitives';
 
 describe('CAD precision drawing primitives', () => {
   it('constructs circles by centre-radius and diameter endpoints', () => {
@@ -31,5 +31,16 @@ describe('CAD precision drawing primitives', () => {
     expect(arc.bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/8));
     const clockwise=arcFromThreePoints({x:1,y:0},{x:Math.SQRT1_2,y:-Math.SQRT1_2},{x:0,y:1},'b','0');
     expect(clockwise.bulges?.[0]).toBeLessThan(0);
+  });
+});
+
+describe('CAD angle arc construction', () => {
+  it('constructs a centre-start-angle arc with the requested signed sweep', () => {
+    const arc=arcFromCenterStartAngle({x:0,y:0},{x:2,y:0},90,'angle','0');
+    expect(arc.points[1].x).toBeCloseTo(0);
+    expect(arc.points[1].y).toBeCloseTo(2);
+    expect(arc.bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/8));
+    expect(arcFromCenterStartAngle({x:0,y:0},{x:2,y:0},-90,'reverse','0').bulges?.[0]).toBeLessThan(0);
+    expect(()=>arcFromCenterStartAngle({x:0,y:0},{x:0,y:0},90,'bad','0')).toThrow(/radius/);
   });
 });
