@@ -90,7 +90,7 @@ function expandBlockInserts(pairs: Pair[], warnings: string[]): Pair[] {
   const end=pairs.findIndex((p,i)=>i>section&&p[0]==='0'&&p[1]==='ENDSEC');
   if(end<0)return pairs;
   const prefix=pairs.slice(0,section+1),entities=splitEntities(pairs.slice(section+1,end)),suffix=pairs.slice(end);
-  const matrixFor=(at:{x:number;y:number},sx:number,sy:number,angle:number,base:{x:number;y:number;y?:number}):Matrix=>{
+  const matrixFor=(at:{x:number;y:number},sx:number,sy:number,angle:number,base:{x:number;y:number}):Matrix=>{
     const cos=Math.cos(angle),sin=Math.sin(angle),a=cos*sx,b=-sin*sy,c=sin*sx,d=cos*sy;
     return {a,b,c,d,tx:at.x-a*base.x-b*base.y,ty:at.y-c*base.x-d*base.y};
   };
