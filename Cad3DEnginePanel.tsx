@@ -772,7 +772,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setActiveWaterTool(kind);
     setWaterDraft([]);
     setMode('select');
-    setMessage(kind === 'pipe' ? 'Click the pipe start and end points. Object snapping is active.' : 'Click the placement point for the ' + kind + '. Object snapping is active.');
+    setMessage(kind === 'pipe' ? 'Click the pipe start, any intermediate route vertices and its end point. Finish the route when ready; object snapping is active.' : 'Click the placement point for the ' + kind + '. Object snapping is active.');
   }
   function commitWaterPlacement(kind: WaterComponentKind, points: Point2D[]) {
     const prefix: Record<WaterComponentKind,string> = { pipe:'P', bend:'B', tee:'T', reducer:'RED', valve:'V', pump:'PU', tank:'TK', chamber:'CH', hydrant:'HYD', meter:'M', 'air-valve':'AV', washout:'WO', reservoir:'RES', source:'SRC', junction:'J' };
@@ -930,7 +930,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (!file) return;
     try {
       if (mode==='replace' && waterCad.components.length && !window.confirm('Replace the current water CAD network with this EPANET model? CAD-only fittings and annotations in the water network will not be retained.')) return;
-      const imported = importEpanetInp(await file.text(), waterCad.verticalDatum);
+      const imported = importEpanetInp(await file.text());
       const nextDocument=mode==='merge'?mergeEpanetRoundTrip(waterCad,imported.document):imported.document;
       setWaterCad(nextDocument);
       setHydraulicResults(null);
