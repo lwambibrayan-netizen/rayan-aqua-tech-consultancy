@@ -141,8 +141,6 @@ export function connectWaterPorts(document: NetworkDocument, aPortId: string, bP
   }
   const connection = { id: 'CON-' + (connections.length + 1).toString().padStart(4, '0'), aPortId, bPortId };
   const components = document.components.map(component => ({ ...component }));
-  const pipePort = a.componentId === 'pipe' ? null : null;
-  void pipePort;
   const applyNodeConnection = (pipePortRef: WaterPort, nodePortRef: WaterPort) => {
     const node = components.find(item => item.id === nodePortRef.componentId);
     if (!node || !['junction', 'source', 'tank', 'reservoir'].includes(node.kind)) return;
@@ -208,16 +206,84 @@ export function buildPreliminaryBoq(document: WaterCadDocument, trenchWidthM = 0
   return lines;
 }
 
+type HydraulicNode = { id: string; elevationM: number; sourceComponent?: WaterCadComponent };
+
+function resolveHydraulicNodes(document: NetworkDocument): { portNodeIds: Map<string, string>; syntheticNodes: HydraulicNode[] } {
+  const ports = document.components.flatMap(getWaterPorts);
+  const parent = new Map<string, string>(ports.map(port => [port.id, port.id]));
+  const find = (id: string): string => {
+    const current = parent.get(id);
+    if (!current) throw new Error('Unknown network port ' + id);
+    if (current === id) return id;
+    const root = find(current);
+    parent.set(id, root);
+    return root;
+  };
+  const union = (a: string, b: string) => {
+    if (parent.has(a) && parent.has(b)) parent.set(find(b), find(a));
+  };
+  (document.connections ?? []).forEach(connection => union(connection.aPortId, connection.bPortId));
+  // Bends, tees and reducers are passive fittings: all their ports share one hydraulic junction.
+  document.components.filter(c => ['bend', 'tee', 'reducer'].includes(c.kind)).forEach(component => {
+    const ids = getWaterPorts(component).map(port => port.id);
+    ids.slice(1).forEach(id => union(ids[0], id));
+  });
+  // Preserve the legacy explicit node selectors by treating them as endpoint connections.
+  document.components.filter(c => ['pipe', 'pump', 'valve'].includes(c.kind)).forEach(component => {
+    const ownPorts = getWaterPorts(component);
+    if (component.fromNodeId) union(ownPorts[0]?.id ?? '', component.fromNodeId + ':P1');
+    if (component.toNodeId) union(ownPorts[1]?.id ?? '', component.toNodeId + ':P1');
+  });
+  const groups = new Map<string, WaterPort[]>();
+  ports.forEach(port => {
+    const root = find(port.id);
+    groups.set(root, [...(groups.get(root) ?? []), port]);
+  });
+  const portNodeIds = new Map<string, string>();
+  const syntheticNodes: HydraulicNode[] = [];
+  let serial = 1;
+  for (const [root, group] of groups) {
+    const componentIds = new Set(group.map(port => port.componentId));
+    const sourceNode = document.components.find(c => componentIds.has(c.id) && ['junction', 'source', 'tank', 'reservoir'].includes(c.kind));
+    const containsLink = group.some(port => {
+      const component = document.components.find(c => c.id === port.componentId);
+      return component && ['pipe', 'pump', 'valve'].includes(component.kind);
+    });
+    if (!sourceNode && !containsLink) continue;
+    const nodeId = sourceNode ? safeId(sourceNode.id) : 'N_' + String(serial++).padStart(4, '0');
+    group.forEach(port => portNodeIds.set(port.id, nodeId));
+    if (!sourceNode) {
+      const levels = group.map(port => port.point.z).filter(finite);
+      const elevationM = levels.length ? levels.reduce((sum, value) => sum + value, 0) / levels.length : 0;
+      syntheticNodes.push({ id: nodeId, elevationM });
+    }
+  }
+  // Unconnected link ends still get explicit synthetic junctions, but are called out to the engineer.
+  document.components.filter(c => ['pipe', 'pump', 'valve'].includes(c.kind)).forEach(component => {
+    getWaterPorts(component).forEach(port => {
+      if (!portNodeIds.has(port.id)) {
+        const id = 'N_' + String(serial++).padStart(4, '0');
+        portNodeIds.set(port.id, id);
+        syntheticNodes.push({ id, elevationM: port.point.z ?? 0 });
+      }
+    });
+  });
+  return { portNodeIds, syntheticNodes };
+}
+
 /** Export a deliberately conservative EPANET INP model. Physical fittings are not silently converted into hydraulic devices. */
 export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExport {
   const warnings: string[] = [];
   const nodes = document.components.filter(c => ['junction', 'source', 'tank', 'reservoir'].includes(c.kind));
-  const nodeIds = new Set(nodes.map(n => n.id));
+  const hydraulic = resolveHydraulicNodes(document);
+  const nodeIds = new Set([...nodes.map(n => safeId(n.id)), ...hydraulic.syntheticNodes.map(n => n.id)]);
+  const linkEnds = (component: WaterCadComponent) => { const ports = getWaterPorts(component); return [hydraulic.portNodeIds.get(ports[0]?.id ?? '') ?? '', hydraulic.portNodeIds.get(ports[1]?.id ?? '') ?? '']; };
   const pipes = document.components.filter(c => c.kind === 'pipe');
   const pumps = document.components.filter(c => c.kind === 'pump');
   const valves = document.components.filter(c => c.kind === 'valve');
   const lines: string[] = ['[TITLE]', 'RayanAqua Water CAD export', '', '[JUNCTIONS]', ';ID Elevation_m BaseDemand_LPS Pattern'];
   nodes.filter(n => n.kind === 'junction').forEach(n => lines.push([safeId(n.id), fmt(n.geometry[0]?.z ?? 0), fmt((n.properties.flowM3h ?? 0) * 1000 / 3600), ''].join(' ')));
+  hydraulic.syntheticNodes.forEach(n => lines.push([n.id, fmt(n.elevationM), '0', ''].join(' ')));
   lines.push('', '[RESERVOIRS]', ';ID Head_m Pattern');
   nodes.filter(n => n.kind === 'source' || n.kind === 'reservoir').forEach(n => lines.push([safeId(n.id), fmt(n.properties.tankOperatingLevelM ?? n.geometry[0]?.z ?? 0), ''].join(' ')));
   lines.push('', '[TANKS]', ';ID Elevation_m InitLevel_m MinLevel_m MaxLevel_m Diameter_m MinVolume_m3');
@@ -228,8 +294,9 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   });
   lines.push('', '[PIPES]', ';ID Node1 Node2 Length_m Diameter_mm Roughness MinorLoss Status');
   for (const p of pipes) {
-    if (!p.fromNodeId || !p.toNodeId || !nodeIds.has(p.fromNodeId) || !nodeIds.has(p.toNodeId)) {
-      warnings.push('Pipe ' + p.id + ' omitted: assign valid from/to network nodes before EPANET export.');
+    const [fromNode, toNode] = linkEnds(p);
+    if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode) || fromNode === toNode) {
+      warnings.push('Pipe ' + p.id + ' omitted: connect both ends to valid network ports/nodes.');
       continue;
     }
     const length = p.geometry.slice(1).reduce((sum, point, i) => sum + Math.hypot(point.x - p.geometry[i].x, point.y - p.geometry[i].y), 0);
@@ -237,31 +304,34 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
       warnings.push('Pipe ' + p.id + ' omitted: positive length and internal diameter are required.');
       continue;
     }
-    lines.push([safeId(p.id), safeId(p.fromNodeId), safeId(p.toNodeId), fmt(length), fmt(p.properties.internalDiameterMm), fmt(p.properties.roughness ?? 130), '0', 'OPEN'].join(' '));
+    lines.push([safeId(p.id), fromNode, toNode, fmt(length), fmt(p.properties.internalDiameterMm), fmt(p.properties.roughness ?? 130), '0', 'OPEN'].join(' '));
   }
   // EPANET check valves are pipe links with status CV, not GPV valves.
   valves.filter(v => v.properties.valveType === 'check').forEach(v => {
-    if (!v.fromNodeId || !v.toNodeId || !nodeIds.has(v.fromNodeId) || !nodeIds.has(v.toNodeId)) warnings.push('Check valve ' + v.id + ' omitted: assign valid inlet and outlet network nodes.');
+    const [fromNode, toNode] = linkEnds(v);
+    if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode)) warnings.push('Check valve ' + v.id + ' omitted: connect its inlet and outlet ports.');
     else if (!(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm)) warnings.push('Check valve ' + v.id + ' omitted: set a positive diameter.');
-    else lines.push([safeId(v.id), safeId(v.fromNodeId), safeId(v.toNodeId), fmt(v.properties.fittingLengthM ?? 0.5), fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), fmt(v.properties.roughness ?? 130), '0', 'CV'].join(' '));
+    else lines.push([safeId(v.id), fromNode, toNode, fmt(v.properties.fittingLengthM ?? 0.5), fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), fmt(v.properties.roughness ?? 130), '0', 'CV'].join(' '));
   });
   lines.push('', '[PUMPS]', ';ID Node1 Node2 Parameters');
   pumps.forEach(p => {
-    if (!p.fromNodeId || !p.toNodeId || !nodeIds.has(p.fromNodeId) || !nodeIds.has(p.toNodeId)) warnings.push('Pump ' + p.id + ' omitted: assign valid inlet and outlet network nodes.');
+    const [fromNode, toNode] = linkEnds(p);
+    if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode)) warnings.push('Pump ' + p.id + ' omitted: connect its inlet and outlet ports.');
     else if (!(p.properties.pumpDutyFlowM3h && p.properties.pumpDutyFlowM3h > 0 && p.properties.pumpDutyHeadM && p.properties.pumpDutyHeadM > 0)) warnings.push('Pump ' + p.id + ' omitted: positive duty flow and head are required for a single-point pump curve.');
-    else lines.push([safeId(p.id), safeId(p.fromNodeId), safeId(p.toNodeId), 'HEAD ' + safeId('CURVE_' + p.id)].join(' '));
+    else lines.push([safeId(p.id), fromNode, toNode, 'HEAD ' + safeId('CURVE_' + p.id)].join(' '));
   });
   lines.push('', '[VALVES]', ';ID Node1 Node2 Diameter_mm Type Setting MinorLoss');
   valves.filter(v => v.properties.valveType !== 'check').forEach(v => {
-    if (!v.fromNodeId || !v.toNodeId || !nodeIds.has(v.fromNodeId) || !nodeIds.has(v.toNodeId)) warnings.push('Valve ' + v.id + ' omitted: assign valid inlet and outlet network nodes.');
-    else if (v.properties.valveType === 'PRV' || v.properties.valveType === 'PSV') lines.push([safeId(v.id), safeId(v.fromNodeId), safeId(v.toNodeId), fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), v.properties.valveType, fmt(v.properties.valveSetting ?? 0), '0'].join(' '));
+    const [fromNode, toNode] = linkEnds(v);
+    if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode)) warnings.push('Valve ' + v.id + ' omitted: connect its inlet and outlet ports.');
+    else if (v.properties.valveType === 'PRV' || v.properties.valveType === 'PSV') lines.push([safeId(v.id), fromNode, toNode, fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), v.properties.valveType, fmt(v.properties.valveSetting ?? 0), '0'].join(' '));
     else warnings.push('Valve ' + v.id + ' (' + (v.properties.valveType ?? 'unspecified') + ') omitted from EPANET valve links; its loss/control model needs an explicit supported setting.');
   });
   const unsupported = document.components.filter(c => ['bend', 'tee', 'reducer', 'chamber', 'hydrant', 'meter', 'air-valve', 'washout'].includes(c.kind));
   if (unsupported.length) warnings.push('EPANET does not model physical ' + [...new Set(unsupported.map(c => c.kind))].join(', ') + ' as standalone hydraulic elements; preserve them in CAD/GIS and model hydraulic losses through suitable pipe minor-loss values or supported links.');
   if (document.components.some(c => c.kind === 'junction') && !document.components.some(c => c.kind === 'source' || c.kind === 'reservoir' || c.kind === 'tank')) warnings.push('No fixed-head source, reservoir or tank is defined; the hydraulic model may be unsolvable.');
   lines.push('', '[CURVES]', ';CurveID Flow_LPS Head_m');
-  pumps.filter(p => p.fromNodeId && p.toNodeId && nodeIds.has(p.fromNodeId) && nodeIds.has(p.toNodeId) && p.properties.pumpDutyFlowM3h && p.properties.pumpDutyHeadM).forEach(p => {
+  pumps.filter(p => { const [a, b] = linkEnds(p); return a && b && nodeIds.has(a) && nodeIds.has(b) && p.properties.pumpDutyFlowM3h && p.properties.pumpDutyHeadM; }).forEach(p => {
     lines.push([safeId('CURVE_' + p.id), fmt((p.properties.pumpDutyFlowM3h ?? 0) * 1000 / 3600), fmt(p.properties.pumpDutyHeadM ?? 0)].join(' '));
   });
   lines.push('', '[OPTIONS]', 'UNITS LPS', 'HEADLOSS H-W', 'SPECIFIC GRAVITY 1', 'VISCOSITY 1', 'TRIALS 40', 'ACCURACY 0.001', '', '[TIMES]', 'DURATION 0', 'HYDRAULIC TIMESTEP 1:00', 'QUALITY TIMESTEP 0:05', '', '[REPORT]', 'STATUS YES', 'SUMMARY YES', 'NODES ALL', 'LINKS ALL', '', '[COORDINATES]');
