@@ -464,7 +464,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const activePaperViewport = activePaperLayout?.viewports[0];
 
   function resolveDraftPoint(svg: SVGSVGElement, raw: Point2D) {
-    const objectSnap = findSnap(svg, raw, shapes, snapEnabled, waterCad, calibratedMetresPerUnit || 1, draft.length ? draft[draft.length - 1] : undefined);
+    const objectSnap = findSnap(svg, raw, shapes, snapEnabled, waterCad, calibratedMetresPerUnit || 1, draft.length ? draft[draft.length - 1] : waterDraft.length ? waterDraft[waterDraft.length - 1] : undefined);
     let point = objectSnap?.point || raw;
     if (!objectSnap && gridSnapEnabled && gridSize > 0) {
       point = { x: Math.round(point.x / gridSize) * gridSize, y: Math.round(point.y / gridSize) * gridSize };
