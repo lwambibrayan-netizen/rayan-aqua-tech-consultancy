@@ -11,6 +11,7 @@ function EngineeringModuleLoading({ label }: { label: string }) {
   return <div className="panel" role="status" aria-live="polite">Loading {label}…</div>;
 }
 import { api, auth } from './client';
+import LandingPage from './LandingPage';
 import {
   Activity,
   ArrowDownRight,
@@ -548,101 +549,19 @@ function App() {
 
   if (!user) {
     return (
-      <main className="public-site">
-        <header className="public-header">
-          <a className="public-brand" href="#top" aria-label="RayanAqua home">
-            <span className="brand-symbol"><Waves size={22} /></span>
-            <span>RayanAqua<span className="brand-light"> / TECH</span></span>
-          </a>
-          <nav className="public-nav" aria-label="Main navigation">
-            <a href="#platform">Platform</a>
-            <a href="#consultancy">Consultancy</a>
-          </nav>
-          <a className="primary-button public-header-cta" href="#workspace-access">Engineer sign in <ChevronRight size={16} /></a>
-        </header>
-
-        <section className="public-hero" id="top">
-          <div className="public-hero-copy">
-            <span className="eyebrow public-eyebrow">WATER INFRASTRUCTURE · ENGINEERING WORKSPACE</span>
-            <h1>From water network concept to <em>engineering decisions.</em></h1>
-            <p className="public-lead">A project-centred workspace for planning, designing, analysing and documenting water infrastructure — with engineering tools in one place.</p>
-            <div className="public-hero-actions">
-              <a className="primary-button" href="#workspace-access">Enter engineering workspace <ChevronRight size={17} /></a>
-              <a className="public-text-link" href="#platform">Explore the platform <ArrowDownRight size={16} /></a>
-            </div>
-            <div className="public-proof">
-              <span><ShieldCheck size={16} /> Private engineer accounts</span>
-              <span><FolderKanban size={16} /> Project-based workflow</span>
-              <span><Waves size={16} /> Water engineering focus</span>
-            </div>
-          </div>
-          <aside className="public-access" id="workspace-access">
-            <div className="access-kicker"><span className="live-dot" /> ENGINEER ACCESS</div>
-            <h2>{authMode === 'signin' ? 'Welcome back.' : 'Create your workspace.'}</h2>
-            <p>{authMode === 'signin' ? 'Sign in to continue to your projects and engineering tools.' : 'Register an engineer account to start a private project workspace.'}</p>
-            <form className="auth-form" onSubmit={submitEmailAuth}>
-              <label htmlFor="auth-email">Email address</label>
-              <input id="auth-email" type="email" autoComplete="email" required value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="engineer@company.com" />
-              <label htmlFor="auth-password">Password</label>
-              <input id="auth-password" type="password" autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} minLength={8} required value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="At least 8 characters" />
-              <button className="primary-button full" type="submit" disabled={authBusy}>
-                {authBusy ? 'Please wait…' : authMode === 'signup' ? 'Create engineer account' : 'Sign in to workspace'}
-                {!authBusy && <ChevronRight size={17} />}
-              </button>
-            </form>
-            <div className="auth-switch">
-              {authMode === 'signin' ? "New to RayanAqua? " : 'Already registered? '}
-              <button type="button" onClick={() => { setAuthMode(authMode === 'signin' ? 'signup' : 'signin'); setErrorMessage(''); setNotice(''); }}>
-                {authMode === 'signin' ? 'Create an account' : 'Sign in'}
-              </button>
-            </div>
-            <div className="auth-divider"><span>OR</span></div>
-            <button className="secondary-button full auth-google" onClick={signIn} disabled={authBusy}>
-              Continue with Google <ChevronRight size={17} />
-            </button>
-            {notice && <div className="alert success">{notice}</div>}
-            {errorMessage && <div className="alert error">{errorMessage}</div>}
-            <div className="login-security"><ShieldCheck size={17} /><span>Authenticated access · Private project records</span></div>
-          </aside>
-        </section>
-
-        <section className="public-platform" id="platform">
-          <div className="public-section-heading">
-            <span className="eyebrow">THE ENGINEERING WORKSPACE</span>
-            <h2>One project. Connected engineering tools.</h2>
-            <p>RayanAqua is built around the work itself. Open a project, use its tools, save the engineering records and return to the same workspace when you need them.</p>
-          </div>
-          <div className="public-capability-grid">
-            <article className="public-capability"><span className="public-cap-icon"><Waves size={20} /></span><div><h3>Hydraulic design</h3><p>Build and analyse water distribution networks with EPANET-based hydraulic simulation, pressures, flows and velocity checks.</p></div><span className="cap-index">01</span></article>
-            <article className="public-capability"><span className="public-cap-icon"><MapPinned size={20} /></span><div><h3>GIS workspace</h3><p>Work with spatial network layouts, pipeline routes, mapped assets and project-linked geographic information.</p></div><span className="cap-index">02</span></article>
-            <article className="public-capability"><span className="public-cap-icon"><Box size={20} /></span><div><h3>CAD & 3D workspace</h3><p>Prepare and manage technical drawings and engineering geometry within the project workflow.</p></div><span className="cap-index">03</span></article>
-            <article className="public-capability"><span className="public-cap-icon"><ClipboardList size={20} /></span><div><h3>BOQ & quantities</h3><p>Organise work items, quantities and cost schedules alongside the related project design.</p></div><span className="cap-index">04</span></article>
-            <article className="public-capability"><span className="public-cap-icon"><Calculator size={20} /></span><div><h3>Engineering calculations</h3><p>Keep practical design calculations and supporting assumptions close to the project they belong to.</p></div><span className="cap-index">05</span></article>
-            <article className="public-capability"><span className="public-cap-icon"><FileText size={20} /></span><div><h3>Reports & records</h3><p>Keep technical notes, project documents and design outputs organised in one working environment.</p></div><span className="cap-index">06</span></article>
-          </div>
-          <div className="public-workflow"><span className="eyebrow">HOW THE WORKSPACE IS ORGANISED</span><div className="workflow-steps"><span><b>01</b> Create or open a project</span><ChevronRight size={16} /><span><b>02</b> Work with project tools</span><ChevronRight size={16} /><span><b>03</b> Save and revisit your work</span></div></div>
-        </section>
-
-        <section className="public-consultancy" id="consultancy">
-          <div className="consultancy-copy">
-            <span className="eyebrow">RAYANAQUA TECH CONSULTANCY</span>
-            <h2>Need support with a water infrastructure project?</h2>
-            <p>Alongside the engineering workspace, RayanAqua welcomes enquiries for water supply planning, hydraulic network design, GIS mapping and pipeline routing, bills of quantities, and technical project documentation.</p>
-            <p className="consultancy-note">Share your project location, scope and available information to start a conversation about the work required.</p>
-          </div>
-          <div className="consultancy-contact">
-            <span className="eyebrow">CONSULTANCY ENQUIRIES</span>
-            <a href="mailto:lwambibrayan@gmail.com"><span className="contact-icon"><Mail size={18} /></span><span><small>Email</small><strong>lwambibrayan@gmail.com</strong></span><ChevronRight size={17} /></a>
-            <a href="https://wa.me/254716450981" target="_blank" rel="noreferrer"><span className="contact-icon"><MessageCircle size={18} /></span><span><small>WhatsApp</small><strong>0716 450 981</strong></span><ChevronRight size={17} /></a>
-          </div>
-        </section>
-
-        <footer className="public-footer">
-          <a className="public-brand" href="#top"><span className="brand-symbol"><Waves size={19} /></span><span>RayanAqua<span className="brand-light"> / TECH</span></span></a>
-          <span>Water engineering workspace · Kenya</span>
-          <span>© {new Date().getFullYear()} RayanAqua Tech Consultancy</span>
-        </footer>
-      </main>
+      <LandingPage
+        authMode={authMode}
+        setAuthMode={setAuthMode}
+        authEmail={authEmail}
+        setAuthEmail={setAuthEmail}
+        authPassword={authPassword}
+        setAuthPassword={setAuthPassword}
+        authBusy={authBusy}
+        onSubmitAuth={submitEmailAuth}
+        onGoogleSignIn={signIn}
+        errorMessage={errorMessage}
+        notice={notice}
+      />
     );
   }
 
