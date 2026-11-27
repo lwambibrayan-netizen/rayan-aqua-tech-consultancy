@@ -98,6 +98,7 @@ function App() {
   const [pendingGisFeatures, setPendingGisFeatures] = useState<any[] | null>(null);
   const [pendingGisMetadata, setPendingGisMetadata] = useState<any>(null);
   const [pendingCadInp, setPendingCadInp] = useState('');
+  const [pendingCadIdMap, setPendingCadIdMap] = useState<any[]>([]);
   const [cadImportToken, setCadImportToken] = useState(0);
   const documentLoadRef = useRef(0);
   const [loading, setLoading] = useState(false);
@@ -459,6 +460,7 @@ function App() {
     setPendingGisFeatures(null);
     setPendingGisMetadata(null);
     setPendingCadInp('');
+    setPendingCadIdMap([]);
     setCadImportToken(0);
     setHydraulicDoc(null);
     setGisDoc(null);
@@ -492,12 +494,13 @@ function App() {
     setNotice('Opening EPANET with the latest GIS draft features.');
   }
 
-  function openEpanetFromCad(input: string) {
+  function openEpanetFromCad(input: string, idMap: any[] = []) {
     if(!activeProject)return;
     setPendingGisFeatures(null);
     setPendingGisMetadata(null);
     setGisImportToken(0);
     setPendingCadInp(input);
+    setPendingCadIdMap(idMap);
     setCadImportToken(value=>value+1);
     setSection('Engineering tools');
     setMobileNav(false);
@@ -1135,7 +1138,7 @@ function App() {
               <div className="page-intro"><div><span className="eyebrow muted">COMPUTER-AIDED DESIGN</span><h1>CAD & 3D workspace</h1><p>Project-centred 2D drafting, DXF exchange and interactive 3D geometry inspection.</p></div></div>
               {!activeProject ? <ChooseProject projects={projects} onChoose={openProject} /> : <>
                 <div className="active-project-strip"><span><Box size={17} /> {activeProject.title}</span><span className="status-pill">{drawingDoc ? 'Saved version ' + drawingDoc.version : 'Unsaved drawing'}</span></div>
-                <Cad3DEnginePanel projectId={activeProject.id} initialData={drawingDoc?.data} gisFeatures={gisDoc?.data?.featureCollection?.features ?? []} linkedEpanetInp={hydraulicDoc?.data?.inp ?? ''} linkedEpanetSimulation={hydraulicDoc?.data?.simulation} linkedEpanetUpdatedAt={hydraulicDoc?.data?.generatedAt} onSendToEpanet={openEpanetFromCad} onSave={data => saveDocument('drawing', data)} />
+                <Cad3DEnginePanel projectId={activeProject.id} initialData={drawingDoc?.data} gisFeatures={gisDoc?.data?.featureCollection?.features ?? []} linkedEpanetInp={hydraulicDoc?.data?.inp ?? ''} linkedEpanetSimulation={hydraulicDoc?.data?.simulation} linkedEpanetIdMap={hydraulicDoc?.data?.cadIdMap} linkedEpanetUpdatedAt={hydraulicDoc?.data?.generatedAt} onSendToEpanet={openEpanetFromCad} onSave={data => saveDocument('drawing', data)} />
               </>}
             </div>
           )}
@@ -1255,6 +1258,7 @@ function App() {
                 gisMetadata={pendingGisMetadata}
                 cadImportInp={pendingCadInp}
                 cadImportToken={cadImportToken}
+                cadImportIdMap={pendingCadIdMap}
                 onSave={data => saveDocument('hydraulic', data)}
               />
               </>}
