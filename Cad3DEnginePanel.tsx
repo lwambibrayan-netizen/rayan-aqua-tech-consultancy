@@ -444,6 +444,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (suppressSelectionClick.current) { suppressSelectionClick.current=false; return; }
     if (panRef.current || panMode) return;
     if (draftTool !== 'none') {
+      const annotationLayer = draftTool === 'dimension' ? 'DIMENSIONS' : draftTool === 'text' ? 'TEXT' : 'ANNOTATION';
+      if (drafting.layers.find(item => item.name === annotationLayer)?.locked) { setMessage('The annotation layer is locked. Unlock it before placing this annotation.'); return; }
       const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
       const point = resolveDraftPoint(event.currentTarget, raw).point;
       const metres = { x: point.x * (calibratedMetresPerUnit || 1), y: point.y * (calibratedMetresPerUnit || 1) };
@@ -1008,8 +1010,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const layerStyle = drafting.layers.find(item => item.name === (shape.layer || '0'));
     const color = layerStyle?.color || (shape.layer === 'WATER_NETWORK' ? '#167b78' : '#c08c3c');
     const lineWeight = Math.max(0.7, (layerStyle?.lineWeightMm || 0.25) * 5);
+    const dashArray = layerStyle?.lineType === 'DASHED' || layerStyle?.lineType === 'HIDDEN' ? '8 5' : layerStyle?.lineType === 'CENTER' ? '12 4 2 4' : layerStyle?.lineType === 'PHANTOM' ? '12 4 2 4 2 4' : undefined;
     if (shape.type === 'circle') {
-      return <circle data-shape-id={shape.id} key={shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius || 12} fill="none" stroke={selectedShapeIds.includes(shape.id) ? '#d04d3f' : color} strokeWidth={selectedShapeIds.includes(shape.id) ? 4 : lineWeight} />;
+      return <circle data-shape-id={shape.id} key={shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius || 12} fill="none" stroke={selectedShapeIds.includes(shape.id) ? '#d04d3f' : color} strokeWidth={selectedShapeIds.includes(shape.id) ? 4 : lineWeight} strokeDasharray={dashArray} />;
     }
     if (shape.type === 'rect') {
       const a = shape.points[0];
@@ -1017,7 +1020,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       return <rect data-shape-id={shape.id} key={shape.id} x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.abs(b.x - a.x)} height={Math.abs(b.y - a.y)} fill="none" stroke={selectedShapeIds.includes(shape.id) ? '#d04d3f' : color} strokeWidth={selectedShapeIds.includes(shape.id) ? 4 : 2.5} />;
     }
     if (shape.type === 'line') {
-      return <line data-shape-id={shape.id} key={shape.id} x1={shape.points[0].x} y1={shape.points[0].y} x2={shape.points[1].x} y2={shape.points[1].y} stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 5 : lineWeight} />;
+      return <line data-shape-id={shape.id} key={shape.id} x1={shape.points[0].x} y1={shape.points[0].y} x2={shape.points[1].x} y2={shape.points[1].y} stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 5 : lineWeight} strokeDasharray={dashArray} />;
     }
     return <path data-shape-id={shape.id} key={shape.id} d={polylineSvgPath(shape)} fill="none" stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 5 : 3} />;
   });
