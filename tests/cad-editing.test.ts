@@ -22,6 +22,21 @@ describe('CAD editing geometry operations', () => {
     const mirrored = mirrorEntities([line], { x: 0, y: 0 }, { x: 0, y: 1 });
     expect(mirrored[0].points).toEqual([{ x: 0, y: 0 }, { x: -10, y: 0 }]);
   });
+  it('rotates and mirrors rectangles as closed true four-corner polylines', () => {
+    const rect: CadEditableEntity = { id: 'r', type: 'rect', points: [{ x: 0, y: 0 }, { x: 4, y: 2 }], layer: 'CIVIL' };
+    const rotated = rotateEntities([rect], { x: 0, y: 0 }, 90)[0];
+    expect(rotated.type).toBe('polyline');
+    expect(rotated.points).toHaveLength(5);
+    expect(rotated.points[0]).toEqual({ x: 0, y: 0 });
+    expect(rotated.points[1].x).toBeCloseTo(0);
+    expect(rotated.points[1].y).toBeCloseTo(4);
+    expect(rotated.points[4]).toEqual(rotated.points[0]);
+    const mirrored = mirrorEntities([rect], { x: 0, y: 0 }, { x: 0, y: 1 })[0];
+    expect(mirrored.type).toBe('polyline');
+    expect(mirrored.points[0].x).toBe(0);
+    expect(mirrored.points[1].x).toBe(-4);
+    expect(mirrored.points[4]).toEqual(mirrored.points[0]);
+  });
   it('stretches only vertices inside the crossing window', () => {
     const poly: CadEditableEntity = { id: 'p', type: 'polyline', points: [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 10 }], layer: 'WATER' };
     const result = stretchEntities([poly], { minX: 4, minY: 4, maxX: 6, maxY: 6 }, { x: 2, y: 0 });
