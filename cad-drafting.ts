@@ -19,7 +19,9 @@ export type DrawingSheet = {
   scale: string; title: string; drawingNumber: string; revision: string; status: 'PRELIMINARY' | 'FOR REVIEW' | 'FOR APPROVAL' | 'FOR CONSTRUCTION' | 'AS BUILT';
   company: string; designer: string; checker: string; approver: string; date: string; units: 'm' | 'mm';
 };
+export type DrawingRevisionEntry = { revision: string; date: string; description: string; drawnBy: string; checkedBy: string; approvedBy: string; status: 'PRELIMINARY' | 'FOR REVIEW' | 'FOR APPROVAL' | 'FOR CONSTRUCTION' | 'AS BUILT' };
 export type DraftingDocument = {
+  revisionHistory: DrawingRevisionEntry[];
   standard: 'ISO' | 'BS' | 'ANSI';
   layers: DraftLayer[];
   annotations: DraftAnnotation[];
@@ -62,6 +64,7 @@ export function createDraftingDocument(partial?: Partial<DraftingDocument>): Dra
   sheets[activeSheetIndex] = sheet;
   return {
     standard: partial?.standard ?? 'ISO',
+    revisionHistory: partial?.revisionHistory?.map(item => ({...item})) ?? [],
     layers: partial?.layers?.length ? partial.layers : DEFAULT_DRAFT_LAYERS.map(layer => ({ ...layer })),
     annotations: partial?.annotations ?? [],
     sheet, sheets, activeSheetIndex,
@@ -99,7 +102,10 @@ export function validateDraftingDocument(doc: DraftingDocument): string[] {
     if ((item.kind === 'linear' || item.kind === 'aligned') && (item.a.x === item.b.x && item.a.y === item.b.y)) issues.push('A dimension cannot measure a zero-length segment.');
   }
   const sheet = sheetDimensionsMm(doc.sheet);
-  if (!(sheet.widthMm > 0 && sheet.heightMm > 0)) issues.push('Drawing sheet dimensions must be positive.');
+  if (!(sheet.widthMm > 0 && sheet.heightMm > 0) || !Number.isFinite(sheet.widthMm) || !Number.isFinite(sheet.heightMm)) issues.push('Drawing sheet dimensions must be positive finite values.');
+  if (doc.sheet.size === 'CUSTOM' && (!(doc.sheet.widthMm && doc.sheet.heightMm) || doc.sheet.widthMm < 50 || doc.sheet.heightMm < 50 || doc.sheet.widthMm > 5000 || doc.sheet.heightMm > 5000)) issues.push('Custom sheet width and height must each be between 50 mm and 5000 mm.');
+  const revisionIds = new Set<string>();
+  for (const revision of doc.revisionHistory) { const key = revision.revision.trim().toUpperCase(); if (!key || revisionIds.has(key)) issues.push('Revision identifiers must be unique and non-empty.'); revisionIds.add(key); if (!revision.date || !revision.description.trim()) issues.push('Each revision requires a date and change description.'); }
   if (!/^1:\\d+(?:\\.\\d+)?$/.test(doc.sheet.scale)) issues.push('Sheet scale must use a ratio such as 1:100.');
   if (!doc.sheet.drawingNumber.trim() || !doc.sheet.title.trim()) issues.push('Drawing title and drawing number are required.');
   return issues;
