@@ -76,7 +76,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
       {id:'OUTLET',point:{...to.geometry[0]},role:'outlet',diameterMm:diameterMm||undefined},
     ];
     c.properties={...c.properties,tag:id,nominalDiameterMm:diameterMm||c.properties.nominalDiameterMm,...props};
-    if(kind==='pipe')c.properties.internalDiameterMm=diameterMm;
+    if(kind==='pipe'){c.properties.internalDiameterMm=diameterMm;c.properties.externalDiameterMm=undefined;}
     components.push(c);
   };
   bySection('PIPES').forEach(r=>{
