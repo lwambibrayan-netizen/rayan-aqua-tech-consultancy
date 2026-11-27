@@ -44,7 +44,10 @@ export function mirrorEntities<T extends CadEditableEntity>(entities: T[], axisS
 }
 export function stretchEntities<T extends CadEditableEntity>(entities: T[], window: CadWindow, delta: Point2D): T[] {
   assertPoint(delta);
-  if (window.minX > window.maxX || window.minY > window.maxY) throw new Error('Stretch window bounds are invalid.');
+  const bounds = [window.minX, window.minY, window.maxX, window.maxY];
+  if (!bounds.every(finite) || window.minX > window.maxX || window.minY > window.maxY) {
+    throw new Error('Stretch window bounds must be finite and ordered.');
+  }
   return entities.map(e => ({ ...e, points: e.points.map(p =>
     p.x >= window.minX && p.x <= window.maxX && p.y >= window.minY && p.y <= window.maxY
       ? { x: p.x + delta.x, y: p.y + delta.y } : clonePoint(p)) }));
@@ -74,22 +77,46 @@ function infiniteLineIntersection(a: Point2D, b: Point2D, c: Point2D, d: Point2D
 }
 const dist = (a: Point2D, b: Point2D) => Math.hypot(a.x - b.x, a.y - b.y);
 
+function segmentIntersection(a: Point2D, b: Point2D, c: Point2D, d: Point2D): Point2D | null {
+  const r = { x: b.x - a.x, y: b.y - a.y }, s = { x: d.x - c.x, y: d.y - c.y };
+  const cross = (u: Point2D, v: Point2D) => u.x * v.y - u.y * v.x;
+  const den = cross(r, s);
+  if (Math.abs(den) < 1e-12) return null;
+  const q = { x: c.x - a.x, y: c.y - a.y };
+  const t = cross(q, s) / den, u = cross(q, r) / den;
+  const eps = 1e-9;
+  if (t < -eps || t > 1 + eps || u < -eps || u > 1 + eps) return null;
+  return { x: a.x + t * r.x, y: a.y + t * r.y };
+}
 export function trimLine<T extends CadEditableEntity>(line: T, cutter: CadEditableEntity, pickPoint: Point2D): T {
-  if (line.type !== 'line' || cutter.points.length < 2) throw new Error('TRIM currently requires a line entity and a linear cutting edge.');
-  const hit = infiniteLineIntersection(line.points[0], line.points[1], cutter.points[0], cutter.points[1]);
-  if (!hit) throw new Error('TRIM failed: cutting edge is parallel or coincident.');
-  const removeStart = dist(pickPoint, line.points[0]) <= dist(pickPoint, line.points[1]);
-  const points = line.points.map(clonePoint);
+  if (line.type !== 'line' || cutter.points.length < 2) throw new Error('TRIM currently requires a line and a linear cutting edge.');
+  assertPoint(pickPoint);
+  const [a, b] = line.points;
+  const hit = segmentIntersection(a, b, cutter.points[0], cutter.points[1]);
+  if (!hit) throw new Error('TRIM failed: the selected line does not intersect the finite cutting edge.');
+  const removeStart = dist(pickPoint, a) <= dist(pickPoint, b);
+  const points = [clonePoint(a), clonePoint(b)];
   points[removeStart ? 0 : 1] = hit;
   return { ...line, points };
 }
 export function extendLine<T extends CadEditableEntity>(line: T, boundary: CadEditableEntity, endpoint: 0 | 1 = 1): T {
-  if (line.type !== 'line' || boundary.points.length < 2) throw new Error('EXTEND currently requires a line entity and a linear boundary.');
-  const hit = infiniteLineIntersection(line.points[0], line.points[1], boundary.points[0], boundary.points[1]);
-  if (!hit) throw new Error('EXTEND failed: boundary is parallel or coincident.');
-  const points = line.points.map(clonePoint);
-  points[endpoint] = hit;
-  return { ...line, points };
+  if (line.type !== 'line' || boundary.points.length < 2) throw new Error('EXTEND currently requires a line and a linear boundary.');
+  const [a, b] = line.points;
+  const hit = segmentIntersection(a, b, boundary.points[0], boundary.points[1]);
+  if (!hit) {
+    // Intersect the endpoint's outward ray with the finite boundary segment.
+    const origin = endpoint === 0 ? a : b;
+    const other = endpoint === 0 ? b : a;
+    const far = { x: origin.x + (origin.x - other.x) * 1e6, y: origin.y + (origin.y - other.y) * 1e6 };
+    const rayHit = segmentIntersection(origin, far, boundary.points[0], boundary.points[1]);
+    if (!rayHit) throw new Error('EXTEND failed: no forward intersection with the finite boundary.');
+    return { ...line, points: endpoint === 0 ? [rayHit, clonePoint(b)] : [clonePoint(a), rayHit] };
+  }
+  const origin = endpoint === 0 ? a : b;
+  const other = endpoint === 0 ? b : a;
+  const dot = (hit.x-origin.x)*(origin.x-other.x)+(hit.y-origin.y)*(origin.y-other.y);
+  if (dot <= 0) throw new Error('EXTEND failed: boundary is not beyond the selected endpoint.');
+  return { ...line, points: endpoint === 0 ? [hit, clonePoint(b)] : [clonePoint(a), hit] };
 }
 export function offsetLine<T extends CadEditableEntity>(line: T, distance: number, side: 1 | -1 = 1): T {
   if (line.type !== 'line' || !finite(distance) || distance < 0) throw new Error('OFFSET requires a line and a non-negative finite distance.');
