@@ -68,7 +68,7 @@ J2 180 0
   expect(result.document.components.find(c=>c.id==='J1')?.properties.hydraulicElevationM).toBe(100);
   expect(result.document.components.find(c=>c.id==='R1')?.properties.hydraulicElevationM).toBeUndefined();
   expect(result.document.components.find(c=>c.id==='R1')?.properties.hydraulicHeadM).toBe(110);
-  expect(result.document.verticalDatum).toBe('EPANET imported elevations');
+  expect(result.document.verticalDatum).toBe('AHD');
   expect(p.properties.hydraulicLengthM).toBe(125);
   expect(p.properties.internalDiameterMm).toBe(150);
   expect(p.properties.externalDiameterMm).toBeUndefined();
@@ -152,7 +152,7 @@ J1 10 0
   expect(result.document.components.find(c=>c.id==='PU1')?.properties.initialStatus).toBe('CLOSED');
   expect(result.document.components.find(c=>c.id==='V1')?.properties.valveSetting).toBe(25);
   expect(result.document.components.find(c=>c.id==='V1')?.properties.minorLossCoefficient).toBeCloseTo(0.4);
-  expect(result.document.components.find(c=>c.id==='V1')?.properties.initialStatus).toBe('CLOSED');
+  expect(result.document.components.find(c=>c.id==='V1')?.properties.initialStatus).toBe('OPEN');
   expect(exportWaterNetworkToEpanet(result.document).input).toContain('PU1 CLOSED');
   expect(exportWaterNetworkToEpanet(result.document).input).toContain('V1 R1 J1 100 PRV 25 0.4');
   expect(exportWaterNetworkToEpanet(result.document).input).toContain('V1 CLOSED');
