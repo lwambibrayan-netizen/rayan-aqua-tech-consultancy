@@ -4,6 +4,9 @@ import { exportDraftingDxf, importDraftingDxf } from '../cad-dxf';
 import { getEngineeringBlock, instantiateEngineeringBlock } from '../cad-object-library';
 
 describe('structured DXF exchange', () => {
+  it('gives a clear message for unsupported binary DXF files', () => {
+    expect(()=>importDraftingDxf('AutoCAD Binary DXF\\r\\n\\u001a\\u0000')).toThrow('Binary DXF is not supported');
+  });
   it('writes drawing units, layer table, linework and annotations', () => {
     const doc = createDraftingDocument();
     doc.annotations.push({ id: 'T1', kind: 'text', layer: 'TEXT', at: { x: 10, y: 20 }, text: 'PIPE DN110', heightMm: 2.5, rotationDeg: 0 });
