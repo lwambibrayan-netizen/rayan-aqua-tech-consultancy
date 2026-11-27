@@ -2021,6 +2021,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         {terrainGrid && <p className="muted" style={{fontSize:11}}>Terrain CRS: {terrainGrid.crs}. {waterCad.horizontalCrs===terrainGrid.crs && waterCad.horizontalUnits==='m' && waterCad.verticalDatum===terrainGrid.verticalDatum ? 'Horizontal CRS, metre units and vertical datum match.' : 'CRS, units or vertical datum do not match; terrain routing and co-registered 3D terrain are disabled until coordinates and levels are properly transformed.'}</p>}
       </div>
 
+      <div className="aquacad-document-tabs" role="tablist" aria-label="Open drawings">
+        <button className="aquacad-document-tab active" role="tab" aria-selected="true">▧ {projectId ? 'Current project drawing' : 'Untitled drawing'} <span>×</span></button>
+        <button className="aquacad-document-add" type="button" title="New drawing" onClick={()=>{setShapes([]);setSelectedShapeIds([]);setDraft([]);setMessage('New drawing started.');}}>＋</button>
+      </div>
+
       {view === '2d' ? (
         <div className="panel" style={{ padding: 12 }}>
           <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>
