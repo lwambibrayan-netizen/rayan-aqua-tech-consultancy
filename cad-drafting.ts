@@ -13,7 +13,7 @@ export type DraftPoint = { x: number; y: number };
 export type DraftAnchorReference = { entityId: string; pointIndex: number };
 export type DraftAnnotation =
   | { id: string; kind: 'linear' | 'aligned'; layer: string; a: DraftPoint; b: DraftPoint; offsetM: number; textOverride?: string; precision: number; association?: { a?: DraftAnchorReference; b?: DraftAnchorReference } }
-  | { id: string; kind: 'text'; layer: string; at: DraftPoint; text: string; heightMm: number; rotationDeg: number }
+  | { id: string; kind: 'radial'; layer: string; circleId?: string; center: DraftPoint; dimensionType: 'radius' | 'diameter'; leaderAngleRad: number; precision: number }\n  | { id: string; kind: 'angular'; layer: string; vertex: DraftPoint; rayA: DraftPoint; rayB: DraftPoint; offsetM: number; precision: number; association?: { vertex?: DraftAnchorReference; rayA?: DraftAnchorReference; rayB?: DraftAnchorReference } }\n  | { id: string; kind: 'text'; layer: string; at: DraftPoint; text: string; heightMm: number; rotationDeg: number }
   | { id: string; kind: 'leader'; layer: string; points: DraftPoint[]; text: string; textHeightMm: number };
 export type SheetSize = 'A0' | 'A1' | 'A2' | 'A3' | 'A4' | 'CUSTOM';
 export type DrawingSheet = {
@@ -107,7 +107,56 @@ export function resolveAssociativeDimension<T extends Extract<DraftAnnotation, {
   return { ...annotation, a: resolve(annotation.association.a, annotation.a), b: resolve(annotation.association.b, annotation.b) };
 }
 
-export function measureDimension(annotation: Extract<DraftAnnotation, { kind: 'linear' | 'aligned' }>): number {
+
+/** Find a circle whose centre is within the associative pick tolerance. */
+export function findAssociativeCircle(point: DraftPoint, entities: Array<{ id: string; type: string; points: DraftPoint[] }>, toleranceM: number, metresPerDrawingUnit: number): string | undefined {
+  if (!(toleranceM >= 0) || !(metresPerDrawingUnit > 0)) return undefined;
+  let best: { id: string; distance: number } | undefined;
+  for (const entity of entities) {
+    if (entity.type !== 'circle' || !entity.points[0]) continue;
+    const distance = Math.hypot(entity.points[0].x * metresPerDrawingUnit - point.x, entity.points[0].y * metresPerDrawingUnit - point.y);
+    if (distance <= toleranceM && (!best || distance < best.distance)) best = { id: entity.id, distance };
+  }
+  return best?.id;
+}
+export function resolveAssociativeRadialDimension<T extends Extract<DraftAnnotation, { kind: 'radial' }>>(
+  annotation: T, entities: Array<{ id: string; type: string; points: DraftPoint[]; radius?: number }>, metresPerDrawingUnit: number
+): T & { center: DraftPoint; radiusM: number } {
+  const circle = annotation.circleId ? entities.find(item => item.id === annotation.circleId && item.type === 'circle') : undefined;
+  if (!circle || !circle.points[0] || !(circle.radius && circle.radius > 0)) {
+    return { ...annotation, radiusM: 0 };
+  }
+  return {
+    ...annotation,
+    center: { x: circle.points[0].x * metresPerDrawingUnit, y: circle.points[0].y * metresPerDrawingUnit },
+    radiusM: circle.radius * metresPerDrawingUnit,
+  };
+}
+export function resolveAssociativeAngularDimension<T extends Extract<DraftAnnotation, { kind: 'angular' }>>(
+  annotation: T, entities: Array<{ id: string; type: string; points: DraftPoint[] }>, metresPerDrawingUnit: number
+): T {
+  const resolve = (ref: DraftAnchorReference | undefined, fallback: DraftPoint): DraftPoint => {
+    if (!ref) return fallback;
+    const entity = entities.find(item => item.id === ref.entityId);
+    const point = entity?.points[ref.pointIndex];
+    return point ? { x: point.x * metresPerDrawingUnit, y: point.y * metresPerDrawingUnit } : fallback;
+  };
+  if (!annotation.association) return annotation;
+  return {
+    ...annotation,
+    vertex: resolve(annotation.association.vertex, annotation.vertex),
+    rayA: resolve(annotation.association.rayA, annotation.rayA),
+    rayB: resolve(annotation.association.rayB, annotation.rayB),
+  };
+}
+export function measureAngularDimension(annotation: Extract<DraftAnnotation, { kind: 'angular' }>): number {
+  const ax = annotation.rayA.x - annotation.vertex.x, ay = annotation.rayA.y - annotation.vertex.y;
+  const bx = annotation.rayB.x - annotation.vertex.x, by = annotation.rayB.y - annotation.vertex.y;
+  const al = Math.hypot(ax, ay), bl = Math.hypot(bx, by);
+  if (al <= 1e-12 || bl <= 1e-12) throw new Error('Angular dimension rays must have non-zero length.');
+  return Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by) / (al * bl))));
+}
+\nexport function measureDimension(annotation: Extract<DraftAnnotation, { kind: 'linear' | 'aligned' }>): number {
   const dx = annotation.b.x - annotation.a.x, dy = annotation.b.y - annotation.a.y;
   return annotation.kind === 'aligned' ? Math.hypot(dx, dy) : Math.abs(dx);
 }
