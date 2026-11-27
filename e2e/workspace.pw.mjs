@@ -108,6 +108,10 @@ test('engineer opens a project, uses visible CAD navigation, saves and opens 3D'
   await circleMethod.selectOption('three-point');
   await expect(circleMethod).toHaveValue('three-point');
   await ribbonContent.getByRole('button', { name: 'Ellipse' }).click();
+  const ellipseMethod = ribbonContent.getByLabel('Ellipse method');
+  await ellipseMethod.selectOption('axis-endpoints');
+  await expect(ellipseMethod).toHaveValue('axis-endpoints');
+  await expect(ribbonContent.getByRole('button', { name: 'Manage Layers' })).toBeVisible();
   await ribbonContent.getByRole('button', { name: 'Arc' }).click();
   const arcMethod = ribbonContent.getByLabel('Arc method');
   await arcMethod.selectOption('center-start-angle');
