@@ -86,6 +86,16 @@ test('engineer opens a project, uses visible CAD navigation, saves and opens 3D'
   await page.getByRole('button', { name: /CAD & 3D workspace/ }).click();
 
   const ribbon = page.getByRole('tablist', { name: 'AquaCAD ribbon' });
+  const cadShell = page.locator('.aquacad-shell');
+  const drawingArea = cadShell.locator('.aquacad-canvas-layout');
+  await expect(drawingArea).toBeVisible();
+
+  await ribbon.getByRole('tab', { name: 'Modify' }).click();
+  await expect(ribbon.getByRole('button', { name: 'Move', exact: true })).toBeVisible();
+  await expect(drawingArea.getByRole('button', { name: 'Move', exact: true })).toHaveCount(0);
+  await ribbon.getByRole('tab', { name: 'Home' }).click();
+  await expect(ribbon.getByRole('button', { name: 'Line', exact: true })).toBeVisible();
+  await expect(drawingArea.getByRole('button', { name: 'Line', exact: true })).toHaveCount(0);
   await ribbon.getByRole('tab', { name: 'Drafting' }).click();
   await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="drafting"]')).toBeVisible();
   await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="drafting"]')).toContainText('Dimensions, annotations, layers & drawing sheets');
@@ -93,6 +103,8 @@ test('engineer opens a project, uses visible CAD navigation, saves and opens 3D'
   await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="blocks"]')).toContainText('Engineering object library');
   await ribbon.getByRole('tab', { name: 'Water Network' }).click();
   await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="water-network"]')).toContainText('Network component library');
+  await ribbon.getByRole('tab', { name: '3D Modeling' }).click();
+  await expect(ribbon.getByRole('button', { name: /Fetch DEM from GIS/ })).toBeVisible();
   await ribbon.getByRole('tab', { name: 'Home' }).click();
 
   const pan = page.getByRole('button', { name: 'Pan drawing' });
@@ -139,7 +151,7 @@ test('engineer opens the GIS workspace and sees terrain-to-CAD tools', async ({ 
 
   await expect(page.getByRole('button', { name: /Pipeline ground profile/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Check PyQGIS \/ DEM coverage/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Send DEM surface to CAD \/ 3D/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Send DEM surface to CAD \/ 3D/ })).toHaveCount(0);
 });
 
 test('PyQGIS DEM-to-CAD endpoint is registered and requires authentication', async ({ request }) => {
