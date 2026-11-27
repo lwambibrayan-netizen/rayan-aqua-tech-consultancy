@@ -650,7 +650,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         setDrafting(current => {
           const known = new Set(current.layers.map(item => item.name.toUpperCase()));
           const importedByName = new Map(imported.layers.map(item => [item.name.toUpperCase(), item]));
-          const added = imported.layerNames.filter(name => !known.has(name.toUpperCase())).map(name => importedByName.get(name.toUpperCase()) || ({ name, color: '#666666', lineType: 'CONTINUOUS' as const, lineWeightMm: 0.18, visible: true, locked: false, plot: true }));
+          const added = imported.layers.filter(item => !known.has(item.name.toUpperCase()));
           return { ...current, layers: [...current.layers, ...added], annotations: [...current.annotations, ...imported.annotations] };
         });
         setMessage('Imported ' + imported.shapes.length + ' geometry entities and ' + imported.annotations.length + ' text annotations.' + (imported.warnings.length ? ' ' + imported.warnings.join(' ') : ''));
