@@ -37,7 +37,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',num(r.values[1]));});
   bySection('TANKS').forEach(r=>{if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}addNode(r.values[0],'tank',num(r.values[1]),{level:num(r.values[2]),diameter:num(r.values[5])});});
   const components=[...nodes.values()];
-  const addLink=(idRaw:string,kind:WaterComponentKind,fromRaw:string,toRaw:string,diameterMm:number,props:Record<string,number|string|undefined>={})=>{
+  const addLink=(idRaw:string,kind:WaterComponentKind,fromRaw:string,toRaw:string,diameterMm:number,props:Partial<WaterCadComponent['properties']>={})=>{
     const from=nodes.get(safe(fromRaw)),to=nodes.get(safe(toRaw));
     if(!from||!to){warnings.push('Link '+idRaw+' references a missing node and was skipped.');return;}
     const id=safe(idRaw);if(components.some(c=>c.id===id)){warnings.push('Duplicate link ID '+id+' was skipped.');return;}
@@ -47,7 +47,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
       {id:'INLET',point:{...from.geometry[0]},role:'inlet',diameterMm:diameterMm||undefined},
       {id:'OUTLET',point:{...to.geometry[0]},role:'outlet',diameterMm:diameterMm||undefined},
     ];
-    c.properties={...c.properties,tag:id,nominalDiameterMm:diameterMm||c.properties.nominalDiameterMm,...(props as object)};
+    c.properties={...c.properties,tag:id,nominalDiameterMm:diameterMm||c.properties.nominalDiameterMm,...props};
     if(kind==='pipe')c.properties.internalDiameterMm=diameterMm;
     components.push(c);
   };
@@ -58,7 +58,22 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     const checkValve=(r.values[7]??'OPEN').toUpperCase()==='CV';
     addLink(r.values[0],checkValve?'valve':'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),valveType:checkValve?'check':undefined,description:'Imported from EPANET'});
   });
-  bySection('PUMPS').forEach(r=>{if(r.values.length<3){warnings.push('Malformed pump at line '+r.line+'.');return;}addLink(r.values[0],'pump',r.values[1],r.values[2],0,{description:'Imported from EPANET pump link'});if(r.values.slice(3).join(' ').toUpperCase().includes('HEAD'))warnings.push('Pump '+r.values[0]+' curve reference imported as a link; curve data requires review before simulation.');});
+  const pumpCurves=new Map<string,Array<{flowM3h:number;headM:number}>>();
+  bySection('CURVES').forEach(r=>{if(r.values.length>=3){const id=safe(r.values[0]);const points=pumpCurves.get(id)??[];points.push({flowM3h:flowToM3h(num(r.values[1])),headM:num(r.values[2])});pumpCurves.set(id,points);}});
+  bySection('PUMPS').forEach(r=>{
+    if(r.values.length<3){warnings.push('Malformed pump at line '+r.line+'.');return;}
+    const headIndex=r.values.findIndex(value=>value.toUpperCase()==='HEAD');
+    const curveId=headIndex>=0?r.values[headIndex+1]:undefined;
+    const points=curveId?pumpCurves.get(safe(curveId)):undefined;
+    addLink(r.values[0],'pump',r.values[1],r.values[2],0,{
+      description:'Imported from EPANET pump link',
+      epanetPumpCurveId:curveId,
+      pumpCurvePoints:points,
+      ...(points?.length===1?{pumpDutyFlowM3h:points[0].flowM3h,pumpDutyHeadM:points[0].headM}:{})
+    });
+    if(curveId&&!points?.length)warnings.push('Pump '+r.values[0]+' references missing curve '+curveId+'; add or repair its pump curve before simulation.');
+    if(!curveId)warnings.push('Pump '+r.values[0]+' uses a non-HEAD or unsupported pump definition; manual pump model review is required.');
+  });
   bySection('VALVES').forEach(r=>{
     if(r.values.length<5){warnings.push('Malformed valve at line '+r.line+'.');return;}
     const type=r.values[4].toUpperCase();const map:Record<string,WaterCadComponent['properties']['valveType']>={PRV:'PRV',PSV:'PSV',FCV:'control',TCV:'control',GPV:'control'};
