@@ -6,7 +6,7 @@ const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
 const num=(v:string|undefined,fallback=0)=>{const n=Number(v);return v!==undefined&&Number.isFinite(n)?n:fallback;};
 const safe=(s:string)=>s.replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,31)||'ID';
 type Row={section:string; values:string[]; line:number};
-const supported=new Set(['JUNCTIONS','RESERVOIRS','TANKS','PIPES','PUMPS','VALVES','COORDINATES','CURVES','OPTIONS','STATUS','DEMANDS','PATTERNS','EMITTERS','VERTICES']);
+const supported=new Set(['JUNCTIONS','RESERVOIRS','TANKS','PIPES','PUMPS','VALVES','COORDINATES','CURVES','OPTIONS','DEMANDS','PATTERNS','EMITTERS','VERTICES','TIMES']);
 export function importEpanetInp(input:string, verticalDatum='EPANET imported elevations'):EpanetImportResult {
   const warnings:string[]=[];
   const rows:Row[]=[]; let section='';
@@ -20,6 +20,9 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const bySection=(name:string)=>rows.filter(row=>row.section===name);
   const coordinates=new Map<string,{x:number;y:number}>();
   bySection('COORDINATES').forEach(r=>{if(r.values.length>=3)coordinates.set(safe(r.values[0]),{x:num(r.values[1]),y:num(r.values[2])});});
+  const vertices=new Map<string,Array<{x:number;y:number}>>();
+  bySection('VERTICES').forEach(r=>{if(r.values.length>=3){const id=safe(r.values[0]);const list=vertices.get(id)??[];list.push({x:num(r.values[1]),y:num(r.values[2])});vertices.set(id,list);}});
+  const parseTime=(value:string|undefined,fallback:number)=>{if(!value)return fallback;const parts=value.split(':').map(Number);if(parts.some(part=>!Number.isFinite(part)))return fallback;return parts.length===1?parts[0]*3600:parts[0]*3600+(parts[1]??0)*60+(parts[2]??0);};
   const unitLine=bySection('OPTIONS').find(r=>r.values[0]?.toUpperCase()==='UNITS');
   const flowUnit=(unitLine?.values[1]??'LPS').toUpperCase();
   const usUnits=['CFS','GPM','MGD','IMGD','AFD'].includes(flowUnit);
@@ -28,6 +31,13 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const diameterToMm=(value:number)=>usUnits?value*25.4:value;
   const headToM=(value:number)=>usUnits?value*0.3048:value;
   const pressureToM=(value:number)=>usUnits?value*0.70307:value;
+  const flowToLps=(value:number)=>flowToM3h(value)*1000/3600;
+  const emitterToLpsSqrtM=(value:number)=>value*flowToLps(1)/Math.sqrt(usUnits?0.70307:1);
+  const optionValue=(key:string,fallback:string)=>bySection('OPTIONS').find(r=>r.values[0]?.toUpperCase()===key)?.values[1]??fallback;
+  const headlossRaw=optionValue('HEADLOSS','H-W').toUpperCase();
+  const headlossFormula=headlossRaw==='D-W'?'D-W':headlossRaw==='C-M'?'C-M':'H-W';
+  const times=(key:string,fallback:number)=>parseTime(bySection('TIMES').find(r=>r.values[0]?.toUpperCase()===key)?.values[1],fallback);
+  const epanetTimes={durationSeconds:times('DURATION',0),hydraulicStepSeconds:times('HYDRAULIC TIMESTEP',3600),patternStepSeconds:times('PATTERN TIMESTEP',3600),patternStartSeconds:times('PATTERN START',0),reportStepSeconds:times('REPORT TIMESTEP',3600),reportStartSeconds:times('REPORT START',0)};
   const patternMap=new Map<string,number[]>();
   bySection('PATTERNS').forEach(r=>{const id=safe(r.values[0]);const values=patternMap.get(id)??[];values.push(...r.values.slice(1).map(Number).filter(Number.isFinite));patternMap.set(id,values);});
   const nodes=new Map<string,WaterCadComponent>();
@@ -41,6 +51,8 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     nodes.set(id,c);
   };
   bySection('JUNCTIONS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed junction at line '+r.line+'.');return;}addNode(r.values[0],'junction',headToM(num(r.values[1])),{flow:flowToM3h(num(r.values[2])),demandPatternId:r.values[3]});});
+  bySection('DEMANDS').forEach(r=>{const node=nodes.get(safe(r.values[0]));if(!node||r.values.length<2){warnings.push('Secondary demand at line '+r.line+' references a missing node or is malformed.');return;}const demand={flowM3h:flowToM3h(num(r.values[1])),patternId:r.values[2]?safe(r.values[2]):undefined};node.properties.additionalDemands=[...(node.properties.additionalDemands??[]),demand];});
+  bySection('EMITTERS').forEach(r=>{const node=nodes.get(safe(r.values[0]));if(!node||r.values.length<2){warnings.push('Emitter at line '+r.line+' references a missing node or is malformed.');return;}node.properties.emitterCoefficient=emitterToLpsSqrtM(num(r.values[1]));});
   bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',headToM(num(r.values[1])),{head:headToM(num(r.values[1]))});});
   bySection('TANKS').forEach(r=>{
     if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}
@@ -53,12 +65,12 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     }
   });
   const components=[...nodes.values()];
-  const addLink=(idRaw:string,kind:WaterComponentKind,fromRaw:string,toRaw:string,diameterMm:number,props:Partial<WaterCadComponent['properties']>={})=>{
+  const addLink=(idRaw:string,kind:WaterComponentKind,fromRaw:string,toRaw:string,diameterMm:number,props:Partial<WaterCadComponent['properties']>={},intermediate:Array<{x:number;y:number}>=[])=>{
     const from=nodes.get(safe(fromRaw)),to=nodes.get(safe(toRaw));
     if(!from||!to){warnings.push('Link '+idRaw+' references a missing node and was skipped.');return;}
     const id=safe(idRaw);if(components.some(c=>c.id===id)){warnings.push('Duplicate link ID '+id+' was skipped.');return;}
     const c=createWaterComponent(kind,id,from.geometry[0].x,from.geometry[0].y);
-    c.geometry=[{...from.geometry[0]},{...to.geometry[0]}];c.fromNodeId=from.id;c.toNodeId=to.id;
+    c.geometry=[{...from.geometry[0]},...intermediate.map(point=>({...point})),{...to.geometry[0]}];c.fromNodeId=from.id;c.toNodeId=to.id;
     if(kind!=='pipe') c.customPorts=[
       {id:'INLET',point:{...from.geometry[0]},role:'inlet',diameterMm:diameterMm||undefined},
       {id:'OUTLET',point:{...to.geometry[0]},role:'outlet',diameterMm:diameterMm||undefined},
@@ -72,7 +84,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     const length=lengthToM(num(r.values[3]));const diameter=diameterToMm(num(r.values[4]));
     if(!(length>0)||!(diameter>0)){warnings.push('Pipe '+r.values[0]+' has invalid length or diameter and was skipped.');return;}
     const checkValve=(r.values[7]??'OPEN').toUpperCase()==='CV';
-    addLink(r.values[0],checkValve?'valve':'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),initialStatus:checkValve?undefined:((r.values[7]??'OPEN').toUpperCase()==='CLOSED'?'CLOSED':'OPEN'),valveType:checkValve?'check':undefined,description:'Imported from EPANET'});
+    addLink(r.values[0],checkValve?'valve':'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),initialStatus:checkValve?undefined:((r.values[7]??'OPEN').toUpperCase()==='CLOSED'?'CLOSED':'OPEN'),valveType:checkValve?'check':undefined,description:'Imported from EPANET'},vertices.get(safe(r.values[0]))??[]);
   });
   const pumpCurves=new Map<string,Array<{flowM3h:number;headM:number}>>();
   bySection('CURVES').forEach(r=>{if(r.values.length>=3){const id=safe(r.values[0]);const points=pumpCurves.get(id)??[];points.push({flowM3h:flowToM3h(num(r.values[1])),headM:headToM(num(r.values[2]))});pumpCurves.set(id,points);}});
@@ -111,7 +123,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const referencedPatterns=components.flatMap(component=>[component.properties.demandPatternId,component.properties.pumpSpeedPattern]).filter((value):value is string=>!!value);
   referencedPatterns.forEach(id=>{if(!patternMap.has(id))warnings.push('Pattern '+id+' is referenced but its [PATTERNS] definition is missing.');});
   if(!components.length)warnings.push('No supported hydraulic nodes were found.');
-  return {document:{schemaVersion:1,units:'m',verticalDatum,horizontalCrs:'UNREFERENCED',horizontalUnits:'unknown',components,epanetPatterns:[...patternMap].map(([id,multipliers])=>({id,multipliers}))},warnings};
+  return {document:{schemaVersion:1,units:'m',verticalDatum,horizontalCrs:'UNREFERENCED',horizontalUnits:'unknown',components,epanetPatterns:[...patternMap].map(([id,multipliers])=>({id,multipliers})),epanetHeadlossFormula:headlossFormula,epanetSpecificGravity:num(optionValue('SPECIFIC GRAVITY','1'),1),epanetViscosity:num(optionValue('VISCOSITY','1'),1),epanetTrials:num(optionValue('TRIALS','40'),40),epanetAccuracy:num(optionValue('ACCURACY','0.001'),0.001),epanetTimes},warnings};
 }
 export type HydraulicNodeResult={id:string;pressureM?:number;headM?:number;demandLps?:number;quality?:number};
 export type HydraulicLinkResult={id:string;flowLps?:number;velocityMs?:number;headlossM?:number;status?:string};
