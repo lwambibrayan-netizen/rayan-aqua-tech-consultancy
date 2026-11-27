@@ -191,6 +191,20 @@ describe('CAD editing geometry operations', () => {
     expect(validateCadEntities([importedDxf])).toEqual([]);
   });
 
+  it('blocks zero-length lines, zero-area rectangles, duplicate polyline vertices and blank layers', () => {
+    const invalid: CadEditableEntity[] = [
+      {id:'zero-line',type:'line',points:[{x:1,y:1},{x:1,y:1}],layer:'0'},
+      {id:'zero-rect',type:'rect',points:[{x:0,y:0},{x:0,y:4}],layer:'0'},
+      {id:'duplicate-vertex',type:'polyline',points:[{x:0,y:0},{x:0,y:0}],layer:'WATER'},
+      {id:'blank-layer',type:'line',points:[{x:0,y:0},{x:1,y:1}],layer:'  '},
+    ];
+    const issues=validateCadEntities(invalid);
+    expect(issues.some(issue=>issue.includes('non-zero length'))).toBe(true);
+    expect(issues.some(issue=>issue.includes('non-zero width and height'))).toBe(true);
+    expect(issues.some(issue=>issue.includes('consecutive polyline vertices'))).toBe(true);
+    expect(issues.some(issue=>issue.includes('layer name must not be empty'))).toBe(true);
+  });
+
   it('rejects degenerate geometry and invalid array dimensions', () => {
     expect(() => mirrorEntities([line], { x: 1, y: 1 }, { x: 1, y: 1 })).toThrow(/non-zero/);
     expect(() => rectangularArray([line], 0, 2, 1, 1)).toThrow(/positive integers/);
