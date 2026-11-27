@@ -2056,7 +2056,23 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <button className="secondary-button" onClick={() => { setShapes([]); setDraft([]); }}>Clear drawing</button>
             <select value={layer} onChange={event => setLayer(event.target.value)} aria-label="CAD layer" style={{ width: 175, padding: 7 }}>{drafting.layers.map(item => <option key={item.name} value={item.name} disabled={item.locked}>{item.name}{item.locked ? " (locked)" : ""}</option>)}</select>
           </div>
-          <svg
+          
+          <div className="aquacad-dock aquacad-left-dock">
+            <div className="aquacad-dock-heading">Properties</div>
+            <div className="aquacad-property-list">
+              <div><span>Selection</span><strong>{selectedShape ? selectedShape.type.toUpperCase() : selectedWaterComponent ? selectedWaterComponent.kind.toUpperCase() : 'None'}</strong></div>
+              <div><span>Layer</span><strong>{selectedShape?.layer || layer}</strong></div>
+              {selectedShape && <><div><span>Entity ID</span><strong>{selectedShape.id.slice(0,10)}</strong></div><div><span>Vertices</span><strong>{selectedShape.points.length}</strong></div></>}
+              {selectedWaterComponent && <><div><span>Network ID</span><strong>{selectedWaterComponent.id}</strong></div><div><span>Type</span><strong>{selectedWaterComponent.kind}</strong></div></>}
+              {!selectedShape && !selectedWaterComponent && <p>Select a drawing entity or water-network object to inspect its properties.</p>}
+            </div>
+            <div className="aquacad-dock-heading">Layers</div>
+            <div className="aquacad-layer-list">
+              {drafting.layers.map(item=><button key={item.name} className={layer===item.name?'active':''} onClick={()=>setLayer(item.name)}><span className="aquacad-layer-swatch" style={{background:item.color}}/>{item.name}<small>{item.locked?'LOCKED':item.visible?'ON':'OFF'}</small></button>)}
+            </div>
+          </div>
+          <div className="aquacad-drawing-stage">
+<svg
             ref={svgRef}
             tabIndex={0}
             role="application"
@@ -2164,6 +2180,19 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               </g>
             )}
           </svg>
+          </div>
+          <div className="aquacad-dock aquacad-right-dock">
+            <div className="aquacad-dock-heading">Project Explorer</div>
+            <div className="aquacad-project-tree">
+              <div className="aquacad-project-root">▾ Current drawing</div>
+              <button onClick={()=>setSelectedShapeIds([])}>CAD entities <small>{shapes.length}</small></button>
+              <button onClick={()=>setMessage('Water network components in this project')}>Water network <small>{waterCad.components.length}</small></button>
+              <div className="aquacad-project-root">▾ Network objects</div>
+              {waterCad.components.slice(0,80).map(component=><button key={component.id} className={selectedWaterId===component.id?'active':''} onClick={()=>setSelectedWaterId(component.id)}><span>{component.kind}</span><small>{component.id}</small></button>)}
+              {waterCad.components.length===0 && <p>No water components yet. Use the Water Network ribbon to add equipment.</p>}
+            </div>
+          </div>
+
           <p className="muted" style={{ fontSize: 12 }}>
             Precision drafting: object snaps include endpoints, centres, circle quadrants, nearest points, midpoints and line intersections. Ortho constrains the next segment horizontally or vertically; grid snap uses the selected drawing-unit interval.
           </p>
