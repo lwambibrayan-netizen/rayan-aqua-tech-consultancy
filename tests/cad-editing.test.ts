@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  chamferPolylineCorner, copyEntities, editEntityGrip, extendLine, filletPolylineCorner,
+  chamferPolylineCorner, copyEntities, editEntityGrip, extendLine, extendPolylineSegment, filletPolylineCorner,
   mirrorEntities, moveEntities, offsetLine, offsetPolyline, rectangularArray, rotateEntities,
-  stretchEntities, trimLine, selectEntitiesInWindow, scaleEntities, validateCadEntities, type CadEditableEntity,
+  stretchEntities, trimLine, trimPolylineSegment, selectEntitiesInWindow, scaleEntities, validateCadEntities, type CadEditableEntity,
 } from '../cad-editing';
 
 const line: CadEditableEntity = { id: 'l1', type: 'line', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], layer: 'WATER' };
@@ -142,6 +142,17 @@ describe('CAD editing geometry operations', () => {
     const result = rectangularArray([line], 2, 2, 5, 5, () => 'generated-' + ++n);
     expect(new Set(result.map(item => item.id)).size).toBe(result.length);
   });
+  it('trims and extends selected straight polyline segments', () => {
+    const poly: CadEditableEntity = { id:'route', type:'polyline', points:[{x:0,y:0},{x:10,y:0},{x:10,y:10}], layer:'WATER' };
+    const cutter: CadEditableEntity = { id:'cut', type:'line', points:[{x:5,y:-5},{x:5,y:5}], layer:'0' };
+    expect(trimPolylineSegment(poly,cutter,{x:1,y:0},0).points[0]).toEqual({x:5,y:0});
+    const boundary: CadEditableEntity = { id:'boundary', type:'line', points:[{x:12,y:-5},{x:12,y:5}], layer:'0' };
+    expect(extendPolylineSegment(poly,boundary,1,0).points[1]).toEqual({x:12,y:0});
+    expect(() => trimPolylineSegment(poly,cutter,{x:1,y:0},1)).toThrow(/does not intersect/);
+    const curved: CadEditableEntity = {...poly,bulges:[0.5,0]};
+    expect(() => trimPolylineSegment(curved,cutter,{x:1,y:0},0)).toThrow(/curved/);
+  });
+
   it('edits vertex and circle grips without mutating source geometry', () => {
     const moved = editEntityGrip(line, 1, { x: 12, y: 3 });
     expect(moved.points[1]).toEqual({ x: 12, y: 3 });
