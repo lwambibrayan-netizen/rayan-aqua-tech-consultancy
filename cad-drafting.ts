@@ -19,6 +19,7 @@ export type DrawingSheet = {
   size: SheetSize; orientation: 'landscape' | 'portrait'; widthMm?: number; heightMm?: number;
   scale: string; title: string; drawingNumber: string; revision: string; status: 'PRELIMINARY' | 'FOR REVIEW' | 'FOR APPROVAL' | 'FOR CONSTRUCTION' | 'AS BUILT';
   company: string; designer: string; checker: string; approver: string; date: string; units: 'm' | 'mm';
+  generalNotes?: string; keyPlanText?: string; showNorthArrow?: boolean; showScaleBar?: boolean;
 };
 export type DrawingRevisionEntry = { revision: string; date: string; description: string; drawnBy: string; checkedBy: string; approvedBy: string; status: 'PRELIMINARY' | 'FOR REVIEW' | 'FOR APPROVAL' | 'FOR CONSTRUCTION' | 'AS BUILT' };
 export type DraftingDocument = {
