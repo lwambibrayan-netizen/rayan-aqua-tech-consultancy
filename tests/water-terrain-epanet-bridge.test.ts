@@ -29,6 +29,15 @@ describe('terrain-aware water engineering',()=>{
   expect(routed.properties.coverDepthM).toBe(1.2);
   expect(buildTerrainIssues({schemaVersion:1,units:'m',verticalDatum:'test',components:[routed]})).toHaveLength(0);
  });
+ it('interpolates pipe invert and crown profiles through surveyed intermediate vertices',()=>{
+  const pipe=createWaterComponent('pipe','PROFILE-1',0,0);
+  pipe.properties.externalDiameterMm=110;
+  pipe.properties.invertInletM=98.5;pipe.properties.invertOutletM=96.5;
+  pipe.geometry=[{x:0,y:0,invertLevelM:98.5},{x:10,y:0,invertLevelM:97.5},{x:20,y:0,invertLevelM:96.5}];
+  const profile=buildTerrainAwarePipeProfile(pipe,terrain,5);
+  expect(profile.find(point=>point.chainageM===10)?.invertLevelM).toBeCloseTo(97.5);
+  expect(profile.find(point=>point.chainageM===10)?.crownLevelM).toBeCloseTo(97.61);
+ });
  it('reports insufficient cover and above-ground conflicts',()=>{
   const pipe=createWaterComponent('pipe','P-2',0,0);
   pipe.geometry=[{x:0,y:0,groundLevelM:100,invertLevelM:99.95},{x:10,y:0,groundLevelM:100,invertLevelM:98}];
