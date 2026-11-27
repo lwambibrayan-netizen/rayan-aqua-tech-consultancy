@@ -626,7 +626,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               if(selectedCircleDimension && selectedCircle){
                 center={x:selectedCircle.points[0].x*scale,y:selectedCircle.points[0].y*scale};
                 const dx=next[0].x-center.x,dy=next[0].y-center.y,length=Math.hypot(dx,dy)||1;
-                pointOnCircle={x:center.x+(dx/length)*selectedCircle.radius*scale,y:center.y+(dy/length)*selectedCircle.radius*scale};
+                pointOnCircle={x:center.x+(dx/length)*(selectedCircle.radius??0)*scale,y:center.y+(dy/length)*(selectedCircle.radius??0)*scale};
                 labelAt=next[0];
               }
               const g = dimensionKind === 'radius' ? calculateRadiusDimension(center,pointOnCircle,labelAt) : calculateDiameterDimension(center,pointOnCircle,labelAt);
