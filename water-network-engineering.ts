@@ -36,7 +36,7 @@ const unit = (v: WaterPoint): WaterPoint => {
 };
 const add = (a: WaterPoint, b: WaterPoint): WaterPoint => ({ x: a.x + b.x, y: a.y + b.y, z: a.z });
 const scale = (a: WaterPoint, n: number): WaterPoint => ({ x: a.x * n, y: a.y * n, z: a.z });
-const dist = (a: WaterPoint, b: WaterPoint) => Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0));
+const dist = (a: WaterPoint, b: WaterPoint) => Math.hypot(a.x - b.x, a.y - b.y, finite(a.z) && finite(b.z) ? a.z - b.z : 0);
 const fmt = (n: number) => Number(n.toFixed(4)).toString();
 const safeId = (s: string) => s.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 31) || 'N';
 
