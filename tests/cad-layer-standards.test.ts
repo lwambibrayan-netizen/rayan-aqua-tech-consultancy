@@ -9,7 +9,19 @@ describe('professional drawing standards', () => {
     expect(result.layers.some(layer => layer.name === '0')).toBe(true);
     expect(mergeLayerTemplate(result.layers, 'WATER_UTILITY').added).toEqual([]);
   });
-  it('synchronizes standard-controlled layer properties without changing user visibility or locks', () => {\n    const initial = [{ ...LAYER_STANDARD_TEMPLATES.WATER_UTILITY[0], color: '#ffffff', lineWeightMm: 0.9, visible: false, locked: true, plot: false }];\n    const result = synchronizeLayerTemplate(initial, 'WATER_UTILITY');\n    const pipe = result.layers.find(layer => layer.name === 'WATER_PIPE')!;\n    expect(pipe.color).toBe(LAYER_STANDARD_TEMPLATES.WATER_UTILITY[0].color);\n    expect(pipe.lineWeightMm).toBe(0.35);\n    expect(pipe.visible).toBe(false);\n    expect(pipe.locked).toBe(true);\n    expect(pipe.plot).toBe(false);\n    expect(result.updated).toContain('WATER_PIPE');\n    expect(validateLayerStandard(result.layers, 'WATER_UTILITY')).toEqual([]);\n  });\n  it('provides civil and mechanical templates with valid plot settings', () => {
+  it('synchronizes standard-controlled layer properties without changing user visibility or locks', () => {
+    const initial = [{ ...LAYER_STANDARD_TEMPLATES.WATER_UTILITY[0], color: '#ffffff', lineWeightMm: 0.9, visible: false, locked: true, plot: false }];
+    const result = synchronizeLayerTemplate(initial, 'WATER_UTILITY');
+    const pipe = result.layers.find(layer => layer.name === 'WATER_PIPE')!;
+    expect(pipe.color).toBe(LAYER_STANDARD_TEMPLATES.WATER_UTILITY[0].color);
+    expect(pipe.lineWeightMm).toBe(0.35);
+    expect(pipe.visible).toBe(false);
+    expect(pipe.locked).toBe(true);
+    expect(pipe.plot).toBe(false);
+    expect(result.updated).toContain('WATER_PIPE');
+    expect(validateLayerStandard(result.layers, 'WATER_UTILITY')).toEqual([]);
+  });
+  it('provides civil and mechanical templates with valid plot settings', () => {
     for (const template of Object.values(LAYER_STANDARD_TEMPLATES)) {
       expect(validatePlotConfiguration(template)).toEqual([]);
     }
