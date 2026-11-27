@@ -3,10 +3,10 @@ import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
 
 const html = readFileSync('dist/index.html', 'utf8');
-const match = html.match(/<script[^>]+src=["']([^"']+\\.js)["']/);
+const match = html.match(/<script[^>]+src=["']([^"']+\.js)["']/);
 if (!match) throw new Error('Could not locate the initial JavaScript entry in dist/index.html.');
 
-const assetPath = join('dist', match[1].replace(/^\\//, ''));
+const assetPath = join('dist', match[1].replace(/^\//, ''));
 const rawBytes = statSync(assetPath).size;
 const gzipBytes = gzipSync(readFileSync(assetPath), { level: 9 }).length;
 const rawKiB = rawBytes / 1024;
