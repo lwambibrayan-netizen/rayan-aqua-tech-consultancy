@@ -227,27 +227,42 @@ export function offsetLine<T extends CadEditableEntity>(line: T, distance: numbe
 
 /** Offset an open polyline with exact parallel segments and bounded miter joins. */
 export function offsetPolyline<T extends CadEditableEntity>(entity:T,distance:number,side:1|-1=1,miterLimit=10):T {
-  if(entity.type!=='polyline'||entity.points.length<2)throw new Error('OFFSET polyline requires an open polyline with at least two vertices.');
-  if(dist(entity.points[0],entity.points[entity.points.length-1])<=1e-9)throw new Error('OFFSET of closed polylines is not supported yet; the drawing geometry was left unchanged.');
+  if(entity.type!=='polyline'||entity.points.length<2)throw new Error('OFFSET polyline requires at least two vertices.');
   if(entity.bulges?.some(value=>Math.abs(value)>1e-12))throw new Error('OFFSET of curved polylines is not supported yet; the drawing geometry was left unchanged.');
   if(!finite(distance)||distance<0||!finite(miterLimit)||miterLimit<1)throw new Error('OFFSET distance and miter limit must be valid non-negative values.');
-  const pts=entity.points;
-  const shifted=pts.slice(1).map((p,i)=>{
-    const a=pts[i],dx=p.x-a.x,dy=p.y-a.y,len=Math.hypot(dx,dy);
+  const closed=dist(entity.points[0],entity.points[entity.points.length-1])<=1e-9;
+  const pts=closed?entity.points.slice(0,-1):entity.points;
+  if(closed&&pts.length<3)throw new Error('OFFSET closed polyline requires at least three distinct vertices.');
+  const segmentCount=closed?pts.length:pts.length-1;
+  const shifted:Array<[Point2D,Point2D]>=Array.from({length:segmentCount},(_,i)=>{
+    const a=pts[i],b=pts[(i+1)%pts.length],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
     if(len<=Number.EPSILON)throw new Error('Cannot offset a polyline with a zero-length segment.');
     const nx=-dy/len*distance*side,ny=dx/len*distance*side;
-    return [{x:a.x+nx,y:a.y+ny},{x:p.x+nx,y:p.y+ny}] as [Point2D,Point2D];
+    return [{x:a.x+nx,y:a.y+ny},{x:b.x+nx,y:b.y+ny}];
   });
-  const result:Point2D[]=[shifted[0][0]];
-  for(let i=1;i<pts.length-1;i++){
-    const previousEnd=shifted[i-1][1],nextStart=shifted[i][0];
-    let hit=infiniteLineIntersection(shifted[i-1][0],previousEnd,nextStart,shifted[i][1]);
+  const result:Point2D[]=[];
+  const firstVertex=closed?0:1,lastVertex=closed?pts.length:pts.length-1;
+  if(!closed)result.push(shifted[0][0]);
+  for(let i=firstVertex;i<lastVertex;i++){
+    const previous=shifted[(i-1+segmentCount)%segmentCount],next=shifted[i%segmentCount];
+    const previousEnd=previous[1],nextStart=next[0];
+    let hit=infiniteLineIntersection(previous[0],previousEnd,nextStart,next[1]);
     if(!hit&&dist(previousEnd,nextStart)<=1e-8)hit={x:(previousEnd.x+nextStart.x)/2,y:(previousEnd.y+nextStart.y)/2};
     if(!hit)throw new Error('OFFSET failed: adjacent segments are parallel but not collinear.');
     if(dist(hit,pts[i])>Math.max(distance,1e-9)*miterLimit+1e-8)throw new Error('OFFSET failed: corner miter exceeds the safety limit.');
     result.push(hit);
   }
-  result.push(shifted[shifted.length-1][1]);
+  if(closed)result.push(clonePoint(result[0]));
+  else result.push(shifted[shifted.length-1][1]);
+  if(closed){
+    const edges=result.slice(0,-1).map((point,index)=>[point,result[index+1]] as [Point2D,Point2D]);
+    for(let i=0;i<edges.length;i++)for(let j=i+1;j<edges.length;j++){
+      if(j===i+1||(i===0&&j===edges.length-1))continue;
+      if(segmentIntersection(edges[i][0],edges[i][1],edges[j][0],edges[j][1])) {
+        throw new Error('OFFSET failed: the resulting closed boundary self-intersects.');
+      }
+    }
+  }
   return {...entity,id:newId(),points:result};
 }
 
