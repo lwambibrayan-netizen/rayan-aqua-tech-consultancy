@@ -901,9 +901,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   function removeAnnotation(id: string) {
     setDrafting(current => ({ ...current, annotations: current.annotations.filter(item => item.id !== id) }));
   }
-  function exportSheetSvg(printToPdf = false) {
-    const { widthMm, heightMm } = sheetDimensionsMm(drafting.sheet);
-    const denominator = Number(drafting.sheet.scale.split(':')[1]) || 100;
+  function exportSheetSvg(printToPdf = false, sheetOverride?: DraftingDocument['sheet'], batch = false): string | void {
+    const sheet = sheetOverride || sheet;
+    const { widthMm, heightMm } = sheetDimensionsMm(sheet);
+    const denominator = Number(sheet.scale.split(':')[1]) || 100;
     const metresPerUnit = calibratedMetresPerUnit || 1;
     const factor = metresPerUnit * 1000 / denominator;
     const margin = 10, titleBlockHeight = 42, usableWidth = widthMm - margin * 2, usableHeight = heightMm - margin * 2 - titleBlockHeight;
@@ -940,28 +941,46 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const a=mapPoint({x:item.a.x/metresPerUnit,y:item.a.y/metresPerUnit}),b=mapPoint({x:item.b.x/metresPerUnit,y:item.b.y/metresPerUnit});
       const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len,off=item.offsetM*1000/denominator;
       const p1={x:a.x+nx*off,y:a.y+ny*off},p2={x:b.x+nx*off,y:b.y+ny*off};
-      const label=item.textOverride||formatDimension(measureDimension(item),item.precision,drafting.sheet.units),mid={x:(p1.x+p2.x)/2,y:(p1.y+p2.y)/2},arrow=dimensionStyle.arrowSizeMm,extOffset=dimensionStyle.extensionOffsetMm,extBeyond=dimensionStyle.extensionBeyondMm,e1={x:a.x+nx*extOffset,y:a.y+ny*extOffset},e2={x:b.x+nx*extOffset,y:b.y+ny*extOffset},e1End={x:p1.x+nx*extBeyond,y:p1.y+ny*extBeyond},e2End={x:p2.x+nx*extBeyond,y:p2.y+ny*extBeyond};
+      const label=item.textOverride||formatDimension(measureDimension(item),item.precision,sheet.units),mid={x:(p1.x+p2.x)/2,y:(p1.y+p2.y)/2},arrow=dimensionStyle.arrowSizeMm,extOffset=dimensionStyle.extensionOffsetMm,extBeyond=dimensionStyle.extensionBeyondMm,e1={x:a.x+nx*extOffset,y:a.y+ny*extOffset},e2={x:b.x+nx*extOffset,y:b.y+ny*extOffset},e1End={x:p1.x+nx*extBeyond,y:p1.y+ny*extBeyond},e2End={x:p2.x+nx*extBeyond,y:p2.y+ny*extBeyond};
       return '<line x1="'+e1.x+'" y1="'+e1.y+'" x2="'+e1End.x+'" y2="'+e1End.y+'" stroke="'+color+'" stroke-width="0.18"/><line x1="'+e2.x+'" y1="'+e2.y+'" x2="'+e2End.x+'" y2="'+e2End.y+'" stroke="'+color+'" stroke-width="0.18"/><line x1="'+p1.x+'" y1="'+p1.y+'" x2="'+p2.x+'" y2="'+p2.y+'" stroke="'+color+'" stroke-width="0.18"/><path d="M '+p1.x+' '+p1.y+' l '+(dx/len*arrow+nx*arrow*0.5)+' '+(dy/len*arrow+ny*arrow*0.5)+' M '+p1.x+' '+p1.y+' l '+(dx/len*arrow-nx*arrow*0.5)+' '+(dy/len*arrow-ny*arrow*0.5)+' M '+p2.x+' '+p2.y+' l '+(-dx/len*arrow+nx*arrow*0.5)+' '+(-dy/len*arrow+ny*arrow*0.5)+' M '+p2.x+' '+p2.y+' l '+(-dx/len*arrow-nx*arrow*0.5)+' '+(-dy/len*arrow-ny*arrow*0.5)+'" stroke="'+color+'" fill="none" stroke-width="0.18"/><text x="'+mid.x+'" y="'+(mid.y-dimensionStyle.textGapMm)+'" text-anchor="middle" font-size="'+dimensionStyle.textHeightMm+'" fill="'+color+'">'+safe(label)+'</text>';
     }).join('');
     const titleX=widthMm-170,titleY=heightMm-42;
-    const titleBlock='<rect x="'+titleX+'" y="'+titleY+'" width="160" height="32" fill="white" stroke="black" stroke-width="0.25"/><line x1="'+titleX+'" y1="'+(titleY+8)+'" x2="'+(titleX+160)+'" y2="'+(titleY+8)+'" stroke="black" stroke-width="0.18"/><line x1="'+titleX+'" y1="'+(titleY+22)+'" x2="'+(titleX+160)+'" y2="'+(titleY+22)+'" stroke="black" stroke-width="0.18"/><line x1="'+(titleX+105)+'" y1="'+titleY+'" x2="'+(titleX+105)+'" y2="'+(titleY+32)+'" stroke="black" stroke-width="0.18"/><text x="'+(titleX+2)+'" y="'+(titleY+5.5)+'" font-size="3.2">'+safe(drafting.sheet.company)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+14)+'" font-size="3">'+safe(drafting.sheet.title)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+19)+'" font-size="2.5">'+safe(drafting.sheet.status)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+27)+'" font-size="2.2">DES: '+safe(drafting.sheet.designer)+'</text><text x="'+(titleX+54)+'" y="'+(titleY+27)+'" font-size="2.2">CHK: '+safe(drafting.sheet.checker)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+30.5)+'" font-size="2.2">APP: '+safe(drafting.sheet.approver)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+5.5)+'" font-size="2.5">DWG '+safe(drafting.sheet.drawingNumber)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+11)+'" font-size="2.5">REV '+safe(drafting.sheet.revision)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+16)+'" font-size="2.5">SCALE '+safe(drafting.sheet.scale)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+21)+'" font-size="2.5">'+safe(drafting.sheet.date)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+27)+'" font-size="2.2">UNITS '+safe(drafting.sheet.units)+'</text>';
+    const titleBlock='<rect x="'+titleX+'" y="'+titleY+'" width="160" height="32" fill="white" stroke="black" stroke-width="0.25"/><line x1="'+titleX+'" y1="'+(titleY+8)+'" x2="'+(titleX+160)+'" y2="'+(titleY+8)+'" stroke="black" stroke-width="0.18"/><line x1="'+titleX+'" y1="'+(titleY+22)+'" x2="'+(titleX+160)+'" y2="'+(titleY+22)+'" stroke="black" stroke-width="0.18"/><line x1="'+(titleX+105)+'" y1="'+titleY+'" x2="'+(titleX+105)+'" y2="'+(titleY+32)+'" stroke="black" stroke-width="0.18"/><text x="'+(titleX+2)+'" y="'+(titleY+5.5)+'" font-size="3.2">'+safe(sheet.company)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+14)+'" font-size="3">'+safe(sheet.title)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+19)+'" font-size="2.5">'+safe(sheet.status)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+27)+'" font-size="2.2">DES: '+safe(sheet.designer)+'</text><text x="'+(titleX+54)+'" y="'+(titleY+27)+'" font-size="2.2">CHK: '+safe(sheet.checker)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+30.5)+'" font-size="2.2">APP: '+safe(sheet.approver)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+5.5)+'" font-size="2.5">DWG '+safe(sheet.drawingNumber)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+11)+'" font-size="2.5">REV '+safe(sheet.revision)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+16)+'" font-size="2.5">SCALE '+safe(sheet.scale)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+21)+'" font-size="2.5">'+safe(sheet.date)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+27)+'" font-size="2.2">UNITS '+safe(sheet.units)+'</text>';
     const border='<rect x="5" y="5" width="'+(widthMm-10)+'" height="'+(heightMm-10)+'" fill="none" stroke="black" stroke-width="0.5"/>';
     const revisionRows=(drafting.revisionHistory||[]).slice(-5).map((r,i)=>'<text x="15" y="'+(heightMm-58+i*3.5)+'" font-size="2.1">'+safe(r.revision)+' · '+safe(r.date)+' · '+safe(r.description)+'</text>').join('');
     const revisionTable=revisionRows?'<text x="15" y="'+(heightMm-61)+'" font-size="2.4" font-weight="bold">REVISION HISTORY</text>'+revisionRows:'';
-    const notes=(drafting.sheet.generalNotes||'').split('\n').filter(Boolean).slice(0,8).map((line,i)=>'<text x="15" y="'+(heightMm-24-i*3.2)+'" font-size="2.2">'+safe(line)+'</text>').join('');
-    const keyPlan=drafting.sheet.keyPlanText?'<text x="15" y="14" font-size="3" font-weight="bold">KEY PLAN · '+safe(drafting.sheet.keyPlanText)+'</text>':'';
-    const northArrow=drafting.sheet.showNorthArrow===false?'':'<g transform="translate('+(widthMm-22)+' 24)'><path d="M 0 9 L 0 -9 M 0 -9 L -3 -3 M 0 -9 L 3 -3" stroke="black" fill="none" stroke-width="0.6"/><text x="0" y="-12" text-anchor="middle" font-size="3">N</text></g>';
+    const notes=(sheet.generalNotes||'').split('\n').filter(Boolean).slice(0,8).map((line,i)=>'<text x="15" y="'+(heightMm-24-i*3.2)+'" font-size="2.2">'+safe(line)+'</text>').join('');
+    const keyPlan=sheet.keyPlanText?'<text x="15" y="14" font-size="3" font-weight="bold">KEY PLAN · '+safe(sheet.keyPlanText)+'</text>':'';
+    const northArrow=sheet.showNorthArrow===false?'':'<g transform="translate('+(widthMm-22)+' 24)'><path d="M 0 9 L 0 -9 M 0 -9 L -3 -3 M 0 -9 L 3 -3" stroke="black" fill="none" stroke-width="0.6"/><text x="0" y="-12" text-anchor="middle" font-size="3">N</text></g>';
     const scaleBarModelM=Math.min(5,50*denominator/1000),scaleBarLengthMm=scaleBarModelM*1000/denominator;
-    const scaleBar=drafting.sheet.showScaleBar===false?'':'<g transform="translate(18 '+(heightMm-18)+')"><rect x="0" y="0" width="'+(scaleBarLengthMm/2)+'" height="2" fill="black"/><rect x="'+(scaleBarLengthMm/2)+'" y="0" width="'+(scaleBarLengthMm/2)+'" height="2" fill="white" stroke="black" stroke-width="0.25"/><text x="'+(scaleBarLengthMm/2)+'" y="-2" text-anchor="middle" font-size="2.5">'+scaleBarModelM.toFixed(2)+' m</text><text x="'+(scaleBarLengthMm/2)+'" y="6" text-anchor="middle" font-size="2">GRAPHIC SCALE</text></g>';
+    const scaleBar=sheet.showScaleBar===false?'':'<g transform="translate(18 '+(heightMm-18)+')"><rect x="0" y="0" width="'+(scaleBarLengthMm/2)+'" height="2" fill="black"/><rect x="'+(scaleBarLengthMm/2)+'" y="0" width="'+(scaleBarLengthMm/2)+'" height="2" fill="white" stroke="black" stroke-width="0.25"/><text x="'+(scaleBarLengthMm/2)+'" y="-2" text-anchor="middle" font-size="2.5">'+scaleBarModelM.toFixed(2)+' m</text><text x="'+(scaleBarLengthMm/2)+'" y="6" text-anchor="middle" font-size="2">GRAPHIC SCALE</text></g>';
     const legendItems=drafting.layers.filter(item=>item.visible&&item.plot&&item.name!=='0').slice(0,10).map((item,i)=>'<line x1="15" y1="'+(25+i*4)+'" x2="24" y2="'+(25+i*4)+'" stroke="'+item.color+'" stroke-width="'+Math.max(0.25,item.lineWeightMm)+'"/><text x="27" y="'+(26+i*4)+'" font-size="2.4">'+safe(item.name)+'</text>').join('');
     const legend=legendItems?'<text x="15" y="22" font-size="2.8" font-weight="bold">LEGEND</text>'+legendItems:'';
     const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+widthMm+'mm" height="'+heightMm+'mm" viewBox="0 0 '+widthMm+' '+heightMm+'"><rect width="100%" height="100%" fill="white"/>'+border+titleBlock+'<g>'+drawing+water+annotations+'</g><g>'+keyPlan+northArrow+legend+revisionTable+notes+scaleBar+'</g></svg>';
-    downloadWaterFile((drafting.sheet.drawingNumber||'drawing')+'.svg',svg,'image/svg+xml');
-    if (printToPdf) { const printWindow = window.open('', '_blank'); if (printWindow) { printWindow.document.open(); printWindow.document.write('<!doctype html><html><head><title>'+safe(drafting.sheet.drawingNumber)+'</title><style>@page{size:'+widthMm+'mm '+heightMm+'mm;margin:0}html,body{margin:0;padding:0}svg{display:block;width:100%;height:auto}</style></head><body>'+svg+'</body></html>'); printWindow.onload = () => printWindow.print(); printWindow.document.close(); } else setMessage('Print window was blocked. Allow pop-ups for this app, then retry Print / Save as PDF.'); }
+    if (batch) return svg;
+    downloadWaterFile((sheet.drawingNumber||'drawing')+'.svg',svg,'image/svg+xml');
+    if (printToPdf) { const printWindow = window.open('', '_blank'); if (printWindow) { printWindow.document.open(); printWindow.document.write('<!doctype html><html><head><title>'+safe(sheet.drawingNumber)+'</title><style>@page{size:'+widthMm+'mm '+heightMm+'mm;margin:0}html,body{margin:0;padding:0}svg{display:block;width:100%;height:auto}</style></head><body>'+svg+'</body></html>'); printWindow.onload = () => printWindow.print(); printWindow.document.close(); } else setMessage('Print window was blocked. Allow pop-ups for this app, then retry Print / Save as PDF.'); }
     const fits=(maxX-minX)*factor<=usableWidth&&(maxY-minY)*factor<=usableHeight;
-    setMessage(fits?'Drawing sheet SVG exported at '+drafting.sheet.scale+'. Review title block and plotted scale before issue.':'Sheet exported, but geometry exceeds the selected sheet at '+drafting.sheet.scale+'. Choose a larger sheet or smaller scale.');
+    if (!batch) setMessage(fits?'Drawing sheet SVG exported at '+sheet.scale+'. Review title block and plotted scale before issue.':'Sheet exported, but geometry exceeds the selected sheet at '+sheet.scale+'. Choose a larger sheet or smaller scale.');
   }
 
+  function printAllDrawingSheets() {
+    const pages = drafting.sheets.map((sheet, index) => {
+      const svg = exportSheetSvg(false, sheet, true);
+      const dimensions = sheetDimensionsMm(sheet);
+      return { svg: typeof svg === 'string' ? svg : '', index, widthMm: dimensions.widthMm, heightMm: dimensions.heightMm };
+    }).filter(page => page.svg);
+    if (!pages.length) { setMessage('There are no drawing sheets to print.'); return; }
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { setMessage('Print window was blocked. Allow pop-ups, then retry the multi-sheet PDF export.'); return; }
+    const pageStyles = pages.map(page => '@page sheet' + page.index + '{size:' + page.widthMm + 'mm ' + page.heightMm + 'mm;margin:0}.sheet-' + page.index + '{page:sheet' + page.index + ';break-after:page;page-break-after:always}').join('');
+    const markup = pages.map(page => '<section class="sheet-' + page.index + '">' + page.svg + '</section>').join('');
+    printWindow.document.open();
+    printWindow.document.write('<!doctype html><html><head><title>RayanAqua drawing set</title><style>' + pageStyles + 'html,body{margin:0;padding:0}.sheet-' + pages.map(page => page.index).join(', .sheet-') + '{margin:0;padding:0}.sheet-' + pages.map(page => page.index).join(' svg,.sheet-') + ' svg{display:block;width:100%;height:auto}</style></head><body>' + markup + '</body></html>');
+    printWindow.onload = () => printWindow.print();
+    printWindow.document.close();
+    setMessage('Prepared ' + pages.length + ' drawing sheets for one multi-page PDF print. Choose Save as PDF in the print dialog.');
+  }
   function downloadDxf() {
     const metresPerUnit = calibratedMetresPerUnit || 1;
     const waterDrawing: DxfShape[] = waterCad.components.flatMap((component, index): DxfShape[] => {
@@ -1233,6 +1252,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <button className="secondary-button" onClick={validateDrafting}>Validate drafting</button>
           <button className="secondary-button" onClick={exportSheetSvg}>Export sheet SVG</button>
           <button className="secondary-button" onClick={() => exportSheetSvg(true)}>Print / Save as PDF</button>
+          <button className="secondary-button" onClick={printAllDrawingSheets} disabled={drafting.sheets.length < 2}>Print complete sheet set</button>
           <span className="muted" style={{ fontSize: 12 }}>{sheetDimensionsMm(drafting.sheet).widthMm} × {sheetDimensionsMm(drafting.sheet).heightMm} mm · {drafting.annotations.length} annotations</span>
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
