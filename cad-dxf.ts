@@ -118,10 +118,15 @@ function expandBlockInserts(pairs: Pair[], warnings: string[]): Pair[] {
         if(nested.xref){warnings.push('Skipped nested external XREF '+nestedName+'.');continue;}
         const at={x:Number(get('10')||0),y:Number(get('20')||0)},sx=Number(get('41')||1),sy=Number(get('42')||1),angle=Number(get('50')||0)*Math.PI/180;
         if(![at.x,at.y,sx,sy,angle].every(Number.isFinite)||sx===0||sy===0){warnings.push('Skipped nested INSERT with invalid transform.');continue;}
-        const rows=Number(get('70')||1),columns=Number(get('71')||1);
-        if(rows>1||columns>1){warnings.push('Nested MINSERT array '+nestedName+' was reduced to its first cell.');}
-        const nestedTransform=matrixFor(at,sx,sy,angle,nested.base);
-        output.push(...expandBlock(nestedName,compose(transform,nestedTransform),resolvedLayer,[...stack,name],depth+1));
+        const rows=Math.max(1,Math.floor(Number(get('70')||1))),columns=Math.max(1,Math.floor(Number(get('71')||1))),rowSpacing=Number(get('45')||0),columnSpacing=Number(get('44')||0);
+        if(![rows,columns,rowSpacing,columnSpacing].every(Number.isFinite)||rows*columns>1000){warnings.push('Skipped oversized or invalid nested MINSERT array '+nestedName+'.');continue;}
+        const cos=Math.cos(angle),sin=Math.sin(angle);
+        for(let row=0;row<rows;row++)for(let column=0;column<columns;column++){
+          const dx=column*columnSpacing*sx,dy=row*rowSpacing*sy;
+          const cellAt={x:at.x+dx*cos-dy*sin,y:at.y+dx*sin+dy*cos};
+          const nestedTransform=matrixFor(cellAt,sx,sy,angle,nested.base);
+          output.push(...expandBlock(nestedName,compose(transform,nestedTransform),resolvedLayer,[...stack,name],depth+1));
+        }
         continue;
       }
       const values:Pair[]=[];
@@ -158,9 +163,14 @@ function expandBlockInserts(pairs: Pair[], warnings: string[]): Pair[] {
     if(block.xref){warnings.push('Skipped external XREF '+name+'; external drawing files are not fetched or merged automatically.');continue;}
     const at={x:Number(get('10')||0),y:Number(get('20')||0)},sx=Number(get('41')||1),sy=Number(get('42')||1),angle=Number(get('50')||0)*Math.PI/180,insertLayer=get('8')||'0';
     if(![at.x,at.y,sx,sy,angle].every(Number.isFinite)||sx===0||sy===0){warnings.push('Skipped INSERT with invalid transform.');continue;}
-    const rows=Number(get('70')||1),columns=Number(get('71')||1);
-    if(rows>1||columns>1)warnings.push('MINSERT array '+name+' was reduced to its first cell.');
-    expanded.push(...expandBlock(name,matrixFor(at,sx,sy,angle,block.base),insertLayer,[],1));
+    const rows=Math.max(1,Math.floor(Number(get('70')||1))),columns=Math.max(1,Math.floor(Number(get('71')||1))),rowSpacing=Number(get('45')||0),columnSpacing=Number(get('44')||0);
+    if(![rows,columns,rowSpacing,columnSpacing].every(Number.isFinite)||rows*columns>1000){warnings.push('Skipped oversized or invalid MINSERT array '+name+'.');continue;}
+    const cos=Math.cos(angle),sin=Math.sin(angle);
+    for(let row=0;row<rows;row++)for(let column=0;column<columns;column++){
+      const dx=column*columnSpacing*sx,dy=row*rowSpacing*sy;
+      const cellAt={x:at.x+dx*cos-dy*sin,y:at.y+dx*sin+dy*cos};
+      expanded.push(...expandBlock(name,matrixFor(cellAt,sx,sy,angle,block.base),insertLayer,[],1));
+    }
   }
   return [...prefix,...expanded,...suffix];
 }
