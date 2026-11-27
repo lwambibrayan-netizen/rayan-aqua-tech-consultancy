@@ -345,14 +345,14 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
       warnings.push('Pipe ' + p.id + ' omitted: positive length and internal diameter are required.');
       continue;
     }
-    lines.push([safeId(p.id), fromNode, toNode, fmt(length), fmt(p.properties.internalDiameterMm), fmt(p.properties.roughness ?? 130), '0', 'OPEN'].join(' '));
+    lines.push([safeId(p.id), fromNode, toNode, fmt(length), fmt(p.properties.internalDiameterMm), fmt(p.properties.roughness ?? 130), fmt(p.properties.minorLossCoefficient ?? 0), 'OPEN'].join(' '));
   }
   // EPANET check valves are pipe links with status CV, not GPV valves.
   valves.filter(v => v.properties.valveType === 'check').forEach(v => {
     const [fromNode, toNode] = linkEnds(v);
     if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode)) warnings.push('Check valve ' + v.id + ' omitted: connect its inlet and outlet ports.');
     else if (!(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm)) warnings.push('Check valve ' + v.id + ' omitted: set a positive diameter.');
-    else lines.push([safeId(v.id), fromNode, toNode, fmt(v.properties.fittingLengthM ?? 0.5), fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), fmt(v.properties.roughness ?? 130), '0', 'CV'].join(' '));
+    else lines.push([safeId(v.id), fromNode, toNode, fmt(v.properties.fittingLengthM ?? 0.5), fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), fmt(v.properties.roughness ?? 130), fmt(v.properties.minorLossCoefficient ?? 0), 'CV'].join(' '));
   });
   lines.push('', '[PUMPS]', ';ID Node1 Node2 Parameters');
   pumps.forEach(p => {
