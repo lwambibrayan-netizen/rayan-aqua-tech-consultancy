@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createHistory, pushHistory, undoHistory, redoHistory } from './cad-geometry';
+import { createHistory, pushHistory, undoHistory, redoHistory, objectSnapCandidates } from './cad-geometry';
 import { moveEntities, copyEntities, rotateEntities, mirrorEntities, stretchEntities, rectangularArray, trimLine, extendLine, offsetLine, offsetPolyline, selectEntitiesInWindow, chamferPolylineCorner, filletPolylineCorner } from './cad-editing';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -304,10 +304,26 @@ function getSegments(shapes: Shape[]): Array<[Point2D, Point2D]> {
   return segments;
 }
 
-function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled: boolean, waterCad?: WaterCadDocument, metresPerDrawingUnit = 1): SnapPoint | null {
+function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled: boolean, waterCad?: WaterCadDocument, metresPerDrawingUnit = 1, referencePoint?: Point2D): SnapPoint | null {
   if (!enabled) return null;
   let best: SnapPoint | null = null;
   const candidates = getSnapCandidates(shapes, cursor);
+  const straightSegments: Array<[Point2D, Point2D]> = [];
+  const circles: Array<{center:Point2D;radius:number}> = [];
+  shapes.forEach(shape => {
+    if (shape.type === 'line' && shape.points.length >= 2) straightSegments.push([shape.points[0], shape.points[1]]);
+    else if (shape.type === 'polyline') {
+      for (let i=0;i<shape.points.length-1;i++) if (Math.abs(shape.bulges?.[i] || 0) <= 1e-12) {
+        straightSegments.push([shape.points[i],shape.points[i+1]]);
+      }
+    } else if (shape.type === 'rect' && shape.points.length >= 2) {
+      const [a,b]=shape.points, corners=[a,{x:b.x,y:a.y},b,{x:a.x,y:b.y}];
+      for(let i=0;i<4;i++) straightSegments.push([corners[i],corners[(i+1)%4]]);
+    } else if (shape.type === 'circle' && shape.points.length && (shape.radius || 12) > 0) {
+      circles.push({center:shape.points[0],radius:shape.radius || 12});
+    }
+  });
+  candidates.push(...objectSnapCandidates(cursor,straightSegments,circles,referencePoint).map(candidate=>({point:candidate.point,kind:candidate.kind})));
   if (waterCad && Number.isFinite(metresPerDrawingUnit) && metresPerDrawingUnit > 0) {
     waterCad.components.forEach(component => getWaterPorts(component).forEach(port => candidates.push({
       point: { x: port.point.x / metresPerDrawingUnit, y: port.point.y / metresPerDrawingUnit }, kind: 'PORT ' + port.role.toUpperCase(),
@@ -446,7 +462,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const activePaperViewport = activePaperLayout?.viewports[0];
 
   function resolveDraftPoint(svg: SVGSVGElement, raw: Point2D) {
-    const objectSnap = findSnap(svg, raw, shapes, snapEnabled, waterCad, calibratedMetresPerUnit || 1);
+    const objectSnap = findSnap(svg, raw, shapes, snapEnabled, waterCad, calibratedMetresPerUnit || 1, draft.length ? draft[draft.length - 1] : undefined);
     let point = objectSnap?.point || raw;
     if (!objectSnap && gridSnapEnabled && gridSize > 0) {
       point = { x: Math.round(point.x / gridSize) * gridSize, y: Math.round(point.y / gridSize) * gridSize };
