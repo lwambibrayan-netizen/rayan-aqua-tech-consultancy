@@ -1842,7 +1842,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             </>}
             {ribbonTab==='Annotate' && <>
               <div className="aquacad-ribbon-group"><strong>Dimensions</strong><div className="aquacad-tool-grid">
-                {(['aligned','linear','angular','radius','diameter','ordinate'] as const).map(kind=><button key={kind} className={draftTool==='dimension'&&dimensionKind===kind?'selected':''} onClick={()=>{setDimensionKind(kind);setDraftTool('dimension');setAnnotationDraft([]);setMessage('Select the required points to place a '+kind+' dimension.')}}><i>↔</i><span>{kind[0].toUpperCase()+kind.slice(1)}</span></button>)}
+                {(['aligned','linear','angular','radius','diameter','ordinate'] as const).map(kind=><button key={kind} className={draftTool==='dimension'&&dimensionKind===kind?'selected':''} onClick={()=>{setDimensionKind(kind);setDraftTool('dimension');setAnnotationDraft([]);setMessage((kind==='radius'||kind==='diameter')&&selectedShape?.type==='circle'?'Circle selected: click the label position to place its '+kind+' dimension.':'Select the required points to place a '+kind+' dimension.')}}><i>↔</i><span>{kind[0].toUpperCase()+kind.slice(1)}</span></button>)}
               </div></div>
               <div className="aquacad-ribbon-group"><strong>Text & Leaders</strong><div className="aquacad-tool-grid">
                 <button onClick={()=>{setDraftTool('text');setMessage('Click the drawing to place text.')}}><i>A</i><span>Text</span></button>
