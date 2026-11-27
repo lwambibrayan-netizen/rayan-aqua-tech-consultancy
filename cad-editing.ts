@@ -390,13 +390,17 @@ export function editEntityGrip<T extends CadEditableEntity>(entity: T, gripIndex
     }
     throw new Error('Circle grip index must be 0 (centre) or 1 (radius).');
   }
+  if (entity.type === 'rect') {
+    if (entity.points.length !== 2 || gripIndex > 3) throw new Error('Rectangle grip index must be 0, 1, 2 or 3.');
+    const [a,b]=entity.points.map(clonePoint);
+    if(gripIndex===0)return {...entity,points:[clonePoint(point),b]};
+    if(gripIndex===1)return {...entity,points:[{x:a.x,y:point.y},{x:point.x,y:b.y}]};
+    if(gripIndex===2)return {...entity,points:[a,clonePoint(point)]};
+    return {...entity,points:[{x:point.x,y:a.y},{x:b.x,y:point.y}]};
+  }
   if (gripIndex >= entity.points.length) throw new Error('Grip index is outside the entity vertex range.');
   const points = entity.points.map((current, index) => index === gripIndex ? clonePoint(point) : clonePoint(current));
-  if (entity.type === 'rect') {
-    const [a,b] = points;
-    return { ...entity, type: 'rect', points: [a,b] } as T;
-  }
-  return { ...entity, points } as T;
+  return { ...entity, points };
 }
 
 /** Scale geometry about a base point; non-uniform scaling of circular arcs is rejected. */
