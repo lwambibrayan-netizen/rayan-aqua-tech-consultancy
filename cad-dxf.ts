@@ -192,7 +192,7 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
     } else if(current.type==='SPLINE') {
       const readPoints=(xCode:string,yCode:string)=>{const points:{x:number;y:number}[]=[];let x:number|null=null;for(const [code,value] of v){if(code===xCode)x=Number(value);else if(code===yCode&&x!==null){points.push({x,y:Number(value)});x=null;}}return points;};
       const points=readPoints('11','21').length>=2?readPoints('11','21'):readPoints('10','20');
-      if(points.length>=2)shapes.push({id,type:'polyline',points:sampleCatmullRom(points),layer});
+      if(points.length>=2){shapes.push({id,type:'polyline',points:sampleCatmullRom(points),layer});warnings.push('Converted SPLINE '+id+' to an editable sampled polyline; exact NURBS control data is not preserved.');}
       else warnings.push('Skipped SPLINE without at least two usable fit/control points.');
     } else if(current.type==='ELLIPSE') {
       const cx=num('10'),cy=num('20'),mx=num('11'),my=num('21'),ratio=num('40'),start=num('41'),end=num('42')||Math.PI*2;
@@ -208,7 +208,7 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
         const count=vertexStart>=0?Number(v[vertexStart][1]):0;
         const points:{x:number;y:number}[]=[];let x:number|null=null;
         if(count>1)for(let i=vertexStart+1;i<v.length&&points.length<count;i++){const [code,value]=v[i];if(code==='10')x=Number(value);else if(code==='20'&&x!==null){points.push({x,y:Number(value)});x=null;}}
-        if(points.length>=2){if(Number(v.find((p,i)=>i>pathIndex&&p[0]==='73')?.[1]||0)===1)points.push({...points[0]});shapes.push({id,type:'polyline',points,layer});}
+        if(points.length>=2){if(Number(v.find((p,i)=>i>pathIndex&&p[0]==='73')?.[1]||0)===1)points.push({...points[0]});shapes.push({id,type:'polyline',points,layer});warnings.push('Converted HATCH '+id+' to its boundary polyline only; hatch pattern and fill are not preserved.');}
         else warnings.push('Skipped HATCH without a readable closed polyline boundary.');
       } else warnings.push('Skipped HATCH without a supported polyline boundary path.');
     } else if(current.type==='DIMENSION') {
