@@ -415,6 +415,8 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
     if(headPattern&&!definedPatterns.has(safeId(headPattern))) warnings.push('Reservoir '+component.id+' references missing head pattern '+headPattern+'.');
     if(speedPattern&&!definedPatterns.has(safeId(speedPattern))) warnings.push('Pump '+component.id+' references missing speed pattern '+speedPattern+'.');
   });
+  lines.push('', '[STATUS]', ';LinkID Status');
+  [...pumps,...valves].filter(component=>component.properties.initialStatus).forEach(component=>lines.push([safeId(component.id),component.properties.initialStatus!].join(' ')));
   lines.push('', '[CURVES]', ';CurveID Flow_LPS Head_m');
   pumps.filter(p => { const [a, b] = linkEnds(p); return a && b && nodeIds.has(a) && nodeIds.has(b) && (p.properties.pumpCurvePoints?.length || (p.properties.pumpDutyFlowM3h && p.properties.pumpDutyHeadM)); }).forEach(p => {
     const points=p.properties.pumpCurvePoints?.length ? p.properties.pumpCurvePoints : [{flowM3h:p.properties.pumpDutyFlowM3h??0,headM:p.properties.pumpDutyHeadM??0}];
