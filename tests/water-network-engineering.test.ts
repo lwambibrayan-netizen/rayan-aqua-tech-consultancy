@@ -113,7 +113,9 @@ describe('water network engineering', () => {
     const doc = document();
     const badPipe = createWaterComponent('pipe', 'P-BAD', 0, 2);
     doc.components.push(badPipe, createWaterComponent('bend', 'B-1', 5, 0));
+    doc.components.find(item => item.id === 'P-1')!.properties.minorLossCoefficient = 2.5;
     const exported = exportWaterNetworkToEpanet(doc);
+    expect(exported.input).toContain('P-1 SRC-1 J-1 10 96 140 2.5 OPEN');
     expect(exported.input).toContain('[JUNCTIONS]');
     expect(exported.input).toContain('[RESERVOIRS]');
     expect(exported.input).toContain('[PIPES]');
