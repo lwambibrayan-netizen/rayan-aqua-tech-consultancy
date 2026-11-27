@@ -1,4 +1,5 @@
 import type { WaterCadComponent, WaterCadDocument, WaterPoint } from './water-cad';
+import type { ProfilePoint } from './water-network-engineering';
 
 export type TerrainGrid = {
   width: number;
@@ -66,14 +67,29 @@ export function applyTerrainToPipe(pipe: WaterCadComponent, grid: TerrainGrid, c
   if(!finite(coverDepthM)||coverDepthM<0||!finite(invertOffsetM)) throw new Error('Cover depth must be non-negative and invert offset finite.');
   const od=(pipe.properties.externalDiameterMm??pipe.properties.nominalDiameterMm??0)/1000;
   if(!(od>0)) throw new Error('Set a positive external or nominal pipe diameter before terrain routing.');
-  const geometry=pipe.geometry.map(point=>{
-    const ground=sampleTerrainElevation(grid,point.x,point.y);
+  const samples=sampleGroundProfile(grid,pipe.geometry,Math.min(5,Math.max(0.5,grid.cellSizeX,grid.cellSizeY)));
+  const geometry=samples.map(point=>{
+    const ground=point.groundLevelM;
     if(ground===null) throw new Error('Terrain contains NoData or route is outside the terrain extent at '+point.x+', '+point.y+'.');
     const invert=ground-coverDepthM-od+invertOffsetM;
-    return {...point,groundLevelM:ground,invertLevelM:invert,z:invert+od/2};
+    return {x:point.x,y:point.y,groundLevelM:ground,invertLevelM:invert,z:invert+od/2};
   });
   const start=geometry[0], end=geometry[geometry.length-1];
   return {...pipe,geometry,properties:{...pipe.properties,groundStartM:start.groundLevelM,groundEndM:end.groundLevelM,invertInletM:start.invertLevelM,invertOutletM:end.invertLevelM,coverDepthM}};
+}
+/** Builds a sampled ground/invert/crown/cover profile from the actual terrain surface. */
+export function buildTerrainAwarePipeProfile(pipe:WaterCadComponent,grid:TerrainGrid,spacingM=5):ProfilePoint[] {
+  if(pipe.kind!=='pipe') throw new Error('A terrain profile requires a pipe component.');
+  const ground=sampleGroundProfile(grid,pipe.geometry,spacingM);
+  const od=(pipe.properties.externalDiameterMm??pipe.properties.nominalDiameterMm??0)/1000;
+  const start=pipe.properties.invertInletM,end=pipe.properties.invertOutletM;
+  const total=ground[ground.length-1]?.chainageM??0;
+  return ground.map(sample=>{
+    const ratio=total>0?sample.chainageM/total:0;
+    const invert=finite(sample.groundLevelM)&&finite(start)&&finite(end)?start+(end-start)*ratio:null;
+    const crown=invert!==null&&od>0?invert+od:null;
+    return {chainageM:sample.chainageM,x:sample.x,y:sample.y,groundLevelM:sample.groundLevelM,invertLevelM:invert,crownLevelM:crown,coverDepthM:sample.groundLevelM!==null&&crown!==null?sample.groundLevelM-crown:null};
+  });
 }
 export function buildTerrainIssues(document: WaterCadDocument, minimumCoverM = 0.9, maximumCoverM = 3): TerrainIssue[] {
   if(!finite(minimumCoverM)||!finite(maximumCoverM)||minimumCoverM<0||maximumCoverM<=minimumCoverM) throw new Error('Terrain cover limits are invalid.');
