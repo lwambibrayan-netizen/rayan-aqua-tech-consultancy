@@ -309,7 +309,7 @@ export function validateCadEntities(entities: CadEditableEntity[]): string[] {
     if (entity.type === 'circle' && (entity.points.length !== 1 || !finite(entity.radius ?? NaN) || (entity.radius ?? 0) <= 0)) {
       issues.push(`${label}: a circle requires one centre point and a positive finite radius.`);
     }
-    if (entity.bulges && (entity.type !== 'polyline' || entity.bulges.length !== Math.max(0, entity.points.length - 1) || entity.bulges.some(value => !finite(value)))) {
+    if (entity.bulges && (entity.type !== 'polyline' || !(entity.bulges.length === Math.max(0, entity.points.length - 1) || entity.bulges.length === entity.points.length) || entity.bulges.some(value => !finite(value)))) {
       issues.push(`${label}: polyline bulges must be finite and match the segment count.`);
     }
   });
