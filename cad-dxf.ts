@@ -67,11 +67,13 @@ function splitEntities(pairs: Pair[]): Array<{type:string;values:Pair[]}> {
   return result;
 }
 function expandBlockInserts(pairs: Pair[], warnings: string[]): Pair[] {
-  const blocks=new Map<string,{base:{x:number;y:number};xref:boolean;entities:Array<{type:string;values:Pair[]}>}>();
+  type Block={base:{x:number;y:number};xref:boolean;entities:Array<{type:string;values:Pair[]}>};
+  type Matrix={a:number;b:number;c:number;d:number;tx:number;ty:number};
+  const blocks=new Map<string,Block>();
   const blockSection=pairs.findIndex((p,i)=>p[0]==='2'&&p[1]==='BLOCKS');
   if(blockSection>=0){
     let i=blockSection+1;
-    while(i<pairs.length && !(pairs[i][0]==='0'&&pairs[i][1]==='ENDSEC')){
+    while(i<pairs.length&&!(pairs[i][0]==='0'&&pairs[i][1]==='ENDSEC')){
       if(pairs[i][0]!=='0'||pairs[i][1]!=='BLOCK'){i++;continue;}
       const header:Pair[]=[];i++;
       while(i<pairs.length&&pairs[i][0]!=='0')header.push(pairs[i++]);
@@ -87,36 +89,78 @@ function expandBlockInserts(pairs: Pair[], warnings: string[]): Pair[] {
   if(section<0)return pairs;
   const end=pairs.findIndex((p,i)=>i>section&&p[0]==='0'&&p[1]==='ENDSEC');
   if(end<0)return pairs;
-  const prefix=pairs.slice(0,section+1), entities=splitEntities(pairs.slice(section+1,end)), suffix=pairs.slice(end);
-  const expanded:Pair[]=[];
-  for(const item of entities){
-    if(item.type!=='INSERT'){expanded.push(['0',item.type],...item.values);continue;}
-    const get=(code:string)=>item.values.find(p=>p[0]===code)?.[1];
-    const name=(get('2')||'').toUpperCase(), block=blocks.get(name);
-    if(!block){warnings.push('Skipped INSERT referencing missing BLOCK '+(get('2')||'(unnamed)')+'.');continue;}
-    if(block.xref){warnings.push('Skipped external XREF '+name+'; external drawing files are not fetched or merged automatically.');continue;}
-    const at={x:Number(get('10')||0),y:Number(get('20')||0)},sx=Number(get('41')||1),sy=Number(get('42')||1),angle=Number(get('50')||0)*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle),insertLayer=get('8')||'0';
-    if(![at.x,at.y,sx,sy,angle].every(Number.isFinite)||sx===0||sy===0){warnings.push('Skipped INSERT with invalid transform.');continue;}
+  const prefix=pairs.slice(0,section+1),entities=splitEntities(pairs.slice(section+1,end)),suffix=pairs.slice(end);
+  const matrixFor=(at:{x:number;y:number},sx:number,sy:number,angle:number,base:{x:number;y:number;y?:number}):Matrix=>{
+    const cos=Math.cos(angle),sin=Math.sin(angle),a=cos*sx,b=-sin*sy,c=sin*sx,d=cos*sy;
+    return {a,b,c,d,tx:at.x-a*base.x-b*base.y,ty:at.y-c*base.x-d*base.y};
+  };
+  const compose=(outer:Matrix,inner:Matrix):Matrix=>({
+    a:outer.a*inner.a+outer.b*inner.c,
+    b:outer.a*inner.b+outer.b*inner.d,
+    c:outer.c*inner.a+outer.d*inner.c,
+    d:outer.c*inner.b+outer.d*inner.d,
+    tx:outer.a*inner.tx+outer.b*inner.ty+outer.tx,
+    ty:outer.c*inner.tx+outer.d*inner.ty+outer.ty,
+  });
+  const expandBlock=(name:string,transform:Matrix,inheritedLayer:string,stack:string[],depth:number):Pair[]=>{
+    if(depth>12){warnings.push('Nested BLOCK depth limit reached at '+name+'.');return [];}
+    if(stack.includes(name)){warnings.push('Skipped cyclic nested BLOCK reference '+[...stack,name].join(' -> ')+'.');return [];}
+    const block=blocks.get(name);
+    if(!block){warnings.push('Skipped INSERT referencing missing BLOCK '+name+'.');return [];}
+    if(block.xref){warnings.push('Skipped external XREF '+name+'; external drawing files are not fetched or merged automatically.');return [];}
+    const output:Pair[]=[];
     for(const child of block.entities){
-      if(child.type==='INSERT'){warnings.push('Nested BLOCK INSERT was skipped; nested block references are not yet expanded.');continue;}
-      const values:Pair[]=[];let pending:{code:string;yCode:string;x:number;index:number}|null=null;
+      const get=(code:string)=>child.values.find(p=>p[0]===code)?.[1];
+      const childLayer=get('8')||'0',resolvedLayer=childLayer==='0'?inheritedLayer:childLayer;
+      if(child.type==='INSERT'){
+        const nestedName=(get('2')||'').toUpperCase(),nested=blocks.get(nestedName);
+        if(!nested){warnings.push('Skipped nested INSERT referencing missing BLOCK '+(get('2')||'(unnamed)')+'.');continue;}
+        if(nested.xref){warnings.push('Skipped nested external XREF '+nestedName+'.');continue;}
+        const at={x:Number(get('10')||0),y:Number(get('20')||0)},sx=Number(get('41')||1),sy=Number(get('42')||1),angle=Number(get('50')||0)*Math.PI/180;
+        if(![at.x,at.y,sx,sy,angle].every(Number.isFinite)||sx===0||sy===0){warnings.push('Skipped nested INSERT with invalid transform.');continue;}
+        const rows=Number(get('70')||1),columns=Number(get('71')||1);
+        if(rows>1||columns>1){warnings.push('Nested MINSERT array '+nestedName+' was reduced to its first cell.');}
+        const nestedTransform=matrixFor(at,sx,sy,angle,nested.base);
+        output.push(...expandBlock(nestedName,compose(transform,nestedTransform),resolvedLayer,[...stack,name],depth+1));
+        continue;
+      }
+      const values:Pair[]=[];
+      let pending:{code:string;yCode:string;x:number;index:number}|null=null;
       for(const [code,value] of child.values){
         if(['10','11','12','13','14','15','16','17','18','19'].includes(code)){
           pending={code,yCode:String(Number(code)+10),x:Number(value),index:values.length};
           values.push([code,value]);continue;
         }
         if(pending&&code===pending.yCode){
-          const px=(pending.x-block.base.x)*sx,py=(Number(value)-block.base.y)*sy;
-          values[pending.index]=[pending.code,fmt(at.x+px*cos-py*sin)];
-          values.push([code,fmt(at.y+px*sin+py*cos)]);pending=null;continue;
+          const x=transform.a*pending.x+transform.b*Number(value)+transform.tx;
+          const y=transform.c*pending.x+transform.d*Number(value)+transform.ty;
+          values[pending.index]=[pending.code,fmt(x)];
+          values.push([code,fmt(y)]);pending=null;continue;
         }
-        if(code==='8'&&value==='0')values.push(['8',insertLayer]);
-        else if(code==='40'&&Number.isFinite(Number(value)))values.push([code,fmt(Number(value)*Math.sqrt(Math.abs(sx*sy)))]);
+        if(code==='8'&&value==='0')values.push(['8',inheritedLayer]);
+        else if(code==='40'&&Number.isFinite(Number(value))&&child.type==='CIRCLE')values.push([code,fmt(Number(value)*Math.sqrt(Math.abs(transform.a*transform.d-transform.b*transform.c)))]);
         else values.push([code,value]);
       }
-      if(Math.abs(Math.abs(sx)-Math.abs(sy))>1e-9&&child.type==='CIRCLE')warnings.push('INSERT '+name+' applies non-uniform scaling to a CIRCLE; the circle radius was approximated using the geometric-mean scale.');
-      expanded.push(['0',child.type],...values);
+      if(!child.values.some(p=>p[0]==='8'))values.push(['8',resolvedLayer]);
+      const sx=Math.hypot(transform.a,transform.c),sy=Math.hypot(transform.b,transform.d);
+      if(Math.abs(sx-sy)>1e-9&&child.type==='CIRCLE')warnings.push('BLOCK '+name+' applies non-uniform scaling to a CIRCLE; the radius was approximated using the geometric-mean scale.');
+      if(Math.abs(sx-sy)>1e-9&&child.type==='LWPOLYLINE'&&child.values.some(p=>p[0]==='42'))warnings.push('BLOCK '+name+' non-uniformly scales a bulged polyline; bulge geometry is approximate.');
+      output.push(['0',child.type],...values);
     }
+    return output;
+  };
+  const expanded:Pair[]=[];
+  for(const item of entities){
+    if(item.type!=='INSERT'){expanded.push(['0',item.type],...item.values);continue;}
+    const get=(code:string)=>item.values.find(p=>p[0]===code)?.[1];
+    const name=(get('2')||'').toUpperCase(),block=blocks.get(name);
+    if(!block){warnings.push('Skipped INSERT referencing missing BLOCK '+(get('2')||'(unnamed)')+'.');continue;}
+    if(block.xref){warnings.push('Skipped external XREF '+name+'; external drawing files are not fetched or merged automatically.');continue;}
+    const at={x:Number(get('10')||0),y:Number(get('20')||0)},sx=Number(get('41')||1),sy=Number(get('42')||1),angle=Number(get('50')||0)*Math.PI/180,insertLayer=get('8')||'0';
+    if(![at.x,at.y,sx,sy,angle].every(Number.isFinite)||sx===0||sy===0){warnings.push('Skipped INSERT with invalid transform.');continue;}
+    const rows=Number(get('70')||1),columns=Number(get('71')||1);
+    if(rows>1||columns>1)warnings.push('MINSERT array '+name+' was reduced to its first cell.');
+    expanded.push(...expandBlock(name,matrixFor(at,sx,sy,angle,block.base),insertLayer,[],1));
   }
   return [...prefix,...expanded,...suffix];
 }
