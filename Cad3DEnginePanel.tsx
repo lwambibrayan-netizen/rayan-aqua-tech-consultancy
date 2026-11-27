@@ -501,6 +501,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   const selectedShape: SelectedShape = shapes.find(shape => shape.id === selectedShapeId) || null;
+  const selectedShapes = shapes.filter(shape => selectedShapeIds.includes(shape.id));
 
   function updateSelected(patch: Partial<Shape>) {
     if (!selectedShapeId) return;
@@ -659,7 +660,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (shape.type === 'rect') {
       const a = shape.points[0];
       const b = shape.points[1];
-      return <rect data-shape-id={shape.id} key={shape.id} x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.abs(b.x - a.x)} height={Math.abs(b.y - a.y)} fill="none" stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 4 : 2.5} />;
+      return <rect data-shape-id={shape.id} key={shape.id} x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.abs(b.x - a.x)} height={Math.abs(b.y - a.y)} fill="none" stroke={selectedShapeIds.includes(shape.id) ? '#d04d3f' : color} strokeWidth={selectedShapeIds.includes(shape.id) ? 4 : 2.5} />;
     }
     if (shape.type === 'line') {
       return <line data-shape-id={shape.id} key={shape.id} x1={shape.points[0].x} y1={shape.points[0].y} x2={shape.points[1].x} y2={shape.points[1].y} stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 5 : 3} />;
