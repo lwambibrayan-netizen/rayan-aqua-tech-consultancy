@@ -10,8 +10,9 @@ export type DraftLayer = {
   plot: boolean;
 };
 export type DraftPoint = { x: number; y: number };
+export type DraftAnchorReference = { entityId: string; pointIndex: number };
 export type DraftAnnotation =
-  | { id: string; kind: 'linear' | 'aligned'; layer: string; a: DraftPoint; b: DraftPoint; offsetM: number; textOverride?: string; precision: number }
+  | { id: string; kind: 'linear' | 'aligned'; layer: string; a: DraftPoint; b: DraftPoint; offsetM: number; textOverride?: string; precision: number; association?: { a?: DraftAnchorReference; b?: DraftAnchorReference } }
   | { id: string; kind: 'text'; layer: string; at: DraftPoint; text: string; heightMm: number; rotationDeg: number }
   | { id: string; kind: 'leader'; layer: string; points: DraftPoint[]; text: string; textHeightMm: number };
 export type SheetSize = 'A0' | 'A1' | 'A2' | 'A3' | 'A4' | 'CUSTOM';
@@ -76,6 +77,35 @@ export function createDraftingDocument(partial?: Partial<DraftingDocument>): Dra
     sheet, sheets, activeSheetIndex,
   };
 }
+
+/** Resolve endpoint associations against current model geometry. Coordinates in the drawing are converted to project metres. */
+export function findAssociativeAnchor(point: DraftPoint, entities: Array<{ id: string; type: string; points: DraftPoint[] }>, toleranceM: number, metresPerDrawingUnit: number): DraftAnchorReference | undefined {
+  if (!(toleranceM >= 0) || !(metresPerDrawingUnit > 0)) return undefined;
+  let best: { ref: DraftAnchorReference; distance: number } | undefined;
+  for (const entity of entities) {
+    if (!['line', 'polyline'].includes(entity.type)) continue;
+    entity.points.forEach((candidate, pointIndex) => {
+      const distance = Math.hypot(candidate.x * metresPerDrawingUnit - point.x, candidate.y * metresPerDrawingUnit - point.y);
+      if (distance <= toleranceM && (!best || distance < best.distance)) best = { ref: { entityId: entity.id, pointIndex }, distance };
+    });
+  }
+  return best?.ref;
+}
+export function resolveAssociativeDimension<T extends Extract<DraftAnnotation, { kind: 'linear' | 'aligned' }>(
+  annotation: T,
+  entities: Array<{ id: string; type: string; points: DraftPoint[] }>,
+  metresPerDrawingUnit: number
+): T {
+  if (!annotation.association) return annotation;
+  const resolve = (ref: DraftAnchorReference | undefined, fallback: DraftPoint): DraftPoint => {
+    if (!ref) return fallback;
+    const entity = entities.find(item => item.id === ref.entityId);
+    const point = entity?.points[ref.pointIndex];
+    return point ? { x: point.x * metresPerDrawingUnit, y: point.y * metresPerDrawingUnit } : fallback;
+  };
+  return { ...annotation, a: resolve(annotation.association.a, annotation.a), b: resolve(annotation.association.b, annotation.b) };
+}
+
 export function measureDimension(annotation: Extract<DraftAnnotation, { kind: 'linear' | 'aligned' }>): number {
   const dx = annotation.b.x - annotation.a.x, dy = annotation.b.y - annotation.a.y;
   return annotation.kind === 'aligned' ? Math.hypot(dx, dy) : Math.abs(dx);
