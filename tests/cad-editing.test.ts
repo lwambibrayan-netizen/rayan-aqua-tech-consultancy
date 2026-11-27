@@ -157,7 +157,7 @@ describe('CAD editing geometry operations', () => {
     const circle: CadEditableEntity = { id: 'c1', type: 'circle', points: [{x: 1, y: 1}], radius: 3, layer: 'WATER' };
     expect(scaleEntities([circle], {x: 0, y: 0}, 2)[0].radius).toBe(6);
     const arc: CadEditableEntity = { id: 'a1', type: 'polyline', points: [{x:0,y:0},{x:4,y:0}], bulges: [0.5], layer: 'WATER' };
-    expect(scaleEntities([arc], {x:0,y:0}, -1)[0].bulges?.[0]).toBe(-0.5);
+    expect(scaleEntities([arc], {x:0,y:0}, -1, 1)[0].bulges?.[0]).toBe(-0.5);
     expect(() => scaleEntities([circle], {x:0,y:0}, 2, 1)).toThrow(/Non-uniform scaling/);
     expect(() => scaleEntities([arc], {x:0,y:0}, 2, 1)).toThrow(/Non-uniform scaling/);
   });
