@@ -25,10 +25,11 @@
 - EPANET INP exchange now preserves closed pump and valve states through the [STATUS] section. Round-trip tests cover node elevations, pipe geometry/diameters/lengths, generated junction-to-CAD mapping, coordinate-reference retention and hydraulic result frames.
 
 ## Deployment protection
-- A **staged Railway configuration change** has been prepared for the existing PyQGIS Processing API. It updates only that service's start command to the feature-branch processor.
-- The staged change is not live. The current Railway PyQGIS API, QGIS Server, PostGIS, and the production RayanAqua application have not been replaced or redeployed by this feature-branch work.
-- Accepting the staged change will redeploy the dedicated PyQGIS service. Its existing `/io/data` volume and `/selftest` health check are retained.
-- Until that staged service update is accepted and passes its health check, the saved-output listing/download endpoints are not available from the currently live PyQGIS service.
+- The live Railway processor already supports authenticated, project-scoped saved-output listing/download, ground profiles, route comparisons, contours, slope analysis and least-cost routing.
+- The live processor's inline handler is older than the feature-branch `app.py`: it does **not** expose `/terrain/grid`, and its `/selftest` does not verify the DEM-to-CAD grid.
+- A **staged Railway configuration change** now replaces only the existing PyQGIS service's start command with the feature-branch `app.py`, and changes the healthcheck from the slow `/selftest` to `/health`.
+- The change is staged but **not live**. The existing 500 MB `/io/data` persistent volume, `PYQGIS_API_KEY`, Railway domain, and running deployment remain unchanged until the staged patch is explicitly applied.
+- After deployment, `/selftest` will additionally verify grid dimensions, positive cell sizes, valid elevation samples, projected CRS and vertical datum; `/terrain/grid` will produce the saved terrain grid required by the CAD/3D handoff.
 
 ## Engineering acceptance checks
 1. Accept the staged PyQGIS service update only after reviewing the feature preview.
