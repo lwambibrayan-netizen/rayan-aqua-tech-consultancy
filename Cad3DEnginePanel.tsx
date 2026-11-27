@@ -7,6 +7,7 @@ import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
 import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
 import { createDraftingDocument, makeLinearDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
+import { exportDraftingDxf, importDraftingDxf } from './cad-dxf';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
@@ -550,12 +551,21 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (!file) return;
     try {
       const text = await file.text();
-      const data = file.name.toLowerCase().endsWith('.json')
-        ? JSON.parse(text).shapes
-        : importDxf(text);
-      if (!Array.isArray(data) || !data.length) throw new Error('No supported drawing entities in this file.');
-      setShapes(current => [...current, ...data]);
-      setMessage('Imported ' + data.length + ' drawing entities.');
+      if (file.name.toLowerCase().endsWith('.json')) {
+        const data = JSON.parse(text).shapes;
+        if (!Array.isArray(data) || !data.length) throw new Error('No supported drawing entities in this file.');
+        setShapes(current => [...current, ...data]);
+        setMessage('Imported ' + data.length + ' drawing entities from JSON.');
+      } else {
+        const imported = importDraftingDxf(text, calibratedMetresPerUnit || 1);
+        setShapes(current => [...current, ...imported.shapes]);
+        setDrafting(current => {
+          const known = new Set(current.layers.map(item => item.name.toUpperCase()));
+          const added = imported.layerNames.filter(name => !known.has(name.toUpperCase())).map(name => ({ name, color: '#666666', lineType: 'CONTINUOUS' as const, lineWeightMm: 0.18, visible: true, locked: false, plot: true }));
+          return { ...current, layers: [...current.layers, ...added], annotations: [...current.annotations, ...imported.annotations] };
+        });
+        setMessage('Imported ' + imported.shapes.length + ' geometry entities and ' + imported.annotations.length + ' text annotations.' + (imported.warnings.length ? ' ' + imported.warnings.join(' ') : ''));
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Drawing import failed.');
     }
@@ -803,7 +813,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   function downloadDxf() {
-    const url = URL.createObjectURL(new Blob([exportDxf(shapes)], { type: 'application/dxf' }));
+    const dxf = exportDraftingDxf(shapes, drafting, calibratedMetresPerUnit || 1);
+    const url = URL.createObjectURL(new Blob([dxf], { type: 'application/dxf' }));
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = 'rayanaqua-drawing.dxf';
