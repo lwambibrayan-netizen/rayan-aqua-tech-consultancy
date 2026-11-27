@@ -110,6 +110,17 @@ export function distance(a: Point2D, b: Point2D): number {
 }
 
 /** Return the included direction angle from A to B in degrees, clockwise-positive screen-independent math (CCW from +X). */
+/** Constrain a cursor ray to the nearest angular increment while preserving its length. */
+export function constrainPointToAngle(anchor: Point2D, cursor: Point2D, incrementDegrees = 15): Point2D {
+  [anchor,cursor].forEach(point=>{assertFinite(point.x,'Point X');assertFinite(point.y,'Point Y');});
+  if(!Number.isFinite(incrementDegrees)||incrementDegrees<=0||incrementDegrees>360)throw new Error('Polar angle increment must be greater than 0 and no more than 360 degrees.');
+  const dx=cursor.x-anchor.x,dy=cursor.y-anchor.y,length=Math.hypot(dx,dy);
+  if(length<=Number.EPSILON)return {...anchor};
+  const increment=incrementDegrees*Math.PI/180;
+  const angle=Math.round(Math.atan2(dy,dx)/increment)*increment;
+  return {x:anchor.x+length*Math.cos(angle),y:anchor.y+length*Math.sin(angle)};
+}
+
 export function directionAngleDegrees(a: Point2D, b: Point2D): number {
   assertFinite(a.x, 'Point A X');
   assertFinite(a.y, 'Point A Y');
