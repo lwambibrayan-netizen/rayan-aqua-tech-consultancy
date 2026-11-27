@@ -139,6 +139,47 @@ describe('CAD viewport, object snapping and edit history', () => {
     expect(candidates.find(candidate => candidate.kind === 'INTERSECTION')?.point).toEqual({ x: 5, y: 0 });
   });
 
+  it('creates perpendicular and tangent construction snaps from a reference point', () => {
+    const candidates = objectSnapCandidates(
+      { x: 4, y: 2 },
+      [[{ x: 0, y: 0 }, { x: 10, y: 0 }]],
+      [{ center: { x: 20, y: 0 }, radius: 5 }],
+      { x: 4, y: 4 },
+    );
+    expect(candidates.some(c => c.kind === 'PERPENDICULAR' && c.point.x === 4 && c.point.y === 0)).toBe(true);
+    const tangents = candidates.filter(c => c.kind === 'TANGENT');
+    expect(tangents).toHaveLength(2);
+    tangents.forEach(({ point }) => {
+      expect(distance(point, { x: 20, y: 0 })).toBeCloseTo(5, 9);
+      const dot = (point.x - 20) * (4 - point.x) + point.y * (4 - point.y);
+      expect(dot).toBeCloseTo(0, 8);
+    });
+  });
+
+  it('snaps exact line-circle and circle-circle intersections', () => {
+    const lineCircle = objectSnapCandidates(
+      { x: 0, y: 0 },
+      [[{ x: -10, y: 0 }, { x: 10, y: 0 }]],
+      [{ center: { x: 0, y: 0 }, radius: 5 }],
+    ).filter(c => c.kind === 'INTERSECTION');
+    expect(lineCircle).toHaveLength(2);
+    expect(lineCircle.map(c => c.point.x).sort((a,b)=>a-b)).toEqual([-5,5]);
+
+    const circleCircle = objectSnapCandidates(
+      { x: 0, y: 0 },
+      [],
+      [{ center: { x: 0, y: 0 }, radius: 5 }, { center: { x: 6, y: 0 }, radius: 5 }],
+    ).filter(c => c.kind === 'INTERSECTION');
+    expect(circleCircle).toHaveLength(2);
+    expect(circleCircle[0].point.x).toBeCloseTo(3, 9);
+    expect(Math.abs(circleCircle[0].point.y)).toBeCloseTo(4, 9);
+  });
+
+  it('rejects invalid snap tolerances and invalid segment coordinates', () => {
+    expect(() => objectSnapCandidates({x:0,y:0}, [], [], undefined, -1)).toThrow(/non-negative/);
+    expect(() => objectSnapCandidates({x:0,y:0}, [[{x:NaN,y:0},{x:1,y:1}]] )).toThrow(/finite/);
+  });
+
   it('supports undo, redo and discards redo history after a new edit', () => {
     let history = createHistory(['line-1']);
     history = pushHistory(history, ['line-1', 'circle-1']);
