@@ -132,12 +132,28 @@ export function connectWaterPorts(document: NetworkDocument, aPortId: string, bP
   if (!a || !b) throw new Error('Both selected ports must exist in this project.');
   if (a.componentId === b.componentId) throw new Error('Two ports on the same component cannot be joined as a network connection.');
   if (dist(a.point, b.point) > toleranceM) throw new Error('Ports are ' + fmt(dist(a.point, b.point)) + ' m apart; move geometry or use a justified tolerance before connecting.');
+  if (finite(a.diameterMm) && finite(b.diameterMm) && Math.abs(a.diameterMm - b.diameterMm) > 1) {
+    throw new Error('Port diameters do not match (' + a.diameterMm + ' mm vs ' + b.diameterMm + ' mm). Connect through a correctly sized reducer.');
+  }
   const connections = document.connections ?? [];
   if (connections.some(c => c.aPortId === aPortId || c.bPortId === aPortId || c.aPortId === bPortId || c.bPortId === bPortId)) {
     throw new Error('A port is already connected. A port may have only one direct connection.');
   }
   const connection = { id: 'CON-' + (connections.length + 1).toString().padStart(4, '0'), aPortId, bPortId };
-  return { ...document, connections: [...connections, connection] };
+  const components = document.components.map(component => ({ ...component }));
+  const pipePort = a.componentId === 'pipe' ? null : null;
+  void pipePort;
+  const applyNodeConnection = (pipePortRef: WaterPort, nodePortRef: WaterPort) => {
+    const node = components.find(item => item.id === nodePortRef.componentId);
+    if (!node || !['junction', 'source', 'tank', 'reservoir'].includes(node.kind)) return;
+    const pipe = components.find(item => item.id === pipePortRef.componentId);
+    if (!pipe || pipe.kind !== 'pipe') return;
+    if (pipePortRef.index === 0) pipe.fromNodeId = node.id;
+    else if (pipePortRef.index === 1) pipe.toNodeId = node.id;
+  };
+  applyNodeConnection(a, b);
+  applyNodeConnection(b, a);
+  return { ...document, components, connections: [...connections, connection] };
 }
 
 export function buildPipeLongitudinalProfile(pipe: WaterCadComponent): ProfilePoint[] {
