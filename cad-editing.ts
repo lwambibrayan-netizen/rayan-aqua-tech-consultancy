@@ -198,7 +198,8 @@ export function offsetPolyline<T extends CadEditableEntity>(entity:T,distance:nu
   result.push(shifted[shifted.length-1][1]);
   return {...entity,id:newId(),points:result};
 }
-\nexport function chamferPolylineCorner<T extends CadEditableEntity>(entity: T, cornerIndex: number, distance: number): T {
+
+export function chamferPolylineCorner<T extends CadEditableEntity>(entity: T, cornerIndex: number, distance: number): T {
   if (entity.type !== 'polyline' || !Number.isInteger(cornerIndex) || cornerIndex <= 0 || cornerIndex >= entity.points.length - 1) throw new Error('CHAMFER requires an internal polyline corner.');
   if (!finite(distance) || distance <= 0) throw new Error('Chamfer distance must be positive and finite.');
   const pts = entity.points, prev = pts[cornerIndex - 1], corner = pts[cornerIndex], next = pts[cornerIndex + 1];
