@@ -336,8 +336,8 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
     ...nodes.map(node=>({epanetId:safeId(node.id),cadId:node.id,kind:'node' as const})),
     ...document.components.filter(component=>['pipe','pump','valve'].includes(component.kind)).map(link=>({epanetId:safeId(link.id),cadId:link.id,kind:'link' as const}))
   ];
-  const safeIds=idMap.map(item=>item.epanetId);
-  if(new Set(safeIds).size!==safeIds.length)warnings.push('EPANET ID collision: two or more CAD IDs become identical after EPANET-safe normalization. Rename conflicting CAD objects before simulation/export.');
+  const hasSafeIdCollision=(['node','link'] as const).some(kind=>{const ids=idMap.filter(item=>item.kind===kind).map(item=>item.epanetId);return new Set(ids).size!==ids.length;});
+  if(hasSafeIdCollision)warnings.push('EPANET ID collision: two or more CAD IDs in the same node/link namespace become identical after EPANET-safe normalization. Rename conflicting CAD objects before simulation/export.');
   const linkEnds = (component: WaterCadComponent) => { const ports = getWaterPorts(component); return [hydraulic.portNodeIds.get(ports[0]?.id ?? '') ?? '', hydraulic.portNodeIds.get(ports[1]?.id ?? '') ?? '']; };
   const pipes = document.components.filter(c => c.kind === 'pipe');
   const pumps = document.components.filter(c => c.kind === 'pump');
