@@ -268,7 +268,7 @@ export function validateWaterNetworkTopology(document: NetworkDocument, toleranc
   return issues;
 }
 
-type HydraulicNode = { id: string; elevationM: number; sourceComponent?: WaterCadComponent };
+type HydraulicNode = { id: string; elevationM: number; x: number; y: number; sourceComponent?: WaterCadComponent };
 
 function resolveHydraulicNodes(document: NetworkDocument): { portNodeIds: Map<string, string>; syntheticNodes: HydraulicNode[] } {
   const ports = document.components.flatMap(getWaterPorts);
@@ -317,7 +317,9 @@ function resolveHydraulicNodes(document: NetworkDocument): { portNodeIds: Map<st
     if (!sourceNode) {
       const levels = group.map(port => port.point.z).filter(finite);
       const elevationM = levels.length ? levels.reduce((sum, value) => sum + value, 0) / levels.length : 0;
-      syntheticNodes.push({ id: nodeId, elevationM });
+      const x=group.reduce((sum,port)=>sum+port.point.x,0)/group.length;
+      const y=group.reduce((sum,port)=>sum+port.point.y,0)/group.length;
+      syntheticNodes.push({ id: nodeId, elevationM, x, y });
     }
   }
   return { portNodeIds, syntheticNodes };
@@ -414,6 +416,9 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
     'REPORT START '+fmtTime(document.epanetTimes?.reportStartSeconds??0),
     '', '[REPORT]', 'STATUS YES', 'SUMMARY YES', 'NODES ALL', 'LINKS ALL', '', '[COORDINATES]');
   nodes.forEach(n => { const point = n.geometry[0]; if (point) lines.push([safeId(n.id), fmt(point.x), fmt(point.y)].join(' ')); });
+  hydraulic.syntheticNodes.forEach(n=>lines.push([n.id,fmt(n.x),fmt(n.y)].join(' ')));
+  lines.push('', '[VERTICES]', ';LinkID X Y');
+  pipes.forEach(pipe=>pipe.geometry.slice(1,-1).forEach(point=>lines.push([safeId(pipe.id),fmt(point.x),fmt(point.y)].join(' '))));
   lines.push('', '[END]');
   return { input: lines.join('\n') + '\n', warnings };
 }
