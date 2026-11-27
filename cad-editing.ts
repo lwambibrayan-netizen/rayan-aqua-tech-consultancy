@@ -260,7 +260,10 @@ export function offsetPolyline<T extends CadEditableEntity>(entity:T,distance:nu
       return sum+point.x*next.y-next.x*point.y;
     },0)/2;
     const inputArea=signedArea(pts),outputArea=signedArea(result.slice(0,-1));
-    if(Math.abs(inputArea)<=1e-10||Math.abs(outputArea)<=1e-10||inputArea*outputArea<=0) {
+    const inputMagnitude=Math.abs(inputArea),outputMagnitude=Math.abs(outputArea);
+    const inwardOffset=inputArea*side>0;
+    if(inputMagnitude<=1e-10||outputMagnitude<=1e-10||inputArea*outputArea<=0||
+      (inwardOffset&&outputMagnitude>=inputMagnitude-1e-9)||(!inwardOffset&&outputMagnitude<=inputMagnitude+1e-9)) {
       throw new Error('OFFSET failed: the closed boundary is degenerate or the offset collapses/inverts the polygon.');
     }
     const edges=result.slice(0,-1).map((point,index)=>[point,result[index+1]] as [Point2D,Point2D]);
