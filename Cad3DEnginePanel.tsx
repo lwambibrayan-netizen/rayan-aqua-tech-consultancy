@@ -943,7 +943,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setSimulationBusy(true);
     try {
       const exported = exportWaterNetworkToEpanet(waterCad);
-      if(exported.warnings.some(warning=>warning.startsWith('EPANET ID collision'))) throw new Error('EPANET IDs are not unique after normalization. Rename the conflicting CAD objects before simulation.');
+      if(exported.warnings.some(warning=>warning.startsWith('EPANET ID collision') || warning.startsWith('EPANET node ID collision'))) throw new Error('EPANET IDs are not unique after normalization. Rename the conflicting CAD objects before simulation.');
       if (exported.warnings.length && !window.confirm('The EPANET export has '+exported.warnings.length+' warning(s). Some CAD components may not be represented in the hydraulic model. Review the warnings before proceeding. Run the model anyway?\n\n'+exported.warnings.slice(0,8).join('\n'))) return;
       const output = await runEpanetHydraulicSimulation(exported.input);
       if (!output.results.length) throw new Error('EPANET completed without returning hydraulic timesteps.');
