@@ -300,10 +300,15 @@ function getSegments(shapes: Shape[]): Array<[Point2D, Point2D]> {
   return segments;
 }
 
-function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled: boolean): SnapPoint | null {
+function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled: boolean, waterCad?: WaterCadDocument, metresPerDrawingUnit = 1): SnapPoint | null {
   if (!enabled) return null;
   let best: SnapPoint | null = null;
   const candidates = getSnapCandidates(shapes, cursor);
+  if (waterCad && Number.isFinite(metresPerDrawingUnit) && metresPerDrawingUnit > 0) {
+    waterCad.components.forEach(component => getWaterPorts(component).forEach(port => candidates.push({
+      point: { x: port.point.x / metresPerDrawingUnit, y: port.point.y / metresPerDrawingUnit }, kind: 'PORT ' + port.role.toUpperCase(),
+    })));
+  }
   const segments = getSegments(shapes);
   for (let i = 0; i < segments.length; i++) {
     for (let j = i + 1; j < segments.length; j++) {
@@ -415,7 +420,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }), [shapes]);
 
   function resolveDraftPoint(svg: SVGSVGElement, raw: Point2D) {
-    const objectSnap = findSnap(svg, raw, shapes, snapEnabled);
+    const objectSnap = findSnap(svg, raw, shapes, snapEnabled, waterCad, calibratedMetresPerUnit || 1);
     let point = objectSnap?.point || raw;
     if (!objectSnap && gridSnapEnabled && gridSize > 0) {
       point = { x: Math.round(point.x / gridSize) * gridSize, y: Math.round(point.y / gridSize) * gridSize };
