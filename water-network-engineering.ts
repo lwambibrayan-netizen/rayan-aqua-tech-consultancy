@@ -350,7 +350,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
       warnings.push('Pipe ' + p.id + ' omitted: connect both ends to valid network ports/nodes.');
       continue;
     }
-    const length = p.geometry.slice(1).reduce((sum, point, i) => sum + Math.hypot(point.x - p.geometry[i].x, point.y - p.geometry[i].y), 0);
+    const length = p.properties.hydraulicLengthM ?? p.geometry.slice(1).reduce((sum, point, i) => sum + Math.hypot(point.x - p.geometry[i].x, point.y - p.geometry[i].y), 0);
     if (!(length > 0) || !(p.properties.internalDiameterMm && p.properties.internalDiameterMm > 0)) {
       warnings.push('Pipe ' + p.id + ' omitted: positive length and internal diameter are required.');
       continue;
