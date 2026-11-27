@@ -42,6 +42,10 @@ export type WaterEngineeringProperties = {
   /** Imported EPANET pump curve points, retained in m³/h and metres of head. */
   pumpCurvePoints?: Array<{ flowM3h: number; headM: number }>;
   epanetPumpCurveId?: string;
+  /** EPANET node elevation used for hydraulic pressure reference; not a pipe invert. */
+  hydraulicElevationM?: number;
+  /** EPANET reservoir fixed hydraulic head in metres. */
+  hydraulicHeadM?: number;
   pumpEfficiencyPct?: number;
   tankType?: 'ground' | 'elevated' | 'underground';
   tankCapacityM3?: number;
@@ -70,6 +74,9 @@ export type WaterCadDocument = {
   schemaVersion: 1;
   units: 'm';
   verticalDatum: string;
+  /** Horizontal reference is explicit; EPANET drawing coordinates are unreferenced unless confirmed. */
+  horizontalCrs?: string;
+  horizontalUnits?: 'm' | 'ft' | 'unknown';
   components: WaterCadComponent[];
   connections?: { id: string; aPortId: string; bPortId: string }[];
 };
