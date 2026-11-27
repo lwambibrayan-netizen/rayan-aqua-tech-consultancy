@@ -157,8 +157,35 @@ describe('CAD editing geometry operations', () => {
     const boundary: CadEditableEntity = { id:'boundary', type:'line', points:[{x:12,y:-5},{x:12,y:5}], layer:'0' };
     expect(extendPolylineSegment(poly,boundary,1,0).points[1]).toEqual({x:12,y:0});
     expect(() => trimPolylineSegment(poly,cutter,{x:1,y:0},1)).toThrow(/does not intersect/);
-    const curved: CadEditableEntity = {...poly,bulges:[0.5,0]};
-    expect(() => trimPolylineSegment(curved,cutter,{x:1,y:0},0)).toThrow(/curved/);
+  });
+
+  it('trims and extends bulged circular-arc polyline segments without losing curvature', () => {
+    const quarterArc: CadEditableEntity = {
+      id:'arc-route',type:'polyline',points:[{x:1,y:0},{x:0,y:1}],bulges:[Math.tan(Math.PI/8)],layer:'WATER',
+    };
+    const trimStart: CadEditableEntity = {id:'trim-start',type:'line',points:[{x:0.5,y:-1},{x:0.5,y:1}],layer:'0'};
+    const trimmedStart=trimPolylineSegment(quarterArc,trimStart,{x:1,y:0},0);
+    expect(trimmedStart.points[0].x).toBeCloseTo(0.5,8);
+    expect(trimmedStart.points[0].y).toBeCloseTo(Math.sqrt(0.75),8);
+    expect(trimmedStart.bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/24),8);
+
+    const trimEnd: CadEditableEntity = {id:'trim-end',type:'line',points:[{x:-1,y:0.5},{x:1,y:0.5}],layer:'0'};
+    const trimmedEnd=trimPolylineSegment(quarterArc,trimEnd,{x:0,y:1},0);
+    expect(trimmedEnd.points[1].x).toBeCloseTo(Math.sqrt(0.75),8);
+    expect(trimmedEnd.points[1].y).toBeCloseTo(0.5,8);
+    expect(trimmedEnd.bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/24),8);
+
+    const extendEnd: CadEditableEntity = {id:'extend-end',type:'line',points:[{x:-0.5,y:0.5},{x:-0.5,y:1}],layer:'0'};
+    const extendedEnd=extendPolylineSegment(quarterArc,extendEnd,1,0);
+    expect(extendedEnd.points[1].x).toBeCloseTo(-0.5,8);
+    expect(extendedEnd.points[1].y).toBeCloseTo(Math.sqrt(0.75),8);
+    expect(extendedEnd.bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/3),8);
+
+    const extendStart: CadEditableEntity = {id:'extend-start',type:'line',points:[{x:0.5,y:-1},{x:1,y:-0.5}],layer:'0'};
+    const extendedStart=extendPolylineSegment(quarterArc,extendStart,0,0);
+    expect(extendedStart.points[0].x).toBeCloseTo(Math.sqrt(0.75),8);
+    expect(extendedStart.points[0].y).toBeCloseTo(-0.5,8);
+    expect(extendedStart.bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/3),8);
   });
 
   it('edits vertex and circle grips without mutating source geometry', () => {
