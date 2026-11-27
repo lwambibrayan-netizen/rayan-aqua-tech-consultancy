@@ -270,6 +270,21 @@ J1 100 0
   expect(merged.horizontalCrs).toBe('EPSG:32737');
   expect(merged.verticalDatum).toBe('AHD');
  });
+ it('retains the CAD project CRS when a generated EPANET junction maps to a pipe connection port',()=>{
+  const r1=createWaterComponent('reservoir','R1',0,0),r2=createWaterComponent('reservoir','R2',20,0);
+  const first=createWaterComponent('pipe','PIPE-A',0,0),second=createWaterComponent('pipe','PIPE-B',10,0);
+  first.geometry=[{x:0,y:0},{x:10,y:0}];first.fromNodeId='R1';first.properties.internalDiameterMm=100;
+  second.geometry=[{x:10,y:0},{x:20,y:0}];second.toNodeId='R2';second.properties.internalDiameterMm=100;
+  const base:NetworkDocument={schemaVersion:1,units:'m',verticalDatum:'AHD',horizontalCrs:'EPSG:32737',horizontalUnits:'m',components:[r1,r2,first,second],connections:[{id:'JOIN',aPortId:'PIPE-A:P2',bPortId:'PIPE-B:P1'}]};
+  const exported=exportWaterNetworkToEpanet(base);
+  const generated=exported.idMap.find(item=>item.kind==='node'&&item.epanetId.startsWith('N_'))!;
+  expect(generated.cadId).toBe('PIPE-A');
+  const imported=importEpanetInp(exported.input,'AHD').document;
+  const merged=mergeEpanetRoundTrip(base,imported,exported.idMap);
+  expect(merged.horizontalCrs).toBe('EPSG:32737');
+  expect(merged.horizontalUnits).toBe('m');
+  expect(merged.verticalDatum).toBe('AHD');
+ });
  it('warns when EPANET coordinates are absent rather than pretending the layout is surveyed',()=>{
   const result=importEpanetInp('[JUNCTIONS]\nJ1 10 1\n[RESERVOIRS]\nR1 20\n[PIPES]\nP1 R1 J1 50 100 130 0 OPEN\n[END]');
   expect(result.warnings.some(w=>w.includes('Synthetic layout positions'))).toBe(true);
