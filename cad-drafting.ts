@@ -102,3 +102,8 @@ export function makeLinearDimension(id: string, a: DraftPoint, b: DraftPoint, of
   if (Math.hypot(b.x - a.x, b.y - a.y) <= 1e-9) throw new Error('Cannot dimension a zero-length segment.');
   return { id, kind: 'linear', layer, a: { ...a }, b: { ...b }, offsetM, precision };
 }
+
+export function makeAlignedDimension(id: string, a: DraftPoint, b: DraftPoint, offsetM: number, layer = 'DIMENSIONS', precision = 3): Extract<DraftAnnotation, { kind: 'linear' | 'aligned' }> {
+  const base = makeLinearDimension(id, a, b, offsetM, layer, precision);
+  return { ...base, kind: 'aligned' };
+}
