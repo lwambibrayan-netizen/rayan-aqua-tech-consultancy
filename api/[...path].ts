@@ -1,6 +1,17 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-type VercelRequest = Request & { method?: string; query?: Record<string, string | string[]> };
+type VercelRequest = Request;
+type VercelNodeRequest = {
+  method?: string;
+  url?: string;
+  headers: Record<string, string | string[] | undefined> & { host?: string; 'x-forwarded-proto'?: string };
+  body?: unknown;
+};
+type VercelNodeResponse = {
+  statusCode: number;
+  setHeader(name: string, value: string): void;
+  end(body?: string): void;
+};
 type Json = Record<string, any>;
 const allowedKinds = new Set(['hydraulic', 'boq', 'report', 'drawing', 'gis', 'calculations']);
 const allowedStatuses = new Set(['Planning', 'In progress', 'On hold', 'Completed']);
@@ -29,7 +40,7 @@ async function upstreamJson(url: URL, init?: RequestInit): Promise<any> {
   return body;
 }
 
-export default async function handler(request: VercelRequest): Promise<Response> {
+async function handleRequest(request: VercelRequest): Promise<Response> {
   try {
     const url = new URL(request.url);
     const path = url.pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
@@ -86,7 +97,7 @@ export default async function handler(request: VercelRequest): Promise<Response>
           if (error) throw error;
           return json({ document: data ? { data: data.data, version: data.version, updatedAt: data.updated_at } : null });
         }
-        if (method === 'PUT') {
+        if (method === 'PUT' || method === 'POST') {
           const input = await bodyOf(request); if (input.data === undefined) return fail('Document data is required.');
           const serialized = JSON.stringify(input.data); if (serialized.length > 220000) return fail('This document exceeds the 220 KB storage limit.', 413);
           const { data: current, error: readError } = await supabase.from('project_documents').select('version').eq('project_id', projectId).eq('kind', kind).maybeSingle();
@@ -117,9 +128,8 @@ export default async function handler(request: VercelRequest): Promise<Response>
         if (method === 'PUT') {
           const input = await bodyOf(request); if (input.data === undefined) return fail('GIS draft data is required.');
           if (JSON.stringify(input.data).length > 900000) return fail('GIS draft exceeds the 900 KB storage limit.', 413);
-          const patch: Json = { data: input.data, version: undefined, updated_at: new Date().toISOString() };
+          const patch: Json = { data: input.data, updated_at: new Date().toISOString() };
           if (typeof input.name === 'string') patch.name = input.name.trim().slice(0, 100);
-          delete patch.version;
           const { data: current, error: readError } = await supabase.from('gis_drafts').select('version').eq('id', draftId).eq('project_id', projectId).maybeSingle();
           if (readError) throw readError;
           if (!current) return fail('GIS draft not found.', 404);
@@ -134,10 +144,10 @@ export default async function handler(request: VercelRequest): Promise<Response>
           return json({ deleted: true, draftId });
         }
       }
-      if (path[2] === 'gis-terrain' && path.length === 4 && method === 'POST') {
+      if (path[2] === 'gis-terrain' && path.length === 4 && path[3] !== 'status' && method === 'POST') {
         const service = process.env.PYQGIS_API_URL; const key = process.env.PYQGIS_API_KEY;
         if (!service || !key) return fail('PyQGIS terrain service is not configured. Configure PYQGIS_API_URL and PYQGIS_API_KEY.', 503);
-        const operation = path[3]; if (!['profile', 'compare', 'contours', 'slope', 'analyze'].includes(operation)) return fail('Unknown terrain operation.', 404);
+        const operation = path[3]; if (!['profile', 'compare', 'least-cost', 'contours', 'slope', 'analyze'].includes(operation)) return fail('Unknown terrain operation.', 404);
         const upstream = new URL(`/terrain/${operation}`, service);
         try { const result = await upstreamJson(upstream, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body: JSON.stringify({ ...(await bodyOf(request)), userId, projectId }) }); return json(result); }
         catch (error) { return fail(error instanceof Error ? error.message : 'PyQGIS service request failed.', 502); }
@@ -177,5 +187,32 @@ export default async function handler(request: VercelRequest): Promise<Response>
     console.error('API request failed:', error);
     const message = error instanceof Error && !('code' in error) ? error.message : 'The API request could not be completed.';
     return fail(message, 500);
+  }
+}
+
+export default async function vercelHandler(req: VercelNodeRequest, res: VercelNodeResponse): Promise<void> {
+  try {
+    const host = req.headers.host || 'localhost';
+    const protocol = req.headers['x-forwarded-proto']?.toString().split(',')[0] || 'https';
+    const url = new URL(req.url || '/', `${protocol}://${host}`);
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(req.headers)) {
+      if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
+    }
+    const method = req.method || 'GET';
+    const hasBody = method !== 'GET' && method !== 'HEAD';
+    const body = hasBody && req.body !== undefined
+      ? typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
+      : undefined;
+    const webRequest = new Request(url, { method, headers, ...(body !== undefined ? { body } : {}) });
+    const response = await handleRequest(webRequest);
+    res.statusCode = response.status;
+    response.headers.forEach((value, name) => res.setHeader(name, value));
+    res.end(await response.text());
+  } catch (error) {
+    console.error('Vercel API adapter failed:', error);
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(JSON.stringify({ error: 'The API request could not be completed.' }));
   }
 }
