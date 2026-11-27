@@ -660,7 +660,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className={view === '2d' ? 'primary-button' : 'secondary-button'} onClick={() => setView('2d')}>2D CAD</button>
           <button className={view === '3d' ? 'primary-button' : 'secondary-button'} onClick={() => setView('3d')}>3D view</button>
-          <label>Units <select value={units} onChange={event => setUnits(event.target.value)}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
+          <label>Measurement units <select value={units} disabled={!calibratedMetresPerUnit} onChange={event => setUnits(event.target.value)}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
           <button className={snapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setSnapEnabled(value => !value)}><Crosshair size={15} /> Object snap: {snapEnabled ? 'ON' : 'OFF'}</button>
           <button className={orthoEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setOrthoEnabled(value => !value)}>Ortho: {orthoEnabled ? 'ON' : 'OFF'}</button>
           <button className={gridSnapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setGridSnapEnabled(value => !value)}>Grid snap: {gridSnapEnabled ? 'ON' : 'OFF'}</button>
@@ -668,7 +668,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <button className="secondary-button" onClick={() => setViewBox({ x: 0, y: 0, width: WIDTH, height: HEIGHT })}>Reset view</button>
           <button className="secondary-button" disabled={!history.past.length} onClick={() => setHistory(current => undoHistory(current))}>Undo</button>
           <button className="secondary-button" disabled={!history.future.length} onClick={() => setHistory(current => redoHistory(current))}>Redo</button>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>Grid step <input type="number" min="0.1" step="any" value={gridSize} onChange={event => setGridSize(Math.max(0.1, Number(event.target.value) || 10))} style={{ width: 66, padding: 6 }} /></label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>Grid step (drawing units) <input type="number" min="0.1" step="any" value={gridSize} onChange={event => setGridSize(Math.max(0.1, Number(event.target.value) || 10))} style={{ width: 66, padding: 6 }} /></label>
           <span className="muted" style={{ fontSize: 11 }}>{calibratedMetresPerUnit ? `Calibrated: ${calibratedMetresPerUnit.toPrecision(5)} m per drawing unit` : 'Unscaled legacy drawing · calibrate a known line for real measurements'}</span>
         </div>
       </div>
