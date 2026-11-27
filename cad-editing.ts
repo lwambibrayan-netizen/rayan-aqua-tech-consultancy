@@ -110,6 +110,24 @@ function bulgeArcData(a:Point2D,b:Point2D,bulge:number) {
   const center={x:(a.x+b.x)/2-dy/chord*offset,y:(a.y+b.y)/2+dx/chord*offset};
   return {center,radius:chord*(1+bulge*bulge)/(4*Math.abs(bulge)),start:Math.atan2(a.y-center.y,a.x-center.x),sweep:4*Math.atan(bulge)};
 }
+function circleSegmentIntersections(center:Point2D,radius:number,a:Point2D,b:Point2D):Point2D[] {
+  const dx=b.x-a.x,dy=b.y-a.y,fx=a.x-center.x,fy=a.y-center.y;
+  const A=dx*dx+dy*dy,B=2*(fx*dx+fy*dy),C=fx*fx+fy*fy-radius*radius;
+  if(A<=1e-18)return [];
+  const discriminant=B*B-4*A*C;
+  if(discriminant< -1e-9)return [];
+  const root=Math.sqrt(Math.max(0,discriminant));
+  const points:Point2D[]=[];
+  for(const t of [(-B-root)/(2*A),(-B+root)/(2*A)])if(t>=-1e-9&&t<=1+1e-9){
+    const point={x:a.x+t*dx,y:a.y+t*dy};
+    if(!points.some(existing=>dist(existing,point)<=1e-9))points.push(point);
+  }
+  return points;
+}
+function positiveDirectedAngle(from:number,to:number,direction:number) {
+  const tau=Math.PI*2,mod=(value:number)=>(value%tau+tau)%tau;
+  return mod(direction*(to-from));
+}
 function angleOnArc(angle:number,start:number,sweep:number) {
   const tau=Math.PI*2,mod=(v:number)=>(v%tau+tau)%tau;
   return sweep>=0?mod(angle-start)<=sweep+1e-9:mod(start-angle)<=-sweep+1e-9;
@@ -426,39 +444,84 @@ export function scaleEntities<T extends CadEditableEntity>(
   });
 }
 
-/** Trim one straight segment of an open polyline against a finite linear cutting edge. */
+/** Trim one straight or bulged-arc segment of a polyline against a finite linear cutting edge. */
 export function trimPolylineSegment<T extends CadEditableEntity>(
   entity: T, cutter: CadEditableEntity, pickPoint: Point2D, segmentIndex: number,
 ): T {
   if (entity.type !== 'polyline' || cutter.type !== 'line' || !Number.isInteger(segmentIndex) ||
-      segmentIndex < 0 || segmentIndex >= entity.points.length - 1) {
-    throw new Error('TRIM polyline requires an open polyline segment and a linear cutting edge.');
+      segmentIndex < 0 || segmentIndex >= entity.points.length - 1 || cutter.points.length !== 2) {
+    throw new Error('TRIM polyline requires a valid polyline segment and a linear cutting edge.');
   }
   assertPoint(pickPoint);
-  if (Math.abs(entity.bulges?.[segmentIndex] ?? 0) > 1e-12) throw new Error('TRIM of a curved polyline segment is not supported yet.');
   const a=entity.points[segmentIndex],b=entity.points[segmentIndex+1];
-  const hit=segmentIntersection(a,b,cutter.points[0],cutter.points[1]);
-  if(!hit)throw new Error('TRIM failed: the selected polyline segment does not intersect the finite cutting edge.');
+  const bulge=entity.bulges?.[segmentIndex]??0;
   const points=entity.points.map(clonePoint);
-  if(dist(pickPoint,a)<=dist(pickPoint,b))points[segmentIndex]=hit;
-  else points[segmentIndex+1]=hit;
-  return {...entity,points};
+  const bulges=entity.bulges?.slice();
+  if(Math.abs(bulge)<=1e-12){
+    const hit=segmentIntersection(a,b,cutter.points[0],cutter.points[1]);
+    if(!hit)throw new Error('TRIM failed: the selected polyline segment does not intersect the finite cutting edge.');
+    if(dist(pickPoint,a)<=dist(pickPoint,b))points[segmentIndex]=hit;
+    else points[segmentIndex+1]=hit;
+    return {...entity,points};
+  }
+  const arc=bulgeArcData(a,b,bulge);
+  if(!arc)throw new Error('TRIM failed: the selected arc geometry is degenerate.');
+  const direction=Math.sign(arc.sweep),endAngle=arc.start+arc.sweep;
+  const hits=circleSegmentIntersections(arc.center,arc.radius,cutter.points[0],cutter.points[1])
+    .filter(hit=>angleOnArc(Math.atan2(hit.y-arc.center.y,hit.x-arc.center.x),arc.start,arc.sweep));
+  if(!hits.length)throw new Error('TRIM failed: the cutting edge does not intersect the selected arc.');
+  const trimStart=dist(pickPoint,a)<=dist(pickPoint,b);
+  const hit=hits.sort((left,right)=>{
+    const la=Math.atan2(left.y-arc.center.y,left.x-arc.center.x),ra=Math.atan2(right.y-arc.center.y,right.x-arc.center.x);
+    return trimStart
+      ? positiveDirectedAngle(arc.start,la,direction)-positiveDirectedAngle(arc.start,ra,direction)
+      : positiveDirectedAngle(ra,endAngle,direction)-positiveDirectedAngle(la,endAngle,direction);
+  })[0];
+  const hitAngle=Math.atan2(hit.y-arc.center.y,hit.x-arc.center.x);
+  const newSweep=trimStart
+    ? direction*(Math.abs(arc.sweep)-positiveDirectedAngle(arc.start,hitAngle,direction))
+    : direction*positiveDirectedAngle(arc.start,hitAngle,direction);
+  if(Math.abs(newSweep)<=1e-9)throw new Error('TRIM failed: the cutting edge would remove the entire arc.');
+  points[trimStart?segmentIndex:segmentIndex+1]=hit;
+  if(bulges)bulges[segmentIndex]=Math.tan(newSweep/4);
+  return {...entity,points,...(bulges?{bulges}:{})};
 }
 
-/** Extend one endpoint of a straight polyline segment to a finite linear boundary. */
+/** Extend one endpoint of a straight or bulged-arc polyline segment to a finite linear boundary. */
 export function extendPolylineSegment<T extends CadEditableEntity>(
   entity: T, boundary: CadEditableEntity, endpoint: 0 | 1, segmentIndex: number,
 ): T {
-  if(entity.type!=='polyline'||boundary.type!=='line'||!Number.isInteger(segmentIndex)||
-    segmentIndex<0||segmentIndex>=entity.points.length-1) {
-    throw new Error('EXTEND polyline requires an open polyline segment and a linear boundary.');
+  if(entity.type!=='polyline'||boundary.type!=='line'||boundary.points.length!==2||
+    !Number.isInteger(segmentIndex)||segmentIndex<0||segmentIndex>=entity.points.length-1) {
+    throw new Error('EXTEND polyline requires a valid polyline segment and a linear boundary.');
   }
-  if(Math.abs(entity.bulges?.[segmentIndex]??0)>1e-12)throw new Error('EXTEND of a curved polyline segment is not supported yet.');
-  const segment:CadEditableEntity={id:entity.id,type:'line',points:[entity.points[segmentIndex],entity.points[segmentIndex+1]],layer:entity.layer};
-  const extended=extendLine(segment,boundary,endpoint);
+  const a=entity.points[segmentIndex],b=entity.points[segmentIndex+1];
+  const bulge=entity.bulges?.[segmentIndex]??0;
   const points=entity.points.map(clonePoint);
-  points[segmentIndex]=clonePoint(extended.points[0]);
-  points[segmentIndex+1]=clonePoint(extended.points[1]);
-  return {...entity,points};
+  const bulges=entity.bulges?.slice();
+  if(Math.abs(bulge)<=1e-12){
+    const segment:CadEditableEntity={id:entity.id,type:'line',points:[a,b],layer:entity.layer};
+    const extended=extendLine(segment,boundary,endpoint);
+    points[segmentIndex]=clonePoint(extended.points[0]);
+    points[segmentIndex+1]=clonePoint(extended.points[1]);
+    return {...entity,points};
+  }
+  const arc=bulgeArcData(a,b,bulge);
+  if(!arc)throw new Error('EXTEND failed: the selected arc geometry is degenerate.');
+  const direction=Math.sign(arc.sweep),endAngle=arc.start+arc.sweep;
+  const hits=circleSegmentIntersections(arc.center,arc.radius,boundary.points[0],boundary.points[1])
+    .map(point=>({point,angle:Math.atan2(point.y-arc.center.y,point.x-arc.center.x)}))
+    .filter(item=>!angleOnArc(item.angle,arc.start,arc.sweep))
+    .map(item=>({...item,delta:endpoint===0
+      ? positiveDirectedAngle(item.angle,arc.start,direction)
+      : positiveDirectedAngle(endAngle,item.angle,direction)}))
+    .filter(item=>item.delta>1e-8)
+    .sort((left,right)=>left.delta-right.delta);
+  if(!hits.length)throw new Error('EXTEND failed: the boundary does not meet the selected arc extension.');
+  const chosen=hits[0],newSweep=arc.sweep+direction*chosen.delta;
+  if(Math.abs(newSweep)>=Math.PI*2-1e-8)throw new Error('EXTEND failed: the resulting arc would make a full revolution.');
+  points[endpoint===0?segmentIndex:segmentIndex+1]=chosen.point;
+  if(bulges)bulges[segmentIndex]=Math.tan(newSweep/4);
+  return {...entity,points,...(bulges?{bulges}:{})};
 }
 
