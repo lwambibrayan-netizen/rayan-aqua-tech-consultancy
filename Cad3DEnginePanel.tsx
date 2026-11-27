@@ -274,6 +274,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [selectedShapeId, setSelectedShapeId] = useState('');
   const [selectedShapeIds, setSelectedShapeIds] = useState<string[]>([]);
   const [selectionBox, setSelectionBox] = useState<{start:Point2D;end:Point2D}|null>(null);
+  const [lastSelectionWindow, setLastSelectionWindow] = useState<{minX:number;minY:number;maxX:number;maxY:number}|null>(null);
   const selectionRef = useRef<{pointerId:number;start:Point2D;current:Point2D}|null>(null);
   const suppressSelectionClick = useRef(false);
   const [commandDistance, setCommandDistance] = useState(5);
@@ -505,6 +506,17 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const selectedShape: SelectedShape = shapes.find(shape => shape.id === selectedShapeId) || null;
   const selectedShapes = shapes.filter(shape => selectedShapeIds.includes(shape.id));
 
+  function previewDrawing(next: Shape[], label: string) {
+    setPreviewShapes(next);
+    setMessage(label + ' preview ready. Apply preview to commit, or cancel it.');
+  }
+  function commitPreview() {
+    if (!previewShapes) return;
+    setShapes(previewShapes);
+    setPreviewShapes(null);
+    setMessage('Preview committed to the drawing.');
+  }
+
   function updateSelected(patch: Partial<Shape>) {
     if (!selectedShapeId) return;
     setShapes(rows => rows.map(shape => shape.id === selectedShapeId ? { ...shape, ...patch } : shape));
@@ -713,7 +725,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{setShapes(cur=>[...cur,...rectangularArray(selectedShapes,arrayRows,arrayColumns,arraySpacing,arraySpacing)]);setMessage('ARRAY committed.');}}>Array</button>
             <label>Rows <input type="number" min="1" value={arrayRows} onChange={e=>setArrayRows(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
             <label>Cols <input type="number" min="1" value={arrayColumns} onChange={e=>setArrayColumns(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
-            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{setShapes(cur=>cur.map(x=>selectedShapeIds.includes(x.id)?stretchEntities([x],{minX:-Infinity,minY:-Infinity,maxX:Infinity,maxY:Infinity},{x:commandDistance,y:0})[0]:x));setMessage('STRETCH applied to selected entities.');}}>Stretch</button>
+            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{try{previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?stretchEntities([x],lastSelectionWindow!,{x:commandDistance,y:0})[0]:x),'STRETCH');}catch(e){setMessage(e instanceof Error?e.message:'STRETCH failed.');}}}>Stretch</button>
             <button className="secondary-button" disabled={selectedShapes.length!==1||selectedShapes[0].type!=='line'} onClick={()=>{setShapes(cur=>[...cur,...selectedShapes.map(x=>offsetLine(x,commandDistance))]);setMessage('OFFSET created parallel geometry.');}}>Offset</button>
             <button className="secondary-button" disabled={selectedShapes.length!==2||selectedShapes[0].type!=='line'||selectedShapes[1].type!=='line'} onClick={()=>{try{setShapes(cur=>cur.map(x=>x.id===selectedShapes[0].id?trimLine(x,selectedShapes[1],x.points[0]):x));setMessage('TRIM committed.');}catch(e){setMessage(e instanceof Error?e.message:'TRIM failed.');}}}>Trim</button>
             <button className="secondary-button" disabled={selectedShapes.length!==2||selectedShapes[0].type!=='line'||selectedShapes[1].type!=='line'} onClick={()=>{try{setShapes(cur=>cur.map(x=>x.id===selectedShapes[0].id?extendLine(x,selectedShapes[1],1):x));setMessage('EXTEND committed.');}catch(e){setMessage(e instanceof Error?e.message:'EXTEND failed.');}}}>Extend</button>
@@ -770,6 +782,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               if (selectionRef.current?.pointerId === event.pointerId) {
                 const end = selectionRef.current.current;
                 const start = selectionRef.current.start;
+                setLastSelectionWindow({minX:Math.min(start.x,end.x),minY:Math.min(start.y,end.y),maxX:Math.max(start.x,end.x),maxY:Math.max(start.y,end.y)});
                 if (Math.hypot(end.x-start.x,end.y-start.y)>2) suppressSelectionClick.current=true;
                 if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
                 const left=Math.min(start.x,end.x), right=Math.max(start.x,end.x), top=Math.min(start.y,end.y), bottom=Math.max(start.y,end.y);
