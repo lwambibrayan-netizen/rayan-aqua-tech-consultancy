@@ -15,6 +15,9 @@ import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringB
 import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
 import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension, calculateBaselineDimensions, calculateChainDimensions } from './cad-dimension-geometry';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
+import { applyTerrainToPipe, buildTerrainIssues, sampleGroundProfile, type TerrainGrid } from './water-terrain-engineering';
+import { importEpanetInp, type HydraulicResults } from './water-epanet-bridge';
+import { buildHydraulicOverlay, type HydraulicOverlay, type HydraulicOverlayMetric } from './water-hydraulic-overlays';
 
 type Point2D = { x: number; y: number };
 type Shape = {
@@ -328,6 +331,12 @@ function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled:
 export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures = [], onSave }: Props) {
   const [history, setHistory] = useState(() => createHistory<Shape[]>(initialData?.shapes || []));
   const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
+  const [terrainGrid, setTerrainGrid] = useState<TerrainGrid | null>(() => initialData?.terrainGrid || null);
+  const [hydraulicResults, setHydraulicResults] = useState<HydraulicResults | null>(() => initialData?.hydraulicResults || null);
+  const [hydraulicMetric, setHydraulicMetric] = useState<HydraulicOverlayMetric>('velocityMs');
+  const [hydraulicOverlay, setHydraulicOverlay] = useState<HydraulicOverlay | null>(() => initialData?.hydraulicOverlay || null);
+  const [terrainCoverM, setTerrainCoverM] = useState(1.2);
+  const [terrainProfileSpacingM, setTerrainProfileSpacingM] = useState(5);
   const [drafting, setDrafting] = useState<DraftingDocument>(() => createDraftingDocument(initialData?.drafting));
   const [draftTool, setDraftTool] = useState<'none' | 'dimension' | 'text' | 'leader'>('none');
   const [annotationDraft, setAnnotationDraft] = useState<Point2D[]>([]);
@@ -392,10 +401,16 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const fileRef = useRef<HTMLInputElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
+  const terrainFileRef = useRef<HTMLInputElement>(null);
+  const epanetFileRef = useRef<HTMLInputElement>(null);
+  const hydraulicResultsFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setHistory(createHistory<Shape[]>(initialData?.shapes || []));
     setWaterCad(initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
+    setTerrainGrid(initialData?.terrainGrid || null);
+    setHydraulicResults(initialData?.hydraulicResults || null);
+    setHydraulicOverlay(initialData?.hydraulicOverlay || null);
     setDrafting(createDraftingDocument(initialData?.drafting));
     setPaperLayouts(initialData?.paperLayouts || []);
     setEngineeringAudit(null);
@@ -890,12 +905,68 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setEngineeringAudit(result);
     setMessage('Engineering drawing audit completed: ' + result.status + ' · ' + result.errors + ' errors · ' + result.warnings + ' warnings.');
   }
+  async function importTerrainGridFile(file?: File) {
+    if (!file) return;
+    try {
+      const grid = JSON.parse(await file.text()) as TerrainGrid;
+      if (!grid || !Number.isInteger(grid.width) || !Number.isInteger(grid.height) || !Array.isArray(grid.elevationsM) || !grid.crs || !grid.verticalDatum) throw new Error('Terrain JSON must include width, height, origin, cell sizes, elevationsM, crs and verticalDatum.');
+      setTerrainGrid(grid);
+      setMessage('Terrain grid loaded: ' + grid.width + ' × ' + grid.height + ' cells · ' + grid.crs + ' · vertical datum ' + grid.verticalDatum + '. Save the drawing to persist it.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Terrain import failed.'); }
+    if (terrainFileRef.current) terrainFileRef.current.value = '';
+  }
+
+  async function importEpanetFile(file?: File) {
+    if (!file) return;
+    try {
+      if (waterCad.components.length && !window.confirm('Importing this EPANET model replaces the current water CAD network in this project. Continue?')) return;
+      const imported = importEpanetInp(await file.text(), waterCad.verticalDatum);
+      setWaterCad(imported.document);
+      setHydraulicResults(null);
+      setHydraulicOverlay(null);
+      setMessage('Imported ' + imported.document.components.length + ' EPANET network objects into CAD.' + (imported.warnings.length ? ' Review: ' + imported.warnings.join(' ') : ' Coordinates and hydraulic link lengths were retained.'));
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'EPANET import failed.'); }
+    if (epanetFileRef.current) epanetFileRef.current.value = '';
+  }
+
+  async function importHydraulicResultsFile(file?: File) {
+    if (!file) return;
+    try {
+      const results = JSON.parse(await file.text()) as HydraulicResults;
+      if (!Number.isFinite(results.timeSeconds) || !Array.isArray(results.nodes) || !Array.isArray(results.links)) throw new Error('Results JSON must include timeSeconds, nodes[] and links[].');
+      setHydraulicResults(results);
+      setHydraulicOverlay(buildHydraulicOverlay(waterCad, results, hydraulicMetric));
+      setMessage('Hydraulic results loaded for ' + results.timeSeconds + ' seconds. Results are matched to CAD IDs; unmatched IDs are not displayed.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Hydraulic result import failed.'); }
+    if (hydraulicResultsFileRef.current) hydraulicResultsFileRef.current.value = '';
+  }
+
+  function changeHydraulicMetric(metric: HydraulicOverlayMetric) {
+    setHydraulicMetric(metric);
+    if (hydraulicResults) setHydraulicOverlay(buildHydraulicOverlay(waterCad, hydraulicResults, metric));
+  }
+
+  function applyTerrainToSelectedPipe() {
+    const selected = waterCad.components.find(component => component.id === selectedWaterId);
+    if (!terrainGrid) { setMessage('Import a terrain elevation grid before routing a pipe.'); return; }
+    if (!selected || selected.kind !== 'pipe') { setMessage('Select a pipe in the component register first.'); return; }
+    try {
+      const updated = applyTerrainToPipe(selected, terrainGrid, terrainCoverM);
+      setWaterCad(current => ({ ...current, components: current.components.map(component => component.id === updated.id ? updated : component) }));
+      const profile = sampleGroundProfile(terrainGrid, updated.geometry, terrainProfileSpacingM);
+      setMessage('Terrain route applied to ' + updated.id + ': ' + profile.length + ' profile samples. Review cover and invert levels, then save.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Terrain routing failed.'); }
+  }
+
   async function saveDrawing() {
     setBusy(true);
     try {
       await onSave({
         shapes,
         waterCad,
+        terrainGrid,
+        hydraulicResults,
+        hydraulicOverlay,
         drafting: { ...drafting, dimensionStyle },
         paperLayouts,
         units,
@@ -1275,6 +1346,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <button className="secondary-button" onClick={importGisDraft}><Layers3 size={15} /> Bring in GIS draft</button>
         </div>
         <input ref={fileRef} type="file" accept=".dxf,.json" hidden onChange={event => importFile(event.target.files?.[0])} />
+        <input ref={terrainFileRef} type="file" accept=".json,application/json" hidden onChange={event => importTerrainGridFile(event.target.files?.[0])} />
+        <input ref={epanetFileRef} type="file" accept=".inp,.txt,text/plain" hidden onChange={event => importEpanetFile(event.target.files?.[0])} />
+        <input ref={hydraulicResultsFileRef} type="file" accept=".json,application/json" hidden onChange={event => importHydraulicResultsFile(event.target.files?.[0])} />
+
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className={view === '2d' ? 'primary-button' : 'secondary-button'} onClick={() => setView('2d')}>2D CAD</button>
           <button className={view === '3d' ? 'primary-button' : 'secondary-button'} onClick={() => setView('3d')}>3D view</button>
@@ -1527,6 +1602,29 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <tbody>{buildPreliminaryBoq(waterCad).map((row, index) => <tr key={row.code + index}><td style={{ padding: 5 }}>{row.description}</td><td style={{ textAlign: 'right', padding: 5 }}>{row.unit}</td><td style={{ textAlign: 'right', padding: 5 }}>{row.quantity.toFixed(2)}</td></tr>)}</tbody>
           </table>
           <p className="muted" style={{ fontSize: 11 }}>Excavation is a preliminary rectangular trench estimate using 0.6 m width × 1.2 m depth. It excludes bedding, shoring, fittings allowances, dewatering, reinstatement and wastage.</p>
+        </div>
+        <div style={{ borderTop: '1px solid #d8e1df', marginTop: 14, paddingTop: 12 }}>
+          <span className="eyebrow muted">TERRAIN + EPANET INTEGRATION</span>
+          <h4 style={{ margin: '5px 0' }}>Elevation-aware network and hydraulic results</h4>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            <button className="secondary-button" onClick={() => terrainFileRef.current?.click()}>Import terrain grid JSON</button>
+            <button className="secondary-button" onClick={() => epanetFileRef.current?.click()}>Import EPANET INP → CAD</button>
+            <button className="secondary-button" onClick={downloadEpanetInput}>Export CAD → EPANET INP</button>
+            <button className="secondary-button" onClick={() => hydraulicResultsFileRef.current?.click()}>Import hydraulic results JSON</button>
+            <button className="secondary-button" onClick={() => { const issues = buildTerrainIssues(waterCad); setMessage('Terrain check: ' + issues.length + ' issue(s). ' + issues.slice(0,5).map(issue => issue.componentId + ': ' + issue.message).join(' ')); }}>Check terrain cover</button>
+          </div>
+          <p className="muted" style={{ fontSize: 11, margin: '6px 0' }}>{terrainGrid ? 'Terrain loaded · '+terrainGrid.width+' × '+terrainGrid.height+' · '+terrainGrid.crs+' · datum '+terrainGrid.verticalDatum : 'No terrain surface loaded. Import a regular-grid elevation JSON in project metres.'} {hydraulicResults ? ' · Hydraulic results at '+hydraulicResults.timeSeconds+' s' : ' · No hydraulic results loaded.'}</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
+            <label style={{ fontSize: 12 }}>Target crown cover (m)<input type="number" min="0" step="0.05" value={terrainCoverM} onChange={e => setTerrainCoverM(Number(e.target.value))} style={{ display: 'block', width: 100 }}/></label>
+            <label style={{ fontSize: 12 }}>Profile sample spacing (m)<input type="number" min="0.1" step="0.5" value={terrainProfileSpacingM} onChange={e => setTerrainProfileSpacingM(Number(e.target.value))} style={{ display: 'block', width: 100 }}/></label>
+            <button className="primary-button" onClick={applyTerrainToSelectedPipe} disabled={!terrainGrid || selectedWaterComponent?.kind !== 'pipe'}>Route selected pipe to cover</button>
+            <label style={{ fontSize: 12 }}>Drawing overlay<select value={hydraulicMetric} onChange={e => changeHydraulicMetric(e.target.value as HydraulicOverlayMetric)} style={{ display: 'block' }}><option value="pressureM">Node pressure (m)</option><option value="flowLps">Link flow (L/s)</option><option value="velocityMs">Velocity (m/s)</option><option value="headlossM">Headloss (m)</option></select></label>
+          </div>
+          {hydraulicOverlay && <div style={{ overflowX: 'auto', marginTop: 8 }}>
+            <strong style={{ fontSize: 12 }}>Hydraulic overlay · {hydraulicOverlay.metric} · t={hydraulicOverlay.timeSeconds}s · range {hydraulicOverlay.min?.toFixed(2) ?? '—'} to {hydraulicOverlay.max?.toFixed(2) ?? '—'}</strong>
+            <table style={{ width: '100%', fontSize: 11 }}><thead><tr><th align="left">Network ID</th><th align="right">Value</th><th align="left">Status</th></tr></thead><tbody>{hydraulicOverlay.items.map(item => <tr key={item.componentId}><td>{item.componentId}</td><td align="right">{item.label}</td><td style={{ color: item.colour }}>{item.severity}</td></tr>)}</tbody></table>
+            <p className="muted" style={{ fontSize: 10 }}>Colours are applied to matching network components in the 2D drawing. This JSON import displays supplied engine results; it does not itself execute a hydraulic simulation.</p>
+          </div>}
         </div>
         <label style={{ display: 'block', marginTop: 10, fontSize: 12 }}>Project vertical datum / level reference
           <input value={waterCad.verticalDatum} onChange={e => setWaterCad(current => ({ ...current, verticalDatum: e.target.value }))} style={{ display: 'block', width: '100%' }} />
