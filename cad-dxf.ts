@@ -123,7 +123,7 @@ function sampleCatmullRom(points:{x:number;y:number}[],steps=8):{x:number;y:numb
 
 export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, metresPerDrawingUnit=1):string {
   if(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0) throw new Error('A valid drawing calibration is required for DXF export.');
-  const insunitFactors: Array<[number,number]> = [[0.0254,1],[0.3048,2],[1609.344,3],[0.001,4],[0.01,5],[1,6],[1000,7],[1e-6,8],[0.0000254,9],[0.9144,10],[1e-10,11],[1e-9,12],[1e-6,13],[0.1,14],[10,15],[100,16],[1e9,17]];
+  const insunitFactors: Array<[number,number]> = [[0.0254,1],[0.3048,2],[1609.344,3],[0.001,4],[0.01,5],[1,6],[1000,7],[2.54e-8,8],[0.0000254,9],[0.9144,10],[1e-10,11],[1e-9,12],[1e-6,13],[0.1,14],[10,15],[100,16],[1e9,17],[149597870700,18],[9.460730472e15,19],[3.085677581e16,20]];
   const insunits=insunitFactors.find(([factor])=>Math.abs(factor-metresPerDrawingUnit)<1e-12)?.[1]??0;
   const layerMap = new Map(drafting.layers.map(layer => [layer.name.toUpperCase(), layer]));
   shapes.forEach(shape => { const name = shape.layer || '0'; if (!layerMap.has(name.toUpperCase())) layerMap.set(name.toUpperCase(), { name, color: '#666666', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }); });
@@ -187,6 +187,7 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit?:number, s
   const declaredUnits=unitHeader>=0?Number(rawPairs.slice(unitHeader+1).find(pair=>pair[0]==='70')?.[1]):0;
   const metresByInsunits:Record<number,number>={1:0.0254,2:0.3048,3:1609.344,4:0.001,5:0.01,6:1,7:1000,8:1e-6,9:0.0000254,10:0.9144,11:1e-10,12:1e-9,13:1e-6,14:0.1,15:10,16:100,17:1e9};
   const effectiveMetresPerDrawingUnit=metresPerDrawingUnit??metresByInsunits[declaredUnits]??1;
+  if(metresPerDrawingUnit===undefined&&(!declaredUnits||!metresByInsunits[declaredUnits]))warnings.push('DXF does not declare a recognized $INSUNITS value; coordinates are assumed to be metres. Set an explicit drawing calibration if this is incorrect.');
   const pairs=expandBlockInserts(normalizeLegacyPolylines(rawPairs, warnings), warnings);
   const importedLayers:DraftLayer[]=[];
   const indexedColors:Record<number,string>={1:'#ff0000',2:'#ffff00',3:'#00ff00',4:'#00ffff',5:'#0000ff',6:'#ff00ff',7:'#222222'};
