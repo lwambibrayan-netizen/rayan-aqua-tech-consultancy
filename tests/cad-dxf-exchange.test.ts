@@ -164,6 +164,28 @@ describe('structured DXF exchange', () => {
     expect(imported.annotations[0].text).toBe('Valve chamber label');
   });
 
+
+  it('emits R2000 handles and subclass markers required by independent DXF readers', () => {
+    const dxf = exportDraftingDxf([
+      {id:'L1',type:'line',points:[{x:0,y:0},{x:10,y:5}],layer:'WATER_PIPE'},
+      {id:'P1',type:'polyline',points:[{x:0,y:0},{x:5,y:0},{x:0,y:0}],layer:'WATER_PIPE'},
+    ], createDraftingDocument(), 0.001);
+    expect(dxf).toContain('$ACADVER\n1\nAC1015');
+    expect(dxf).toContain('$HANDSEED\n5\n10000');
+    expect(dxf).toContain('0\nLAYER\n5\n15');
+    expect(dxf).toContain('100\nAcDbSymbolTableRecord\n100\nAcDbLayerTableRecord');
+    expect(dxf).toContain('100\nAcDbEntity\n8\nWATER_PIPE\n100\nAcDbLine');
+    expect(dxf).toContain('100\nAcDbEntity\n8\nWATER_PIPE\n100\nAcDbPolyline');
+  });
+
+  it('warns when explicit project calibration conflicts with external DXF INSUNITS', () => {
+    const source = ['0','SECTION','2','HEADER','9','$INSUNITS','70','4','0','ENDSEC',
+      '0','SECTION','2','ENTITIES','0','LINE','8','0','10','0','20','0','11','1000','21','0','0','ENDSEC','0','EOF'].join('\n');
+    const imported = importDraftingDxf(source, 1);
+    expect(imported.shapes[0].points[1].x).toBe(1000);
+    expect(imported.warnings.some(warning=>warning.includes('conflicts with the active project calibration'))).toBe(true);
+  });
+
   it('exports paper-scaled dimension text and arrow linework from the selected dimension style', () => {
     const doc = createDraftingDocument();
     doc.dimensionStyle = { name:'TEST', textHeightMm:3, arrowSizeMm:2, extensionOffsetMm:1, extensionBeyondMm:1.5, textGapMm:1, precision:2, decimalSeparator:'.', zeroSuppress:'trailing', unit:'m', prefix:'', suffix:'', tolerance:{mode:'none',upper:0,lower:0} };
