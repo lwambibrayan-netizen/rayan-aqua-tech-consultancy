@@ -362,7 +362,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
     const [fromNode, toNode] = linkEnds(v);
     if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode)) warnings.push('Check valve ' + v.id + ' omitted: connect its inlet and outlet ports.');
     else if (!(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm)) warnings.push('Check valve ' + v.id + ' omitted: set a positive diameter.');
-    else lines.push([safeId(v.id), fromNode, toNode, fmt(v.properties.fittingLengthM ?? 0.5), fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), fmt(v.properties.roughness ?? 130), fmt(v.properties.minorLossCoefficient ?? 0), 'CV'].join(' '));
+    else lines.push([safeId(v.id), fromNode, toNode, fmt(v.properties.hydraulicLengthM ?? v.properties.fittingLengthM ?? 0.5), fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), fmt(v.properties.roughness ?? 130), fmt(v.properties.minorLossCoefficient ?? 0), 'CV'].join(' '));
   });
   lines.push('', '[PUMPS]', ';ID Node1 Node2 Parameters');
   pumps.forEach(p => {
@@ -375,8 +375,8 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   valves.filter(v => v.properties.valveType !== 'check').forEach(v => {
     const [fromNode, toNode] = linkEnds(v);
     if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode)) warnings.push('Valve ' + v.id + ' omitted: connect its inlet and outlet ports.');
-    else if (v.properties.valveType === 'PRV' || v.properties.valveType === 'PSV') lines.push([safeId(v.id), fromNode, toNode, fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), v.properties.valveType, fmt(v.properties.valveSetting ?? 0), '0'].join(' '));
-    else warnings.push('Valve ' + v.id + ' (' + (v.properties.valveType ?? 'unspecified') + ') omitted from EPANET valve links; its loss/control model needs an explicit supported setting.');
+    else if (['PRV','PSV','PBV','FCV','TCV'].includes(v.properties.valveType ?? '')) lines.push([safeId(v.id), fromNode, toNode, fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), v.properties.valveType!, fmt(v.properties.valveSetting ?? 0), '0'].join(' '));
+    else warnings.push('Valve ' + v.id + ' (' + (v.properties.valveType ?? 'unspecified') + ') omitted from EPANET valve links; its loss/control model needs an explicit supported setting or curve.');
   });
   const unsupported = document.components.filter(c => ['bend', 'tee', 'reducer', 'chamber', 'hydrant', 'meter', 'air-valve', 'washout'].includes(c.kind));
   if (unsupported.length) warnings.push('EPANET does not model physical ' + [...new Set(unsupported.map(c => c.kind))].join(', ') + ' as standalone hydraulic elements; preserve them in CAD/GIS and model hydraulic losses through suitable pipe minor-loss values or supported links.');
