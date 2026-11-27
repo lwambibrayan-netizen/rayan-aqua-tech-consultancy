@@ -13,7 +13,7 @@ export type DraftPoint = { x: number; y: number };
 export type DraftAnchorReference = { entityId: string; pointIndex: number };
 export type DraftAnnotation =
   | { id: string; kind: 'linear' | 'aligned'; layer: string; a: DraftPoint; b: DraftPoint; offsetM: number; textOverride?: string; precision: number; association?: { a?: DraftAnchorReference; b?: DraftAnchorReference } }
-  | { id: string; kind: 'radial'; layer: string; circleId?: string; center: DraftPoint; dimensionType: 'radius' | 'diameter'; leaderAngleRad: number; precision: number }\n  | { id: string; kind: 'angular'; layer: string; vertex: DraftPoint; rayA: DraftPoint; rayB: DraftPoint; offsetM: number; precision: number; association?: { vertex?: DraftAnchorReference; rayA?: DraftAnchorReference; rayB?: DraftAnchorReference } }\n  | { id: string; kind: 'text'; layer: string; at: DraftPoint; text: string; heightMm: number; rotationDeg: number }
+  | { id: string; kind: 'radial'; layer: string; circleId?: string; center: DraftPoint; radiusM: number; dimensionType: 'radius' | 'diameter'; leaderAngleRad: number; precision: number }\n  | { id: string; kind: 'angular'; layer: string; vertex: DraftPoint; rayA: DraftPoint; rayB: DraftPoint; offsetM: number; precision: number; association?: { vertex?: DraftAnchorReference; rayA?: DraftAnchorReference; rayB?: DraftAnchorReference } }\n  | { id: string; kind: 'text'; layer: string; at: DraftPoint; text: string; heightMm: number; rotationDeg: number }
   | { id: string; kind: 'leader'; layer: string; points: DraftPoint[]; text: string; textHeightMm: number };
 export type SheetSize = 'A0' | 'A1' | 'A2' | 'A3' | 'A4' | 'CUSTOM';
 export type DrawingSheet = {
@@ -124,7 +124,7 @@ export function resolveAssociativeRadialDimension<T extends Extract<DraftAnnotat
 ): T & { center: DraftPoint; radiusM: number } {
   const circle = annotation.circleId ? entities.find(item => item.id === annotation.circleId && item.type === 'circle') : undefined;
   if (!circle || !circle.points[0] || !(circle.radius && circle.radius > 0)) {
-    return { ...annotation, radiusM: 0 };
+    return { ...annotation, radiusM: annotation.radiusM };
   }
   return {
     ...annotation,
