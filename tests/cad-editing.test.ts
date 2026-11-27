@@ -69,6 +69,30 @@ describe('CAD editing geometry operations', () => {
     expect(filleted.points[1].x).toBeCloseTo(8);
     expect(filleted.points[filleted.points.length - 2].y).toBeCloseTo(2);
   });
+  it('supports both trim endpoints and extension directions', () => {
+    const cutter: CadEditableEntity = { id: 'c', type: 'line', points: [{ x: 5, y: -5 }, { x: 5, y: 5 }], layer: '0' };
+    const trimmedEnd = trimLine(line, cutter, { x: 9, y: 0 });
+    expect(trimmedEnd.points[1]).toEqual({ x: 5, y: 0 });
+    const reversed: CadEditableEntity = { ...line, points: [{ x: 10, y: 0 }, { x: 7, y: 0 }] };
+    const extendedStart = extendLine(reversed, cutter, 0);
+    expect(extendedStart.points[0]).toEqual({ x: 5, y: 0 });
+  });
+  it('keeps fillet tangent points at the requested radius and rejects oversized corners', () => {
+    const poly: CadEditableEntity = { id: 'p', type: 'polyline', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], layer: 'WATER' };
+    const result = filletPolylineCorner(poly, 1, 2, 16);
+    const start = result.points[1], end = result.points[result.points.length - 2];
+    expect(start.x).toBeCloseTo(8);
+    expect(start.y).toBeCloseTo(0);
+    expect(end.x).toBeCloseTo(10);
+    expect(end.y).toBeCloseTo(2);
+    expect(result.points).toHaveLength(19);
+    expect(() => filletPolylineCorner(poly, 1, 6)).toThrow(/too large/);
+  });
+  it('creates unique IDs for every generated array entity', () => {
+    let n = 0;
+    const result = rectangularArray([line], 2, 2, 5, 5, () => 'generated-' + ++n);
+    expect(new Set(result.map(item => item.id)).size).toBe(result.length);
+  });
   it('rejects degenerate geometry and invalid array dimensions', () => {
     expect(() => mirrorEntities([line], { x: 1, y: 1 }, { x: 1, y: 1 })).toThrow(/non-zero/);
     expect(() => rectangularArray([line], 0, 2, 1, 1)).toThrow(/positive integers/);
