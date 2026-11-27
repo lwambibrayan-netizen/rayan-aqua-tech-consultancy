@@ -77,7 +77,7 @@ async function prepareWorkspace(page) {
   });
 }
 
-test('engineer opens a project, uses visible CAD navigation, saves and opens 3D', async ({ page }) => {
+test('engineer opens a project, verifies precision drafting, saves and opens 3D', async ({ page }) => {
   await prepareWorkspace(page);
   await page.goto('/');
   await expect(page.getByRole('button', { name: /Projects/ }).first()).toBeVisible();
