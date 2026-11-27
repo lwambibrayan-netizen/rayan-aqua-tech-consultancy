@@ -746,6 +746,38 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setMessage('Selected CAD entity deleted.');
   }
 
+  function insertEngineeringBlock() {
+    if (!calibratedMetresPerUnit) { setMessage('Calibrate the drawing from a verified real length before inserting engineering objects at true scale.'); return; }
+    try {
+      const block = getEngineeringBlock(libraryBlockName);
+      const centre = { x: viewBox.x + viewBox.width / 2, y: viewBox.y + viewBox.height / 2 };
+      const atMetres = { x: centre.x * calibratedMetresPerUnit, y: centre.y * calibratedMetresPerUnit };
+      const targetLayer = block.category === 'valve' ? 'WATER_VALVE' : block.category === 'structure' ? 'WATER_STRUCTURE' : block.category === 'pipework' ? 'WATER_PIPE' : 'WATER_FITTING';
+      const insert: BlockInsert = { blockName: block.name, at: { x: atMetres.x * 1000, y: atMetres.y * 1000 }, rotationDeg: 0, scaleX: 1, scaleY: 1, layer: targetLayer, properties: { ...block.defaultProperties } };
+      const primitives = instantiateEngineeringBlock(insert);
+      const toDrawing = (point: { x: number; y: number }) => ({ x: point.x / 1000 / calibratedMetresPerUnit, y: point.y / 1000 / calibratedMetresPerUnit });
+      const newShapes: Shape[] = primitives.map(primitive => {
+        if (primitive.kind === 'line') return { id: makeId(), type: 'line', points: [toDrawing(primitive.a), toDrawing(primitive.b)], layer: targetLayer };
+        if (primitive.kind === 'circle') return { id: makeId(), type: 'circle', points: [toDrawing(primitive.center)], radius: primitive.radius / 1000 / calibratedMetresPerUnit, layer: targetLayer };
+        return { id: makeId(), type: 'polyline', points: primitive.points.map(toDrawing), layer: targetLayer };
+      });
+      setShapes(current => [...current, ...newShapes]);
+      if (block.waterKind && block.name !== 'PIPE_BREAK') {
+        const id = block.name + '-' + makeId();
+        const component = createWaterComponent(block.waterKind, id, atMetres.x, atMetres.y);
+        component.properties = { ...component.properties, ...block.defaultProperties };
+        setWaterCad(current => ({ ...current, components: [...current.components, component] }));
+        setSelectedWaterId(id);
+      }
+      setMessage(block.name + ' inserted at calibrated scale. Review position, orientation and engineering properties before design use.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Engineering object could not be inserted.'); }
+  }
+
+  function runEngineeringAudit() {
+    const result = auditEngineeringDrawing({ drafting: { ...drafting, dimensionStyle }, waterCad, shapes, metresPerDrawingUnit: calibratedMetresPerUnit });
+    setEngineeringAudit(result);
+    setMessage('Engineering drawing audit completed: ' + result.status + ' · ' + result.errors + ' errors · ' + result.warnings + ' warnings.');
+  }
   async function saveDrawing() {
     setBusy(true);
     try {
