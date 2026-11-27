@@ -56,6 +56,8 @@ J2 180 0
   const result=importEpanetInp(inp,'AHD');
   const p=result.document.components.find(c=>c.id==='P1')!;
   expect(result.document.components.find(c=>c.id==='J1')?.properties.hydraulicElevationM).toBe(100);
+  expect(result.document.components.find(c=>c.id==='R1')?.properties.hydraulicElevationM).toBeUndefined();
+  expect(result.document.components.find(c=>c.id==='R1')?.properties.hydraulicHeadM).toBe(110);
   expect(p.properties.hydraulicLengthM).toBe(125);
   expect(p.properties.internalDiameterMm).toBe(150);
   expect(p.properties.externalDiameterMm).toBeUndefined();
