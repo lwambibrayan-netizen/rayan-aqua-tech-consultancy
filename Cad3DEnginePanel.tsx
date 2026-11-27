@@ -1291,10 +1291,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         mesh.position.set((a.x + b.x) / 2*(calibratedMetresPerUnit??1)-centreX, 0, (a.y + b.y) / 2*(calibratedMetresPerUnit??1)-centreY);
         scene.add(mesh);
       } else if (shape.points.length > 1) {
-        const curve = new THREE.CatmullRomCurve3(
-          (shape.type==='polyline'?expandedPolylinePoints(shape):shape.points).map(point => new THREE.Vector3(point.x*(calibratedMetresPerUnit??1)-centreX, 0, point.y*(calibratedMetresPerUnit??1)-centreY))
-        );
-        scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 30, Math.max(0.02,1.8*(calibratedMetresPerUnit??1)), 8, false), material));
+        const route=(shape.type==='polyline'?expandedPolylinePoints(shape):shape.points).map(point => new THREE.Vector3(point.x*(calibratedMetresPerUnit??1)-centreX, 0, point.y*(calibratedMetresPerUnit??1)-centreY));
+        for(let index=1;index<route.length;index++){
+          const segment=new THREE.LineCurve3(route[index-1],route[index]);
+          scene.add(new THREE.Mesh(new THREE.TubeGeometry(segment,1,Math.max(0.02,1.8*(calibratedMetresPerUnit??1)),8,false),material));
+        }
       }
     });
 
@@ -1320,9 +1321,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     }
     const addPipeTube=(route:THREE.Vector3[],radius:number,colour:string)=>{
       if(route.length<2)return;
-      const curve=new THREE.CatmullRomCurve3(route);
-      const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,Math.max(8,route.length*4),radius,12,false),new THREE.MeshStandardMaterial({color:colour}));
-      scene.add(mesh);
+      for(let index=1;index<route.length;index++){
+        const segment=new THREE.LineCurve3(route[index-1],route[index]);
+        const mesh=new THREE.Mesh(new THREE.TubeGeometry(segment,1,radius,12,false),new THREE.MeshStandardMaterial({color:colour}));
+        scene.add(mesh);
+      }
     };
     waterCad.components.forEach(component=>{
       const baseLevel=component.properties.hydraulicElevationM??component.geometry[0]?.z??component.geometry[0]?.invertLevelM??0;
