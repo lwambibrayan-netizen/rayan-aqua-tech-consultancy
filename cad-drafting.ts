@@ -97,7 +97,7 @@ export function validateDraftingDocument(doc: DraftingDocument): string[] {
   if (!doc.sheet.drawingNumber.trim() || !doc.sheet.title.trim()) issues.push('Drawing title and drawing number are required.');
   return issues;
 }
-export function makeLinearDimension(id: string, a: DraftPoint, b: DraftPoint, offsetM: number, layer = 'DIMENSIONS', precision = 3): DraftAnnotation {
+export function makeLinearDimension(id: string, a: DraftPoint, b: DraftPoint, offsetM: number, layer = 'DIMENSIONS', precision = 3): Extract<DraftAnnotation, { kind: 'linear' }> {
   if (!id || !Number.isFinite(offsetM) || !Number.isInteger(precision) || precision < 0 || precision > 6) throw new Error('Invalid dimension settings.');
   if (Math.hypot(b.x - a.x, b.y - a.y) <= 1e-9) throw new Error('Cannot dimension a zero-length segment.');
   return { id, kind: 'linear', layer, a: { ...a }, b: { ...b }, offsetM, precision };
