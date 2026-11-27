@@ -81,10 +81,22 @@ export function buildTerrainAwarePipeProfile(pipe:WaterCadComponent,grid:Terrain
   const ground=sampleGroundProfile(grid,pipe.geometry,spacingM);
   const od=(pipe.properties.externalDiameterMm??pipe.properties.nominalDiameterMm??0)/1000;
   const start=pipe.properties.invertInletM,end=pipe.properties.invertOutletM;
+  const anchors:Array<{chainageM:number;invert:number|null}>=[];
+  let anchorChainage=0;
+  pipe.geometry.forEach((point,index)=>{
+    if(index>0)anchorChainage+=segmentLength(pipe.geometry[index-1],point);
+    anchors.push({chainageM:anchorChainage,invert:finite(point.invertLevelM)?point.invertLevelM:null});
+  });
   const total=ground[ground.length-1]?.chainageM??0;
   return ground.map(sample=>{
     const ratio=total>0?sample.chainageM/total:0;
-    const invert=finite(sample.groundLevelM)&&finite(start)&&finite(end)?start+(end-start)*ratio:null;
+    let invert:number|null=null;
+    const nextIndex=anchors.findIndex(anchor=>anchor.chainageM>=sample.chainageM);
+    if(nextIndex>0){
+      const a=anchors[nextIndex-1],b=anchors[nextIndex];
+      if(a.invert!==null&&b.invert!==null){const t=(sample.chainageM-a.chainageM)/(b.chainageM-a.chainageM||1);invert=a.invert+(b.invert-a.invert)*t;}
+    } else if(nextIndex===0) invert=anchors[0]?.invert??null;
+    if(invert===null&&finite(start)&&finite(end))invert=start+(end-start)*ratio;
     const crown=invert!==null&&od>0?invert+od:null;
     return {chainageM:sample.chainageM,x:sample.x,y:sample.y,groundLevelM:sample.groundLevelM,invertLevelM:invert,crownLevelM:crown,coverDepthM:sample.groundLevelM!==null&&crown!==null?sample.groundLevelM-crown:null};
   });
