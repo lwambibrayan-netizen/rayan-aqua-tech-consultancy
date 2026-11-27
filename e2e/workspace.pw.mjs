@@ -131,8 +131,8 @@ test('engineer opens a project, uses visible CAD navigation, saves and opens 3D'
   await expect(page.locator('.aquacad-shell .aquacad-ribbon-content').getByRole('button', { name: /Fetch DEM from GIS/ })).toBeVisible();
   await ribbon.getByRole('tab', { name: 'Home' }).click();
 
-  await circleMethod.selectOption('center-radius');
   await ribbonContent.getByRole('button', { name: 'Circle' }).click();
+  await ribbonContent.getByLabel('Circle method').selectOption('center-radius');
   const cadCanvas = page.getByRole('application', { name: /AquaCAD drawing canvas/ });
   await cadCanvas.click({ position: { x: 120, y: 120 } });
   await cadCanvas.click({ position: { x: 160, y: 120 } });
