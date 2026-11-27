@@ -615,7 +615,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             if (anchorA || anchorB) item.association = { a: anchorA, b: anchorB };
             setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
           } else if (dimensionKind === 'angular') {
-            const item: DraftAnnotation = { id: makeId(), kind: 'angular', layer: 'DIMENSIONS', vertex: next[0], rayA: next[1], rayB: next[2], offsetM: Math.max(0.001, Math.abs(dimensionOffset * scale)), precision: dimensionStyle.precision };
+            const item: Extract<DraftAnnotation, { kind: 'angular' }> = { id: makeId(), kind: 'angular', layer: 'DIMENSIONS', vertex: next[0], rayA: next[1], rayB: next[2], offsetM: Math.max(0.001, Math.abs(dimensionOffset * scale)), precision: dimensionStyle.precision };
             const vertex = findAssociativeAnchor(next[0], shapes, 0.002, scale), rayA = findAssociativeAnchor(next[1], shapes, 0.002, scale), rayB = findAssociativeAnchor(next[2], shapes, 0.002, scale);
             if (vertex || rayA || rayB) item.association = { vertex, rayA, rayB };
             measureAngularDimension(item);
@@ -1772,9 +1772,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (item.kind === 'leader') { const pts = item.points.map(toDrawing); const last = pts[pts.length - 1]; return <g key={item.id}><polyline points={pts.map(p => p.x + ',' + p.y).join(' ')} fill='none' stroke={color}/><text x={last.x + paperHeight(1.5)} y={last.y - paperHeight(1)} fontSize={paperHeight(item.textHeightMm)} fill={color}>{item.text}</text></g>; }
     if (item.kind === 'radial') {
       const resolved = resolveAssociativeRadialDimension(item, shapes, calibratedMetresPerUnit || 1), center = toDrawing(resolved.center), radius = resolved.radiusM / (calibratedMetresPerUnit || 1);
-      const edge = { x: center.x + Math.cos(item.leaderAngleRad) * radius, y: center.y + Math.sin(item.leaderAngleRad) * radius };
+      const direction = { x: Math.cos(item.leaderAngleRad), y: Math.sin(item.leaderAngleRad) }, edge = { x: center.x + direction.x * radius, y: center.y + direction.y * radius }, opposite = { x: center.x - direction.x * radius, y: center.y - direction.y * radius };
       const label = (item.dimensionType === 'radius' ? 'R ' : 'Ø ') + formatStyledDimension(item.dimensionType === 'radius' ? resolved.radiusM : resolved.radiusM * 2, dimensionStyle);
-      return <g key={item.id} fill='none' stroke={color}><line x1={center.x} y1={center.y} x2={edge.x} y2={edge.y}/><line x1={center.x-paperHeight(1.5)} y1={center.y} x2={center.x+paperHeight(1.5)} y2={center.y}/><line x1={center.x} y1={center.y-paperHeight(1.5)} x2={center.x} y2={center.y+paperHeight(1.5)}/><text x={edge.x+paperHeight(2)} y={edge.y-paperHeight(1)} fontSize={paperHeight(dimensionStyle.textHeightMm)} fill={color} stroke='none'>{label}</text></g>;
+      return <g key={item.id} fill='none' stroke={color}>{item.dimensionType === 'diameter' ? <line x1={opposite.x} y1={opposite.y} x2={edge.x} y2={edge.y}/> : <line x1={center.x} y1={center.y} x2={edge.x} y2={edge.y}/ >}<line x1={center.x-paperHeight(1.5)} y1={center.y} x2={center.x+paperHeight(1.5)} y2={center.y}/><line x1={center.x} y1={center.y-paperHeight(1.5)} x2={center.x} y2={center.y+paperHeight(1.5)}/><text x={edge.x+paperHeight(2)} y={edge.y-paperHeight(1)} fontSize={paperHeight(dimensionStyle.textHeightMm)} fill={color} stroke='none'>{label}</text></g>;
     }
     if (item.kind === 'angular') {
       const resolved = resolveAssociativeAngularDimension(item, shapes, calibratedMetresPerUnit || 1), g = calculateAngularDimension(resolved.vertex, resolved.rayA, resolved.rayB, item.offsetM);
