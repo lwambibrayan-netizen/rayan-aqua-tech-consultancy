@@ -176,7 +176,29 @@ export function offsetLine<T extends CadEditableEntity>(line: T, distance: numbe
   return { ...line, id: newId(), points: [{ x: a.x + nx, y: a.y + ny }, { x: b.x + nx, y: b.y + ny }] };
 }
 
-export function chamferPolylineCorner<T extends CadEditableEntity>(entity: T, cornerIndex: number, distance: number): T {
+
+/** Offset an open polyline with exact parallel segments and bounded miter joins. */
+export function offsetPolyline<T extends CadEditableEntity>(entity:T,distance:number,side:1|-1=1,miterLimit=10):T {
+  if(entity.type!=='polyline'||entity.points.length<2)throw new Error('OFFSET polyline requires an open polyline with at least two vertices.');
+  if(!finite(distance)||distance<0||!finite(miterLimit)||miterLimit<1)throw new Error('OFFSET distance and miter limit must be valid non-negative values.');
+  const pts=entity.points;
+  const shifted=pts.slice(1).map((p,i)=>{
+    const a=pts[i],dx=p.x-a.x,dy=p.y-a.y,len=Math.hypot(dx,dy);
+    if(len<=Number.EPSILON)throw new Error('Cannot offset a polyline with a zero-length segment.');
+    const nx=-dy/len*distance*side,ny=dx/len*distance*side;
+    return [{x:a.x+nx,y:a.y+ny},{x:p.x+nx,y:p.y+ny}] as [Point2D,Point2D];
+  });
+  const result:Point2D[]=[shifted[0][0]];
+  for(let i=1;i<pts.length-1;i++){
+    const hit=infiniteLineIntersection(shifted[i-1][0],shifted[i-1][1],shifted[i][0],shifted[i][1]);
+    if(!hit)throw new Error('OFFSET failed: adjacent segments are parallel or collinear.');
+    if(dist(hit,pts[i])>Math.max(distance,1e-9)*miterLimit+dist(pts[i],pts[i-1]))throw new Error('OFFSET failed: corner miter exceeds the safety limit.');
+    result.push(hit);
+  }
+  result.push(shifted[shifted.length-1][1]);
+  return {...entity,id:newId(),points:result};
+}
+\nexport function chamferPolylineCorner<T extends CadEditableEntity>(entity: T, cornerIndex: number, distance: number): T {
   if (entity.type !== 'polyline' || !Number.isInteger(cornerIndex) || cornerIndex <= 0 || cornerIndex >= entity.points.length - 1) throw new Error('CHAMFER requires an internal polyline corner.');
   if (!finite(distance) || distance <= 0) throw new Error('Chamfer distance must be positive and finite.');
   const pts = entity.points, prev = pts[cornerIndex - 1], corner = pts[cornerIndex], next = pts[cornerIndex + 1];
