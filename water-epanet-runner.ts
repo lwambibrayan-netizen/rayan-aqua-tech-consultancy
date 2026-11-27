@@ -1,4 +1,4 @@
-import { CountType, InitHydOption, LinkProperty, NodeProperty, Project, Workspace } from 'epanet-js';
+import { CountType, InitHydOption, LinkProperty, LinkStatusType, NodeProperty, Project, Workspace } from 'epanet-js';
 import type { HydraulicResults } from './water-epanet-bridge';
 
 export type EpanetSimulationOutput = { results: HydraulicResults[]; engine: string; report: string };
@@ -42,7 +42,7 @@ export async function runEpanetHydraulicSimulation(input: string): Promise<Epane
           flowLps: project.getLinkValue(i, LinkProperty.Flow),
           velocityMs: project.getLinkValue(i, LinkProperty.Velocity),
           headlossM: project.getLinkValue(i, LinkProperty.Headloss),
-          status: String(project.getLinkValue(i, LinkProperty.Status)),
+          status: project.getLinkValue(i, LinkProperty.Status)===LinkStatusType.Open?'OPEN':'CLOSED',
         };
       });
       results.push({ timeSeconds, nodes, links });
