@@ -475,7 +475,7 @@ export function trimPolylineSegment<T extends CadEditableEntity>(
     const la=Math.atan2(left.y-arc.center.y,left.x-arc.center.x),ra=Math.atan2(right.y-arc.center.y,right.x-arc.center.x);
     return trimStart
       ? positiveDirectedAngle(arc.start,la,direction)-positiveDirectedAngle(arc.start,ra,direction)
-      : positiveDirectedAngle(ra,endAngle,direction)-positiveDirectedAngle(la,endAngle,direction);
+      : positiveDirectedAngle(la,endAngle,direction)-positiveDirectedAngle(ra,endAngle,direction);
   })[0];
   const hitAngle=Math.atan2(hit.y-arc.center.y,hit.x-arc.center.x);
   const newSweep=trimStart
