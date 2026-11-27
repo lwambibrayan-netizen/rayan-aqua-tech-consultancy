@@ -12,7 +12,7 @@ describe('CAD editing geometry operations', () => {
     expect(moveEntities([line], { x: 2, y: 3 })[0].points).toEqual([{ x: 2, y: 3 }, { x: 12, y: 3 }]);
     const copied = copyEntities([line], { x: 0, y: 5 }, () => 'copy-1');
     expect(copied[0].id).toBe('copy-1');
-    expect(copied[0].points[0]).toEqual({ x: 0, y: 5 });
+    expect(copied[0]).toMatchObject({ points: [{ x: 0, y: 5 }] });
     expect(line.points[0]).toEqual({ x: 0, y: 0 });
   });
   it('rotates around a pivot and mirrors about an arbitrary axis', () => {
