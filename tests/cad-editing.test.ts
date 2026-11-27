@@ -71,6 +71,13 @@ describe('CAD editing geometry operations', () => {
     expect(result.id).not.toBe(poly.id);
     expect(()=>offsetPolyline({...poly,points:[{x:0,y:0},{x:0,y:0},{x:2,y:2}]},2)).toThrow(/zero-length/);
   });
+
+  it('offsets collinear polyline segments continuously and rejects excessive mitres', () => {
+    const straight:CadEditableEntity={id:'s',type:'polyline',points:[{x:0,y:0},{x:5,y:0},{x:10,y:0}],layer:'WATER'};
+    expect(offsetPolyline(straight,2).points).toEqual([{x:0,y:2},{x:5,y:2},{x:10,y:2}]);
+    const acute:CadEditableEntity={id:'a',type:'polyline',points:[{x:0,y:0},{x:10,y:0},{x:0.1,y:0.1}],layer:'WATER'};
+    expect(()=>offsetPolyline(acute,2)).toThrow(/miter exceeds/);
+  });
   it('chamfers and fillets an internal polyline corner', () => {
     const poly: CadEditableEntity = { id: 'p', type: 'polyline', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], layer: 'WATER' };
     const chamfered = chamferPolylineCorner(poly, 1, 2);
