@@ -12,6 +12,7 @@ import { DIMENSION_STYLES, formatStyledDimension, validateDimensionStyle, append
 import { mergeLayerTemplate, validatePlotConfiguration, type LayerStandard } from './cad-layer-standards';
 import { auditEngineeringDrawing, type EngineeringDrawingAudit } from './cad-engineering-verification';
 import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringBlock, type BlockInsert } from './cad-object-library';
+import { fitViewportScale, validatePaperLayout, type PaperLayout } from './cad-paper-space';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
@@ -334,6 +335,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [newLayerName, setNewLayerName] = useState('');
   const [libraryBlockName, setLibraryBlockName] = useState(ENGINEERING_BLOCK_LIBRARY[0].name);
   const [engineeringAudit, setEngineeringAudit] = useState<EngineeringDrawingAudit | null>(null);
+  const [paperLayouts, setPaperLayouts] = useState<PaperLayout[]>(() => initialData?.paperLayouts || []);
   const [selectedWaterId, setSelectedWaterId] = useState('');
   const [activeWaterTool, setActiveWaterTool] = useState<WaterComponentKind | null>(null);
   const [waterDraft, setWaterDraft] = useState<Point2D[]>([]);
@@ -386,6 +388,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setHistory(createHistory<Shape[]>(initialData?.shapes || []));
     setWaterCad(initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
     setDrafting(createDraftingDocument(initialData?.drafting));
+    setPaperLayouts(initialData?.paperLayouts || []);
+    setEngineeringAudit(null);
     setDimensionStyle(initialData?.drafting?.dimensionStyle || DIMENSION_STYLES.ISO);
     setDraftTool('none');
     setAnnotationDraft([]);
@@ -773,8 +777,28 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Engineering object could not be inserted.'); }
   }
 
+  function createOrRefreshPaperLayout() {
+    if (!calibratedMetresPerUnit) { setMessage('Calibrate the drawing before creating a scaled paper-space viewport.'); return; }
+    const dimensions = sheetDimensionsMm(drafting.sheet);
+    const viewportWidthMm = dimensions.widthMm - 40;
+    const viewportHeightMm = dimensions.heightMm - 80;
+    if (viewportWidthMm <= 0 || viewportHeightMm <= 0) { setMessage('The selected sheet is too small for the default paper-space viewport.'); return; }
+    try {
+      const scaleDenominator = fitViewportScale(viewBox.width * calibratedMetresPerUnit, viewBox.height * calibratedMetresPerUnit, viewportWidthMm, viewportHeightMm, [20,25,50,75,100,150,200,250,500,1000,2000,5000]);
+      const layoutId = 'LAY-' + drafting.sheet.drawingNumber;
+      const layout: PaperLayout = {
+        id: layoutId, name: drafting.sheet.title, sheetSize: drafting.sheet.size, widthMm: dimensions.widthMm, heightMm: dimensions.heightMm, orientation: drafting.sheet.orientation,
+        printableMarginMm: 10, plotScale: '1:1',
+        viewports: [{ id: 'VP-' + drafting.sheet.drawingNumber, name: 'Main model viewport', xMm: 20, yMm: 20, widthMm: viewportWidthMm, heightMm: viewportHeightMm, modelCenter: { x: (viewBox.x + viewBox.width / 2) * calibratedMetresPerUnit, y: (viewBox.y + viewBox.height / 2) * calibratedMetresPerUnit }, scaleDenominator, rotationDeg: 0, locked: true, visible: true }],
+      };
+      const issues = validatePaperLayout(layout);
+      if (issues.length) { setMessage('Paper-space layout could not be created: ' + issues.join(' ')); return; }
+      setPaperLayouts(current => [...current.filter(item => item.id !== layoutId), layout]);
+      setMessage('Paper-space layout created for ' + drafting.sheet.drawingNumber + ' with a locked 1:' + scaleDenominator + ' model viewport. Save the drawing to persist it.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Paper-space layout could not be created.'); }
+  }
   function runEngineeringAudit() {
-    const result = auditEngineeringDrawing({ drafting: { ...drafting, dimensionStyle }, waterCad, shapes, metresPerDrawingUnit: calibratedMetresPerUnit });
+    const result = auditEngineeringDrawing({ drafting: { ...drafting, dimensionStyle }, waterCad, shapes, metresPerDrawingUnit: calibratedMetresPerUnit, paperLayouts });
     setEngineeringAudit(result);
     setMessage('Engineering drawing audit completed: ' + result.status + ' · ' + result.errors + ' errors · ' + result.warnings + ' warnings.');
   }
@@ -785,6 +809,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         shapes,
         waterCad,
         drafting: { ...drafting, dimensionStyle },
+        paperLayouts,
         units,
         schemaVersion: 1,
         coordinateSystem: calibratedMetresPerUnit ? 'calibrated-local-grid' : 'legacy-unscaled-drawing-units',
@@ -1158,9 +1183,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           {!calibratedMetresPerUnit && <span className="muted" style={{ fontSize: 11 }}>Scale calibration required</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="secondary-button" onClick={createOrRefreshPaperLayout} disabled={!calibratedMetresPerUnit}>Create / refresh paper-space layout</button>
           <button className="secondary-button" onClick={runEngineeringAudit}>Run engineering drawing audit</button>
           {engineeringAudit && <strong style={{ fontSize: 12, color: engineeringAudit.status === 'FAIL' ? '#b42318' : engineeringAudit.status === 'PASS_WITH_WARNINGS' ? '#9a6700' : '#16794b' }}>{engineeringAudit.status} · {engineeringAudit.errors} errors · {engineeringAudit.warnings} warnings</strong>}
         </div>
+        <div className="muted" style={{ fontSize: 11 }}>{paperLayouts.length} saved paper-space layouts · {paperLayouts.reduce((sum, layout) => sum + layout.viewports.length, 0)} viewports</div>
         {engineeringAudit && <div style={{ display: 'grid', gap: 4, fontSize: 12 }}>
           <span>{engineeringAudit.summary.shapeCount} CAD entities · {engineeringAudit.summary.annotationCount} annotations · {engineeringAudit.summary.waterComponentCount} water components · {engineeringAudit.summary.layerCount} layers · {engineeringAudit.summary.sheetCount} sheets</span>
           {engineeringAudit.issues.slice(0, 12).map((issue, index) => <div key={issue.code + '-' + index} style={{ color: issue.severity === 'error' ? '#b42318' : '#9a6700' }}>{issue.severity.toUpperCase()} · {issue.code}: {issue.message}</div>)}
