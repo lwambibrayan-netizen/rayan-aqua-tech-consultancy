@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arcFromCenterStartAngle, arcFromThreePoints, circleFromCenterDiameter, circleFromCenterRadius, circleFromDiameter, circleFromThreePoints, ellipseFromBounds } from '../cad-primitives';
+import { arcFromCenterStartAngle, arcFromThreePoints, circleFromCenterDiameter, circleFromCenterRadius, circleFromDiameter, circleFromThreePoints, ellipseFromAxisEndpoints, ellipseFromBounds } from '../cad-primitives';
 
 describe('CAD precision drawing primitives', () => {
   it('constructs circles by centre-radius and diameter endpoints', () => {
@@ -25,6 +25,13 @@ describe('CAD precision drawing primitives', () => {
     expect(ellipse.points[0]).toEqual(ellipse.points[64]);
     expect(Math.max(...ellipse.points.map(p=>p.x))).toBeCloseTo(10);
     expect(Math.max(...ellipse.points.map(p=>p.y))).toBeCloseTo(4);
+  });
+  it('creates a rotated ellipse from major-axis endpoints and a minor-axis point', () => {
+    const ellipse=ellipseFromAxisEndpoints({x:0,y:0},{x:4,y:0},{x:2,y:1},'rotated','0');
+    expect(ellipse.points).toHaveLength(65);
+    expect(Math.max(...ellipse.points.map(p=>p.x))).toBeCloseTo(4);
+    expect(Math.max(...ellipse.points.map(p=>p.y))).toBeCloseTo(1);
+    expect(()=>ellipseFromAxisEndpoints({x:0,y:0},{x:4,y:0},{x:2,y:3},'bad','0')).toThrow(/minor radius/);
   });
   it('creates a true circular arc using a signed bulge and honours the through point', () => {
     const arc=arcFromThreePoints({x:1,y:0},{x:Math.SQRT1_2,y:Math.SQRT1_2},{x:0,y:1},'a','0');
