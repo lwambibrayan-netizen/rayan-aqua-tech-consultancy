@@ -1232,40 +1232,43 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const light = new THREE.DirectionalLight(0xffffff, 2);
     light.position.set(300, 700, 500);
     scene.add(light);
-    scene.add(new THREE.GridHelper(1000, 20));
+    // Engineering model grid is sized after model extents are calculated.
     shapes.forEach(shape => {
       const material = new THREE.MeshStandardMaterial({ color: '#167b78' });
       if (shape.type === 'circle') {
         const radius = Math.max(shape.radius || 4, 2);
-        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, 6, 24), material);
-        mesh.position.set(shape.points[0].x - 500, 3, shape.points[0].y - 325);
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius*(calibratedMetresPerUnit??1), radius*(calibratedMetresPerUnit??1), 0.1, 24), material);
+        mesh.position.set(shape.points[0].x*(calibratedMetresPerUnit??1)-centreX, 0, shape.points[0].y*(calibratedMetresPerUnit??1)-centreY);
         scene.add(mesh);
       } else if (shape.type === 'rect') {
         const a = shape.points[0];
         const b = shape.points[1];
         const mesh = new THREE.Mesh(
-          new THREE.BoxGeometry(Math.max(1, Math.abs(b.x - a.x)), 8, Math.max(1, Math.abs(b.y - a.y))),
+          new THREE.BoxGeometry(Math.max(0.1, Math.abs(b.x - a.x)*(calibratedMetresPerUnit??1)), 0.1, Math.max(0.1, Math.abs(b.y - a.y)*(calibratedMetresPerUnit??1))),
           material
         );
-        mesh.position.set((a.x + b.x) / 2 - 500, 4, (a.y + b.y) / 2 - 325);
+        mesh.position.set((a.x + b.x) / 2*(calibratedMetresPerUnit??1)-centreX, 0, (a.y + b.y) / 2*(calibratedMetresPerUnit??1)-centreY);
         scene.add(mesh);
       } else if (shape.points.length > 1) {
         const curve = new THREE.CatmullRomCurve3(
-          (shape.type==='polyline'?expandedPolylinePoints(shape):shape.points).map(point => new THREE.Vector3(point.x - 500, 3, point.y - 325))
+          (shape.type==='polyline'?expandedPolylinePoints(shape):shape.points).map(point => new THREE.Vector3(point.x*(calibratedMetresPerUnit??1)-centreX, 0, point.y*(calibratedMetresPerUnit??1)-centreY))
         );
         scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 30, 1.8, 8, false), material));
       }
     });
     // Render the engineering network from project-metre XYZ geometry, not as a flat 2D extrusion.
+    const horizontalScale = waterCad.horizontalUnits === 'ft' ? 0.3048 : 1;
     const networkPoints = waterCad.components.flatMap(component => component.geometry);
+    const cadPoints = shapes.flatMap(shape => shape.points.map(point=>({x:point.x*(calibratedMetresPerUnit??1),y:point.y*(calibratedMetresPerUnit??1)})));
     const terrainAligned = !!terrainGrid && waterCad.horizontalUnits === 'm' && waterCad.horizontalCrs === terrainGrid.crs && waterCad.verticalDatum === terrainGrid.verticalDatum;
     const terrainValues = (terrainAligned ? terrainGrid?.elevationsM : undefined)?.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
     const verticalBase = terrainValues.length ? Math.min(...terrainValues) : networkPoints.length ? Math.min(...networkPoints.map(point => point.z ?? point.invertLevelM ?? 0)) : 0;
-    const allX = [...networkPoints.map(point => point.x), ...(terrainAligned && terrainGrid ? [terrainGrid.originX, terrainGrid.originX + (terrainGrid.width-1)*terrainGrid.cellSizeX] : [])];
-    const allY = [...networkPoints.map(point => point.y), ...(terrainAligned && terrainGrid ? [terrainGrid.originY, terrainGrid.originY + (terrainGrid.height-1)*terrainGrid.cellSizeY] : [])];
+    const allX = [...networkPoints.map(point => point.x*horizontalScale), ...cadPoints.map(point=>point.x), ...(terrainAligned && terrainGrid ? [terrainGrid.originX, terrainGrid.originX + (terrainGrid.width-1)*terrainGrid.cellSizeX] : [])];
+    const allY = [...networkPoints.map(point => point.y*horizontalScale), ...cadPoints.map(point=>point.y), ...(terrainAligned && terrainGrid ? [terrainGrid.originY, terrainGrid.originY + (terrainGrid.height-1)*terrainGrid.cellSizeY] : [])];
     const centreX = allX.length ? (Math.min(...allX)+Math.max(...allX))/2 : 0;
     const centreY = allY.length ? (Math.min(...allY)+Math.max(...allY))/2 : 0;
     const span = Math.max(allX.length ? Math.max(...allX)-Math.min(...allX) : 0, allY.length ? Math.max(...allY)-Math.min(...allY) : 0, 10);
+    scene.add(new THREE.GridHelper(span*1.5,Math.max(10,Math.round(span/5))));
     camera.position.set(span*0.9, span*0.8, span*1.1);
     camera.lookAt(0,0,0);
     if (terrainAligned && terrainGrid) {
@@ -1368,7 +1371,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         }
       });
     };
-  }, [view, shapes, waterCad, terrainGrid, hydraulicOverlay]);
+  }, [view, shapes, waterCad, terrainGrid, hydraulicOverlay, calibratedMetresPerUnit]);
 
   const formatLength = (drawingUnits: number) => calibratedMetresPerUnit
     ? ((drawingUnits * calibratedMetresPerUnit) * (units === 'mm' ? 1000 : 1)).toFixed(3) + ' ' + units
