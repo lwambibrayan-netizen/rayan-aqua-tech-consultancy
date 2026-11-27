@@ -38,7 +38,7 @@
 The development branch was tested using the independent ezdxf 1.4.5 implementation:
 
 1. AquaCAD generated a DXF R2000 (AC1015) file with metric millimetre units, line, circle, closed polyline, text, layers and dimension graphics. ezdxf opened it and audited it with zero errors and zero fixes.
-2. A separate R2010 (AC1024) DXF created by ezdxf with millimetre units, line, circle, closed polyline, text and a transformed block INSERT was imported by AquaCAD. It produced five editable shapes, one text annotation, detected 0.001 metres per drawing unit, and no import warnings.
+2. A separate R2010 (AC1024) DXF created by ezdxf with millimetre units, line, circle, closed polyline, text and a nested, transformed block INSERT was imported by AquaCAD. It produced five editable shapes, one text annotation, detected 0.001 metres per drawing unit, and no import warnings.
 3. The imported external drawing was exported again by AquaCAD and reopened/audited by ezdxf; the round-trip file had zero audit errors and zero audit fixes.
 
 This is independent parser-level interoperability evidence. A final visual open/save check in AutoCAD, QCAD or LibreCAD is still required before declaring full desktop-CAD compatibility.
