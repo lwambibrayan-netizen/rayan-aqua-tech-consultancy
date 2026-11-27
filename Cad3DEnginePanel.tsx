@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair, Maximize2, Minimize2, ChevronDown } from 'lucide-react';
 import { api } from './client';
 import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
-import { createDraftingDocument, makeAlignedDimension, makeLinearDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, findAssociativeAnchor, resolveAssociativeDimension, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
+import { createDraftingDocument, makeAlignedDimension, makeLinearDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, findAssociativeAnchor, findAssociativeCircle, resolveAssociativeDimension, resolveAssociativeRadialDimension, resolveAssociativeAngularDimension, measureAngularDimension, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
 import { exportDraftingDxf, importDraftingDxf, type DxfShape } from './cad-dxf';
 import { DIMENSION_STYLES, formatStyledDimension, validateDimensionStyle, appendDrawingRevision, type DimensionStyle } from './cad-dimension-standards';
 import { synchronizeLayerTemplate, validateLayerStandard, validatePlotConfiguration, type LayerStandard } from './cad-layer-standards';
@@ -614,6 +614,20 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             const anchorB = findAssociativeAnchor(next[1], shapes, 0.002, scale);
             if (anchorA || anchorB) item.association = { a: anchorA, b: anchorB };
             setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
+          } else if (dimensionKind === 'angular') {
+            const item: DraftAnnotation = { id: makeId(), kind: 'angular', layer: 'DIMENSIONS', vertex: next[0], rayA: next[1], rayB: next[2], offsetM: Math.max(0.001, Math.abs(dimensionOffset * scale)), precision: dimensionStyle.precision };
+            const vertex = findAssociativeAnchor(next[0], shapes, 0.002, scale), rayA = findAssociativeAnchor(next[1], shapes, 0.002, scale), rayB = findAssociativeAnchor(next[2], shapes, 0.002, scale);
+            if (vertex || rayA || rayB) item.association = { vertex, rayA, rayB };
+            measureAngularDimension(item);
+            setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
+            setMessage('Associative angular dimension placed. Snapped line/polyline vertices will update its angle when edited.');
+            setDraftTool('none'); setAnnotationDraft([]); return;
+          } else if (dimensionKind === 'radius' || dimensionKind === 'diameter') {
+            const circleId = findAssociativeCircle(next[0], shapes, 0.002, scale);
+            const item: DraftAnnotation = { id: makeId(), kind: 'radial', layer: 'DIMENSIONS', circleId, center: next[0], dimensionType: dimensionKind, leaderAngleRad: Math.atan2(next[2].y-next[0].y, next[2].x-next[0].x), precision: dimensionStyle.precision };
+            setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
+            setMessage(circleId ? 'Associative circle dimension placed. Radius and diameter update when the circle changes.' : 'Radius/diameter dimension placed without an associative circle reference.');
+            setDraftTool('none'); setAnnotationDraft([]); return;
           } else {
             const id = makeId(), graphics: Shape[] = [], pushLine = (a: Point2D, b: Point2D) => graphics.push({ id: makeId(), type: 'line', points: [{x:a.x/scale,y:a.y/scale},{x:b.x/scale,y:b.y/scale}], layer: 'DIMENSIONS' });
             let labelPoint: Point2D, label = '';
@@ -1351,7 +1365,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const margin = 10, titleBlockHeight = 42, usableWidth = widthMm - margin * 2, usableHeight = heightMm - margin * 2 - titleBlockHeight;
     const allPoints = shapes.flatMap(shape => shape.points)
       .concat(waterCad.components.flatMap(item => item.geometry.map(p => ({ x: p.x / metresPerUnit, y: p.y / metresPerUnit }))))
-      .concat(drafting.annotations.flatMap(item => item.kind === 'text' ? [{x:item.at.x/metresPerUnit,y:item.at.y/metresPerUnit}] : item.kind === 'leader' ? item.points.map(p=>({x:p.x/metresPerUnit,y:p.y/metresPerUnit})) : [{x:item.a.x/metresPerUnit,y:item.a.y/metresPerUnit},{x:item.b.x/metresPerUnit,y:item.b.y/metresPerUnit}]));
+      .concat(drafting.annotations.flatMap(item => item.kind === 'text' ? [{x:item.at.x/metresPerUnit,y:item.at.y/metresPerUnit}] : item.kind === 'leader' ? item.points.map(p=>({x:p.x/metresPerUnit,y:p.y/metresPerUnit})) : item.kind === 'radial' ? [{x:item.center.x/metresPerUnit,y:item.center.y/metresPerUnit}] : item.kind === 'angular' ? [item.vertex,item.rayA,item.rayB].map(p=>({x:p.x/metresPerUnit,y:p.y/metresPerUnit})) : [{x:item.a.x/metresPerUnit,y:item.a.y/metresPerUnit},{x:item.b.x/metresPerUnit,y:item.b.y/metresPerUnit}]));
     const minX = allPoints.length ? Math.min(...allPoints.map(p=>p.x)) : 0;
     const maxX = allPoints.length ? Math.max(...allPoints.map(p=>p.x)) : 1;
     const minY = allPoints.length ? Math.min(...allPoints.map(p=>p.y)) : 0;
@@ -1398,6 +1412,15 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const annotations=drafting.annotations.filter(item=>allowed.has(item.layer)).map(item=>{
       const color=plotColor(layer(item.layer)?.color||'#111111');
       if(item.kind==='text'){const p=mapPoint({x:item.at.x/metresPerUnit,y:item.at.y/metresPerUnit});return '<text x="'+p.x+'" y="'+p.y+'" font-size="'+item.heightMm+'" fill="'+color+'">'+safe(item.text)+'</text>';}
+      if(item.kind==='radial'){
+        const resolved=resolveAssociativeRadialDimension(item,shapes,calibratedMetresPerUnit||1),center=mapPoint({x:resolved.center.x/metresPerUnit,y:resolved.center.y/metresPerUnit}),radius=resolved.radiusM*1000/drawingScaleDenominator;
+        const edge={x:center.x+Math.cos(item.leaderAngleRad)*radius,y:center.y-Math.sin(item.leaderAngleRad)*radius},value=item.dimensionType==='radius'?resolved.radiusM:resolved.radiusM*2,label=(item.dimensionType==='radius'?'R ':'Ø ')+formatStyledDimension(value,dimensionStyle);
+        return '<line x1="'+center.x+'" y1="'+center.y+'" x2="'+edge.x+'" y2="'+edge.y+'" stroke="'+color+'" stroke-width="0.18"/><text x="'+(edge.x+1)+'" y="'+(edge.y-1)+'" font-size="2.5" fill="'+color+'">'+safe(label)+'</text>';
+      }
+      if(item.kind==='angular'){
+        const resolved=resolveAssociativeAngularDimension(item,shapes,calibratedMetresPerUnit||1),g=calculateAngularDimension(resolved.vertex,resolved.rayA,resolved.rayB,item.offsetM),pts=Array.from({length:25},(_,i)=>{const a=g.arc.startAngleRad+(g.arc.endAngleRad-g.arc.startAngleRad)*i/24;return mapPoint({x:(g.arc.center.x+Math.cos(a)*g.arc.radius)/metresPerUnit,y:(g.arc.center.y+Math.sin(a)*g.arc.radius)/metresPerUnit});}),at=mapPoint({x:g.labelPoint.x/metresPerUnit,y:g.labelPoint.y/metresPerUnit}),label=(measureAngularDimension(resolved)*180/Math.PI).toFixed(item.precision)+'°';
+        return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="'+color+'" stroke-width="0.18"/><text x="'+at.x+'" y="'+at.y+'" font-size="2.5" fill="'+color+'">'+safe(label)+'</text>';
+      }
       if(item.kind==='leader'){const pts=item.points.map(p=>mapPoint({x:p.x/metresPerUnit,y:p.y/metresPerUnit}));const last=pts[pts.length-1];return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="'+color+'" stroke-width="0.18"/><text x="'+(last.x+1)+'" y="'+(last.y-1)+'" font-size="'+item.textHeightMm+'" fill="'+color+'">'+safe(item.text)+'</text>';}
       const resolved=resolveAssociativeDimension(item,shapes,calibratedMetresPerUnit||1),a=mapPoint({x:resolved.a.x/metresPerUnit,y:resolved.a.y/metresPerUnit}),b=mapPoint({x:resolved.b.x/metresPerUnit,y:resolved.b.y/metresPerUnit});
       const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len,off=item.offsetM*1000/drawingScaleDenominator;
@@ -1747,6 +1770,18 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const toDrawing = (p: Point2D) => ({ x: p.x / (calibratedMetresPerUnit || 1), y: p.y / (calibratedMetresPerUnit || 1) });
     if (item.kind === 'text') { const at = toDrawing(item.at); return <text key={item.id} x={at.x} y={at.y} fontSize={paperHeight(item.heightMm)} fill={color}>{item.text}</text>; }
     if (item.kind === 'leader') { const pts = item.points.map(toDrawing); const last = pts[pts.length - 1]; return <g key={item.id}><polyline points={pts.map(p => p.x + ',' + p.y).join(' ')} fill='none' stroke={color}/><text x={last.x + paperHeight(1.5)} y={last.y - paperHeight(1)} fontSize={paperHeight(item.textHeightMm)} fill={color}>{item.text}</text></g>; }
+    if (item.kind === 'radial') {
+      const resolved = resolveAssociativeRadialDimension(item, shapes, calibratedMetresPerUnit || 1), center = toDrawing(resolved.center), radius = resolved.radiusM / (calibratedMetresPerUnit || 1);
+      const edge = { x: center.x + Math.cos(item.leaderAngleRad) * radius, y: center.y + Math.sin(item.leaderAngleRad) * radius };
+      const label = (item.dimensionType === 'radius' ? 'R ' : 'Ø ') + formatStyledDimension(item.dimensionType === 'radius' ? resolved.radiusM : resolved.radiusM * 2, dimensionStyle);
+      return <g key={item.id} fill='none' stroke={color}><line x1={center.x} y1={center.y} x2={edge.x} y2={edge.y}/><line x1={center.x-paperHeight(1.5)} y1={center.y} x2={center.x+paperHeight(1.5)} y2={center.y}/><line x1={center.x} y1={center.y-paperHeight(1.5)} x2={center.x} y2={center.y+paperHeight(1.5)}/><text x={edge.x+paperHeight(2)} y={edge.y-paperHeight(1)} fontSize={paperHeight(dimensionStyle.textHeightMm)} fill={color} stroke='none'>{label}</text></g>;
+    }
+    if (item.kind === 'angular') {
+      const resolved = resolveAssociativeAngularDimension(item, shapes, calibratedMetresPerUnit || 1), g = calculateAngularDimension(resolved.vertex, resolved.rayA, resolved.rayB, item.offsetM);
+      const pts = Array.from({length:25},(_,i)=>{const a=g.arc.startAngleRad+(g.arc.endAngleRad-g.arc.startAngleRad)*i/24;return toDrawing({x:g.arc.center.x+Math.cos(a)*g.arc.radius,y:g.arc.center.y+Math.sin(a)*g.arc.radius});});
+      const at = toDrawing(g.labelPoint), label = (measureAngularDimension(resolved)*180/Math.PI).toFixed(item.precision)+'°';
+      return <g key={item.id} fill='none' stroke={color}><polyline points={pts.map(p=>p.x+','+p.y).join(' ')}/><line x1={resolved.vertex.x/(calibratedMetresPerUnit||1)} y1={resolved.vertex.y/(calibratedMetresPerUnit||1)} x2={resolved.rayA.x/(calibratedMetresPerUnit||1)} y2={resolved.rayA.y/(calibratedMetresPerUnit||1)}/><line x1={resolved.vertex.x/(calibratedMetresPerUnit||1)} y1={resolved.vertex.y/(calibratedMetresPerUnit||1)} x2={resolved.rayB.x/(calibratedMetresPerUnit||1)} y2={resolved.rayB.y/(calibratedMetresPerUnit||1)}/><text x={at.x} y={at.y} fontSize={paperHeight(dimensionStyle.textHeightMm)} fill={color} stroke='none'>{label}</text></g>;
+    }
     const resolved = resolveAssociativeDimension(item, shapes, calibratedMetresPerUnit || 1);
     const a = toDrawing(resolved.a), b = toDrawing(resolved.b);
     const dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy) || 1;
