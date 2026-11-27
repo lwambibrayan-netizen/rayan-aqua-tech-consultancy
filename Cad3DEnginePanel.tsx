@@ -411,6 +411,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   function pointerPosition(event: React.PointerEvent<SVGSVGElement>) {
+    if (drafting.layers.find(item => item.name === layer)?.locked) { setMessage('The current layer is locked. Choose an unlocked layer before drawing.'); return; }
     const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
     const resolved = resolveDraftPoint(event.currentTarget, raw);
     return { raw, snapped: resolved.snapped, point: resolved.point };
@@ -688,6 +689,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const selectedShapes = shapes.filter(shape => selectedShapeIds.includes(shape.id));
 
   function previewDrawing(next: Shape[], label: string) {
+    if (selectedShapes.some(shape => drafting.layers.find(item => item.name === shape.layer)?.locked)) { setMessage('Selection includes locked-layer entities. Unlock the layer before modifying them.'); return; }
     setPreviewShapes(next);
     setMessage(label + ' preview ready. Apply preview to commit, or cancel it.');
   }
@@ -700,6 +702,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
 
   function updateSelected(patch: Partial<Shape>) {
     if (!selectedShapeId) return;
+    if (drafting.layers.find(item => item.name === selectedShape?.layer)?.locked) { setMessage('This layer is locked. Unlock it before editing entities.'); return; }
     setShapes(rows => rows.map(shape => shape.id === selectedShapeId ? { ...shape, ...patch } : shape));
   }
 
@@ -943,8 +946,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     }
     return (selectedShape.type === 'line' ? 'Length: ' : 'Total path length: ') + formatLength(total);
   })() : '';
-  const layerNames = Array.from(new Set(shapes.map(shape => shape.layer || '0'))).sort();
-  const visibleShapes = shapes.filter(shape => !hiddenLayers.includes(shape.layer || '0'));
+  const layerNames = Array.from(new Set([...drafting.layers.map(item => item.name), ...shapes.map(shape => shape.layer || '0')])).sort();
+  const visibleShapes = shapes.filter(shape => !hiddenLayers.includes(shape.layer || '0') && drafting.layers.find(item => item.name === (shape.layer || '0'))?.visible !== false);
   const renderedWaterComponents = waterCad.components.map(component => {
     const pts = component.geometry.map(point => ({ x: point.x / (calibratedMetresPerUnit || 1), y: point.y / (calibratedMetresPerUnit || 1) }));
     const p = pts[0] || {x:0,y:0};
@@ -993,9 +996,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     return <g key={item.id} fill='none' stroke={color} strokeWidth={Math.max(viewBox.width / 1800, 0.45)}><line x1={a.x} y1={a.y} x2={p1.x} y2={p1.y}/><line x1={b.x} y1={b.y} x2={p2.x} y2={p2.y}/><line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}/><text x={mid.x} y={mid.y - h * 0.2} textAnchor='middle' fontSize={h} fill={color} stroke='none'>{label}</text></g>;
   });
   const renderedShapes = visibleShapes.map(shape => {
-    const color = shape.layer === 'WATER_NETWORK' ? '#167b78' : '#c08c3c';
+    const layerStyle = drafting.layers.find(item => item.name === (shape.layer || '0'));
+    const color = layerStyle?.color || (shape.layer === 'WATER_NETWORK' ? '#167b78' : '#c08c3c');
+    const lineWeight = Math.max(0.7, (layerStyle?.lineWeightMm || 0.25) * 5);
     if (shape.type === 'circle') {
-      return <circle data-shape-id={shape.id} key={shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius || 12} fill="none" stroke={selectedShapeIds.includes(shape.id) ? '#d04d3f' : color} strokeWidth={selectedShapeIds.includes(shape.id) ? 4 : 2.5} />;
+      return <circle data-shape-id={shape.id} key={shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius || 12} fill="none" stroke={selectedShapeIds.includes(shape.id) ? '#d04d3f' : color} strokeWidth={selectedShapeIds.includes(shape.id) ? 4 : lineWeight} />;
     }
     if (shape.type === 'rect') {
       const a = shape.points[0];
@@ -1003,7 +1008,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       return <rect data-shape-id={shape.id} key={shape.id} x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.abs(b.x - a.x)} height={Math.abs(b.y - a.y)} fill="none" stroke={selectedShapeIds.includes(shape.id) ? '#d04d3f' : color} strokeWidth={selectedShapeIds.includes(shape.id) ? 4 : 2.5} />;
     }
     if (shape.type === 'line') {
-      return <line data-shape-id={shape.id} key={shape.id} x1={shape.points[0].x} y1={shape.points[0].y} x2={shape.points[1].x} y2={shape.points[1].y} stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 5 : 3} />;
+      return <line data-shape-id={shape.id} key={shape.id} x1={shape.points[0].x} y1={shape.points[0].y} x2={shape.points[1].x} y2={shape.points[1].y} stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 5 : lineWeight} />;
     }
     return <path data-shape-id={shape.id} key={shape.id} d={polylineSvgPath(shape)} fill="none" stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 5 : 3} />;
   });
@@ -1240,7 +1245,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             ))}
             {mode === 'polyline' && draft.length > 1 && <button className="primary-button" onClick={finishPolyline}>Finish polyline</button>}
             <button className="secondary-button" onClick={() => { setShapes([]); setDraft([]); }}>Clear drawing</button>
-            <input value={layer} onChange={event => setLayer(event.target.value)} aria-label="CAD layer" style={{ width: 145, padding: 7 }} />
+            <select value={layer} onChange={event => setLayer(event.target.value)} aria-label="CAD layer" style={{ width: 175, padding: 7 }}>{drafting.layers.map(item => <option key={item.name} value={item.name} disabled={item.locked}>{item.name}{item.locked ? " (locked)" : ""}</option>)}</select>
           </div>
           <svg
             ref={svgRef}
