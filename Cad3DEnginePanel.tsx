@@ -1297,7 +1297,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     };
     waterCad.components.forEach(component=>{
       const baseLevel=component.properties.hydraulicElevationM??component.geometry[0]?.z??component.geometry[0]?.invertLevelM??0;
-      const to3d=(point:{x:number;y:number;z?:number;invertLevelM?:number})=>new THREE.Vector3(point.x-centreX,(point.z??point.invertLevelM??baseLevel)-verticalBase,point.y-centreY);
+      const to3d=(point:{x:number;y:number;z?:number;invertLevelM?:number})=>new THREE.Vector3(point.x*horizontalScale-centreX,(point.z??point.invertLevelM??baseLevel)-verticalBase,point.y*horizontalScale-centreY);
       const points=component.geometry.map(to3d);
       const overlayItem=hydraulicOverlay?.items.find(item=>item.componentId===component.id);
       const colour=overlayItem?.colour??'#087e83';
