@@ -75,7 +75,7 @@ describe('CAD editing geometry operations', () => {
     const poly: CadEditableEntity = { id: 'p', type: 'polyline', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], layer: 'WATER' };
     const chamfered = chamferPolylineCorner(poly, 1, 2);
     expect(chamfered.points).toEqual([{ x: 0, y: 0 }, { x: 8, y: 0 }, { x: 10, y: 2 }, { x: 10, y: 10 }]);
-    const filleted = filletPolylineCorner(poly, 1, 2, 8);
+    const filleted = filletPolylineCorner(poly, 1, 2);
     expect(filleted.points).toHaveLength(4);
     expect(filleted.points[1]).toEqual({x:8,y:0});
     expect(filleted.points[2]).toEqual({x:10,y:2});
@@ -91,7 +91,7 @@ describe('CAD editing geometry operations', () => {
   });
   it('keeps fillet tangent points at the requested radius and rejects oversized corners', () => {
     const poly: CadEditableEntity = { id: 'p', type: 'polyline', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], layer: 'WATER' };
-    const result = filletPolylineCorner(poly, 1, 2, 16);
+    const result = filletPolylineCorner(poly, 1, 2);
     const start = result.points[1], end = result.points[2];
     expect(start).toEqual({x:8,y:0});
     expect(end).toEqual({x:10,y:2});
@@ -110,6 +110,14 @@ describe('CAD editing geometry operations', () => {
     expect(selectEntitiesInWindow([cross,falseHit,inside,circle],w,false).map(x=>x.id)).toEqual(['inside']);
   });
 
+
+  it('uses the circular arc rather than the tangent chord for crossing selection', () => {
+    const poly:CadEditableEntity={id:'arc',type:'polyline',points:[{x:0,y:0},{x:10,y:0},{x:10,y:10}],layer:'WATER'};
+    const fillet=filletPolylineCorner(poly,1,2);
+    const window={minX:9.3,minY:0.5,maxX:9.5,maxY:0.7};
+    expect(selectEntitiesInWindow([fillet],window,true)).toHaveLength(1);
+    expect(selectEntitiesInWindow([fillet],window,false)).toHaveLength(0);
+  });
   it('mirrors arc bulges and retains exact circular fillet geometry', () => {
     const poly:CadEditableEntity={id:'p',type:'polyline',points:[{x:0,y:0},{x:10,y:0},{x:10,y:10}],layer:'WATER'};
     const fillet=filletPolylineCorner(poly,1,2);
