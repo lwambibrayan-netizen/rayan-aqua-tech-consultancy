@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createHistory, pushHistory, undoHistory, redoHistory } from './cad-geometry';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
@@ -237,7 +238,11 @@ function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled:
 }
 
 export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures = [], onSave }: Props) {
-  const [shapes, setShapes] = useState<Shape[]>(initialData?.shapes || []);
+  const [history, setHistory] = useState(() => createHistory<Shape[]>(initialData?.shapes || []));
+  const shapes = history.present;
+  function setShapes(next: Shape[] | ((current: Shape[]) => Shape[])) {
+    setHistory(current => pushHistory(current, typeof next === 'function' ? next(current.present) : next));
+  }
   const [mode, setMode] = useState<'select' | 'line' | 'polyline' | 'rect' | 'circle'>('select');
   const [draft, setDraft] = useState<Point2D[]>([]);
   const [view, setView] = useState<'2d' | '3d'>('2d');
@@ -253,12 +258,15 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [snapMarker, setSnapMarker] = useState<SnapPoint | null>(null);
   const [selectedShapeId, setSelectedShapeId] = useState('');
   const [cursorPoint, setCursorPoint] = useState<Point2D | null>(null);
+  const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: WIDTH, height: HEIGHT });
+  const [panMode, setPanMode] = useState(false);
+  const panRef = useRef<{ pointerId: number; x: number; y: number; viewBox: typeof viewBox } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setShapes(initialData?.shapes || []);
+    setHistory(createHistory<Shape[]>(initialData?.shapes || []));
     setDraft([]);
   }, [initialData]);
 
@@ -290,17 +298,27 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
+    if (panRef.current && panRef.current.pointerId === event.pointerId) {
+      const svg = event.currentTarget;
+      const rect = svg.getBoundingClientRect();
+      const start = panRef.current;
+      const dx = (event.clientX - start.x) * start.viewBox.width / Math.max(rect.width, 1);
+      const dy = (event.clientY - start.y) * start.viewBox.height / Math.max(rect.height, 1);
+      setViewBox({ ...start.viewBox, x: start.viewBox.x - dx, y: start.viewBox.y - dy });
+      return;
+    }
     const { point, snapped } = pointerPosition(event);
     setCursorPoint(point);
     setSnapMarker(snapped);
   }
 
   function handlePointerLeave() {
-    setSnapMarker(null);
+    if (!panRef.current) setSnapMarker(null);
     setCursorPoint(null);
   }
 
   function handleCanvasClick(event: React.MouseEvent<SVGSVGElement>) {
+    if (panRef.current || panMode) return;
     if (mode === 'select') {
       const target = (event.target as SVGElement).closest('[data-shape-id]') as SVGElement | null;
       setSelectedShapeId(target?.getAttribute('data-shape-id') || '');
@@ -463,7 +481,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       await onSave({
         shapes,
         units,
-        format: 'RayanAqua CAD v2',
+        schemaVersion: 1,
+        coordinateSystem: 'legacy-drawing-units',
+        calibratedMetresPerUnit: null,
+        viewport: viewBox,
+        format: 'RayanAqua CAD v3',
         updatedAt: new Date().toISOString(),
       });
       setMessage('Drawing saved to this project. It will be available when you sign in again.');
@@ -593,6 +615,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <button className={snapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setSnapEnabled(value => !value)}><Crosshair size={15} /> Object snap: {snapEnabled ? 'ON' : 'OFF'}</button>
           <button className={orthoEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setOrthoEnabled(value => !value)}>Ortho: {orthoEnabled ? 'ON' : 'OFF'}</button>
           <button className={gridSnapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setGridSnapEnabled(value => !value)}>Grid snap: {gridSnapEnabled ? 'ON' : 'OFF'}</button>
+          <button className={panMode ? 'primary-button' : 'secondary-button'} onClick={() => setPanMode(value => !value)}>Pan: {panMode ? 'ON' : 'OFF'}</button>
+          <button className="secondary-button" onClick={() => setViewBox({ x: 0, y: 0, width: WIDTH, height: HEIGHT })}>Reset view</button>
+          <button className="secondary-button" disabled={!history.past.length} onClick={() => setHistory(current => undoHistory(current))}>Undo</button>
+          <button className="secondary-button" disabled={!history.future.length} onClick={() => setHistory(current => redoHistory(current))}>Redo</button>
           <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>Grid step <input type="number" min="0.1" step="any" value={gridSize} onChange={event => setGridSize(Math.max(0.1, Number(event.target.value) || 10))} style={{ width: 66, padding: 6 }} /></label>
         </div>
       </div>
@@ -611,8 +637,34 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           </div>
           <svg
             ref={svgRef}
-            viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+            viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
             onClick={handleCanvasClick}
+            onWheel={event => {
+              event.preventDefault();
+              const anchor = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
+              const factor = Math.exp(event.deltaY * 0.001);
+              setViewBox(current => {
+                const nextWidth = Math.max(5, Math.min(20000, current.width * factor));
+                const nextHeight = nextWidth * current.height / current.width;
+                const rx = (anchor.x - current.x) / current.width;
+                const ry = (anchor.y - current.y) / current.height;
+                return { x: anchor.x - rx * nextWidth, y: anchor.y - ry * nextHeight, width: nextWidth, height: nextHeight };
+              });
+            }}
+            onPointerDown={event => {
+              if (panMode || event.button === 1) {
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                panRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, viewBox };
+              }
+            }}
+            onPointerUp={event => {
+              if (panRef.current?.pointerId === event.pointerId) {
+                panRef.current = null;
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
+            onPointerCancel={() => { panRef.current = null; }}
             onPointerMove={handlePointerMove}
             onPointerLeave={handlePointerLeave}
             style={{
@@ -624,8 +676,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               backgroundSize: '25px 25px',
               border: '1px solid #dce5e2',
               borderRadius: 8,
-              cursor: mode === 'select' ? 'default' : 'crosshair',
-              touchAction: 'pan-y',
+              cursor: panMode ? 'grab' : mode === 'select' ? 'default' : 'crosshair',
+              touchAction: 'none',
             }}
           >
             {renderedShapes}
