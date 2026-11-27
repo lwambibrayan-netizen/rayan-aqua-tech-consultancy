@@ -40,12 +40,12 @@ export const DEFAULT_DRAFT_LAYERS: DraftLayer[] = [
   { name: 'WATER_VALVE', color: '#a45c20', lineType: 'CONTINUOUS', lineWeightMm: 0.35, visible: true, locked: false, plot: true },
   { name: 'WATER_STRUCTURE', color: '#536b9b', lineType: 'CONTINUOUS', lineWeightMm: 0.35, visible: true, locked: false, plot: true },
   { name: 'WATER_CHAMBER', color: '#70558f', lineType: 'CONTINUOUS', lineWeightMm: 0.35, visible: true, locked: false, plot: true },
-  { name: 'DIMENSIONS', color: '#202020', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
-  { name: 'TEXT', color: '#202020', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
+  { name: 'DIMENSIONS', color: '#ffffff', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
+  { name: 'TEXT', color: '#ffffff', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
   { name: 'CENTERLINES', color: '#777777', lineType: 'CENTER', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
   { name: 'HIDDEN', color: '#777777', lineType: 'HIDDEN', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
-  { name: 'BOUNDARY', color: '#202020', lineType: 'CONTINUOUS', lineWeightMm: 0.5, visible: true, locked: false, plot: true },
-  { name: 'ANNOTATION', color: '#202020', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
+  { name: 'BOUNDARY', color: '#ffffff', lineType: 'CONTINUOUS', lineWeightMm: 0.5, visible: true, locked: false, plot: true },
+  { name: 'ANNOTATION', color: '#ffffff', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
   { name: 'CONSTRUCTION', color: '#aaaaaa', lineType: 'DASHED', lineWeightMm: 0.13, visible: true, locked: false, plot: false },
 ];
 export const DEFAULT_DRAWING_SHEET: DrawingSheet = {
@@ -71,7 +71,7 @@ export function createDraftingDocument(partial?: Partial<DraftingDocument>): Dra
     standard: partial?.standard ?? 'ISO',
     dimensionStyle: partial?.dimensionStyle ? { ...partial.dimensionStyle, tolerance: { ...partial.dimensionStyle.tolerance } } : undefined,
     revisionHistory: partial?.revisionHistory?.map(item => ({...item})) ?? [],
-    layers: partial?.layers?.length ? partial.layers : DEFAULT_DRAFT_LAYERS.map(layer => ({ ...layer })),
+    layers: partial?.layers?.length ? partial.layers.map(layer => ({ ...layer, color: ['0','DIMENSIONS','TEXT','BOUNDARY','ANNOTATION'].includes(layer.name.toUpperCase()) && layer.color.toLowerCase() === '#202020' ? '#ffffff' : layer.color })) : DEFAULT_DRAFT_LAYERS.map(layer => ({ ...layer })),
     annotations: partial?.annotations ?? [],
     sheet, sheets, activeSheetIndex,
   };
