@@ -2,10 +2,12 @@ import {validateDraftingDocument,type DraftingDocument,sheetDimensionsMm} from '
 import {validateWaterCad,type WaterCadDocument} from './water-cad';
 import type {DxfShape} from './cad-dxf';
 import {validatePaperLayout,type PaperLayout} from './cad-paper-space';
+import {validateDimensionStyle,type DimensionStyle} from './cad-dimension-standards';
+import {validateLayerStandard,type LayerStandard} from './cad-layer-standards';
 export type EngineeringDrawingIssue={severity:'error'|'warning';code:string;message:string;source:'drafting'|'water-cad'|'geometry'|'paper-space'};
 export type EngineeringDrawingAuditInput={
  drafting:DraftingDocument;waterCad:WaterCadDocument;shapes:DxfShape[];
- metresPerDrawingUnit:number|null;paperLayouts?:PaperLayout[];
+ metresPerDrawingUnit:number|null;paperLayouts?:PaperLayout[];layerStandard?:LayerStandard;dimensionStyle?:DimensionStyle;
 };
 export type EngineeringDrawingAudit={
  status:'PASS'|'PASS_WITH_WARNINGS'|'FAIL';errors:number;warnings:number;issues:EngineeringDrawingIssue[];
@@ -15,6 +17,8 @@ export function auditEngineeringDrawing(input:EngineeringDrawingAuditInput):Engi
  const issues:EngineeringDrawingIssue[]=[];
  const add=(severity:EngineeringDrawingIssue['severity'],code:string,message:string,source:EngineeringDrawingIssue['source'])=>issues.push({severity,code,message,source});
  for(const message of validateDraftingDocument(input.drafting))add('error','DRAFTING_INVALID',message,'drafting');
+ if(input.dimensionStyle)for(const message of validateDimensionStyle(input.dimensionStyle))add('error','DIMENSION_STYLE_INVALID',message,'drafting');
+ if(input.layerStandard)for(const message of validateLayerStandard(input.drafting.layers,input.layerStandard))add('error','LAYER_STANDARD_NONCONFORMING',message,'drafting');
  for(const item of validateWaterCad(input.waterCad))add(item.severity,item.code,item.message,'water-cad');
  if(input.metresPerDrawingUnit===null||!Number.isFinite(input.metresPerDrawingUnit)||input.metresPerDrawingUnit<=0)add('error','DRAWING_SCALE_UNCALIBRATED','Drawing scale is not calibrated to a verified real-world length.','geometry');
  const layerNames=new Set(input.drafting.layers.map(layer=>layer.name.toUpperCase()));
