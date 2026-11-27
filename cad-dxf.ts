@@ -151,9 +151,16 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
     } else {
       const a=model(item.a),b=model(item.b),dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len,off=item.offsetM/metresPerDrawingUnit;
       const p1={x:a.x+nx*off,y:a.y+ny*off},p2={x:b.x+nx*off,y:b.y+ny*off};
-      for(const [s,e] of [[a,p1],[b,p2],[p1,p2]]) out.push(...entity('LINE',['8',item.layer,'10',fmt(s.x),'20',fmt(s.y),'11',fmt(e.x),'21',fmt(e.y)]));
+      const denominator=Number(drafting.sheet.scale.split(':')[1])||100,style=drafting.dimensionStyle;
+      const extOffset=(style?.extensionOffsetMm||1)*denominator/1000/metresPerDrawingUnit,extBeyond=(style?.extensionBeyondMm||1.5)*denominator/1000/metresPerDrawingUnit;
+      const e1={x:a.x+nx*extOffset,y:a.y+ny*extOffset},e2={x:b.x+nx*extOffset,y:b.y+ny*extOffset},e1End={x:p1.x+nx*extBeyond,y:p1.y+ny*extBeyond},e2End={x:p2.x+nx*extBeyond,y:p2.y+ny*extBeyond};
+      for(const [s,e] of [[e1,e1End],[e2,e2End],[p1,p2]]) out.push(...entity('LINE',['8',item.layer,'10',fmt(s.x),'20',fmt(s.y),'11',fmt(e.x),'21',fmt(e.y)]));
+      const arrow=(style?.arrowSizeMm||2.5)*denominator/1000/metresPerDrawingUnit,ux=dx/len,uy=dy/len;
+      for(const [p,sign] of [[p1,1],[p2,-1]] as Array<[{x:number;y:number},number]>){
+        for(const side of [-1,1]){const end={x:p.x+nx*arrow*sign+ux*arrow*side,y:p.y+ny*arrow*sign+uy*arrow*side};out.push(...entity('LINE',['8',item.layer,'10',fmt(p.x),'20',fmt(p.y),'11',fmt(end.x),'21',fmt(end.y)]));}
+      }
       const label=item.textOverride||((item.kind==='aligned'?Math.hypot(item.b.x-item.a.x,item.b.y-item.a.y):Math.abs(item.b.x-item.a.x)).toFixed(item.precision));
-      textEntity({x:(p1.x+p2.x)/2,y:(p1.y+p2.y)/2},label,2.5*(Number(drafting.sheet.scale.split(':')[1])||100)/1000/metresPerDrawingUnit,item.layer);
+      textEntity({x:(p1.x+p2.x)/2,y:(p1.y+p2.y)/2},label,(style?.textHeightMm||2.5)*denominator/1000/metresPerDrawingUnit,item.layer);
     }
   }
   out.push('0','ENDSEC','0','EOF');
