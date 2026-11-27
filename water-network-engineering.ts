@@ -1,0 +1,249 @@
+import type { WaterCadComponent, WaterCadDocument, WaterPoint } from './water-cad';
+
+export type WaterPort = {
+  id: string;
+  componentId: string;
+  index: number;
+  point: WaterPoint;
+  diameterMm?: number;
+  role: 'inlet' | 'outlet' | 'run' | 'branch' | 'node';
+};
+export type WaterPortConnection = { id: string; aPortId: string; bPortId: string };
+export type NetworkDocument = WaterCadDocument & { connections?: WaterPortConnection[] };
+export type ProfilePoint = {
+  chainageM: number;
+  x: number;
+  y: number;
+  groundLevelM: number | null;
+  invertLevelM: number | null;
+  crownLevelM: number | null;
+  coverDepthM: number | null;
+};
+export type QuantityLine = {
+  code: string;
+  description: string;
+  unit: 'm' | 'nr' | 'm3';
+  quantity: number;
+  material?: string;
+  nominalDiameterMm?: number;
+};
+export type EpanetExport = { input: string; warnings: string[] };
+
+const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+const unit = (v: WaterPoint): WaterPoint => {
+  const d = Math.hypot(v.x, v.y) || 1;
+  return { x: v.x / d, y: v.y / d };
+};
+const add = (a: WaterPoint, b: WaterPoint): WaterPoint => ({ x: a.x + b.x, y: a.y + b.y, z: a.z });
+const scale = (a: WaterPoint, n: number): WaterPoint => ({ x: a.x * n, y: a.y * n, z: a.z });
+const dist = (a: WaterPoint, b: WaterPoint) => Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0));
+const fmt = (n: number) => Number(n.toFixed(4)).toString();
+const safeId = (s: string) => s.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 31) || 'N';
+
+function componentAxis(c: WaterCadComponent): WaterPoint {
+  const angle = (c.properties.rotationDeg ?? 0) * Math.PI / 180;
+  return { x: Math.cos(angle), y: Math.sin(angle) };
+}
+
+/** Returns true engineering connection ports for pipes and inline/branch fittings. */
+export function getWaterPorts(c: WaterCadComponent): WaterPort[] {
+  const centre = c.geometry[0] ?? { x: 0, y: 0 };
+  const axis = componentAxis(c);
+  const perpendicular = { x: -axis.y, y: axis.x };
+  const nd = c.properties.nominalDiameterMm;
+  const make = (index: number, point: WaterPoint, role: WaterPort['role'], diameter = nd): WaterPort => ({
+    id: c.id + ':P' + (index + 1), componentId: c.id, index, point, role, diameterMm: diameter,
+  });
+  if (c.kind === 'pipe' && c.geometry.length >= 2) {
+    return [make(0, c.geometry[0], 'inlet'), make(1, c.geometry[c.geometry.length - 1], 'outlet')];
+  }
+  if (c.kind === 'bend') {
+    const r = c.properties.bendRadiusM ?? 0.5;
+    const half = (c.properties.bendAngleDeg ?? 90) * Math.PI / 360;
+    const tangent = Math.tan(half);
+    const offset = r * tangent;
+    const a = add(centre, scale(axis, -offset));
+    const b = add(centre, scale(perpendicular, offset));
+    return [make(0, a, 'inlet'), make(1, b, 'outlet')];
+  }
+  if (c.kind === 'tee') {
+    const run = c.properties.fittingRunLengthM ?? 1;
+    const branch = c.properties.fittingBranchLengthM ?? 0.5;
+    return [
+      make(0, add(centre, scale(axis, -run / 2)), 'run'),
+      make(1, add(centre, scale(axis, run / 2)), 'run'),
+      make(2, add(centre, scale(perpendicular, branch)), 'branch', c.properties.branchDiameterMm),
+    ];
+  }
+  if (c.kind === 'reducer') {
+    const length = c.properties.fittingLengthM ?? 0.5;
+    return [
+      make(0, add(centre, scale(axis, -length / 2)), 'inlet'),
+      make(1, add(centre, scale(axis, length / 2)), 'outlet', c.properties.outletDiameterMm),
+    ];
+  }
+  if (['valve', 'pump', 'meter'].includes(c.kind)) {
+    const half = (c.properties.fittingLengthM ?? 0.5) / 2;
+    return [make(0, add(centre, scale(axis, -half)), 'inlet'), make(1, add(centre, scale(axis, half)), 'outlet')];
+  }
+  if (['junction', 'source', 'tank', 'reservoir', 'hydrant', 'air-valve', 'washout'].includes(c.kind)) {
+    return [make(0, centre, 'node')];
+  }
+  return [];
+}
+
+/** Sampled centreline for a bend; the returned points form a circular arc. */
+export function buildBendCentreline(c: WaterCadComponent, segments = 16): WaterPoint[] {
+  if (c.kind !== 'bend') throw new Error('Bend geometry can only be generated for a bend component.');
+  if (!Number.isInteger(segments) || segments < 2) throw new Error('Use at least two arc segments.');
+  const centre = c.geometry[0] ?? { x: 0, y: 0 };
+  const radius = c.properties.bendRadiusM ?? 0.5;
+  const angle = (c.properties.bendAngleDeg ?? 90) * Math.PI / 180;
+  const rotation = (c.properties.rotationDeg ?? 0) * Math.PI / 180;
+  if (!(radius > 0) || !(angle > 0 && angle < Math.PI)) throw new Error('Bend radius and angle are outside valid ranges.');
+  // The centre point is the intersection of the two tangent lines.
+  const tangent = Math.tan(angle / 2);
+  const tangentDistance = radius * tangent;
+  const start = { x: centre.x - Math.cos(rotation) * tangentDistance, y: centre.y - Math.sin(rotation) * tangentDistance };
+  const arcCentre = { x: start.x + Math.cos(rotation + Math.PI / 2) * radius, y: start.y + Math.sin(rotation + Math.PI / 2) * radius };
+  const startAngle = Math.atan2(start.y - arcCentre.y, start.x - arcCentre.x);
+  return Array.from({ length: segments + 1 }, (_, i) => {
+    const a = startAngle + angle * i / segments;
+    return { x: arcCentre.x + radius * Math.cos(a), y: arcCentre.y + radius * Math.sin(a), z: centre.z };
+  });
+}
+
+export function buildTeeCentreline(c: WaterCadComponent): WaterPoint[][] {
+  if (c.kind !== 'tee') throw new Error('Tee geometry can only be generated for a tee component.');
+  const ports = getWaterPorts(c);
+  return [[ports[0].point, ports[1].point], [ports[2].point, c.geometry[0]]];
+}
+export function buildReducerCentreline(c: WaterCadComponent): WaterPoint[] {
+  if (c.kind !== 'reducer') throw new Error('Reducer geometry can only be generated for a reducer component.');
+  const ports = getWaterPorts(c);
+  return [ports[0].point, ports[1].point];
+}
+
+export function connectWaterPorts(document: NetworkDocument, aPortId: string, bPortId: string, toleranceM = 0.05): NetworkDocument {
+  if (!finite(toleranceM) || toleranceM < 0) throw new Error('Connection tolerance must be a non-negative metre value.');
+  if (aPortId === bPortId) throw new Error('A port cannot connect to itself.');
+  const ports = document.components.flatMap(getWaterPorts);
+  const a = ports.find(p => p.id === aPortId), b = ports.find(p => p.id === bPortId);
+  if (!a || !b) throw new Error('Both selected ports must exist in this project.');
+  if (a.componentId === b.componentId) throw new Error('Two ports on the same component cannot be joined as a network connection.');
+  if (dist(a.point, b.point) > toleranceM) throw new Error('Ports are ' + fmt(dist(a.point, b.point)) + ' m apart; move geometry or use a justified tolerance before connecting.');
+  const connections = document.connections ?? [];
+  if (connections.some(c => c.aPortId === aPortId || c.bPortId === aPortId || c.aPortId === bPortId || c.bPortId === bPortId)) {
+    throw new Error('A port is already connected. A port may have only one direct connection.');
+  }
+  const connection = { id: 'CON-' + (connections.length + 1).toString().padStart(4, '0'), aPortId, bPortId };
+  return { ...document, connections: [...connections, connection] };
+}
+
+export function buildPipeLongitudinalProfile(pipe: WaterCadComponent): ProfilePoint[] {
+  if (pipe.kind !== 'pipe' || pipe.geometry.length < 2) throw new Error('A profile requires a pipe with at least two surveyed vertices.');
+  const length = pipe.geometry.slice(1).reduce((sum, p, i) => sum + dist({ ...pipe.geometry[i], z: 0 }, { ...p, z: 0 }), 0);
+  if (length <= 0) throw new Error('Pipe profile length must be positive.');
+  const groundStart = pipe.properties.groundStartM;
+  const groundEnd = pipe.properties.groundEndM;
+  const invertStart = pipe.properties.invertInletM;
+  const invertEnd = pipe.properties.invertOutletM;
+  const od = pipe.properties.externalDiameterMm ?? pipe.properties.nominalDiameterMm;
+  let chainage = 0;
+  return pipe.geometry.map((point, i) => {
+    if (i > 0) chainage += dist({ ...pipe.geometry[i - 1], z: 0 }, { ...point, z: 0 });
+    const ratio = chainage / length;
+    const ground = finite(groundStart) && finite(groundEnd) ? groundStart + (groundEnd - groundStart) * ratio : null;
+    const invert = finite(invertStart) && finite(invertEnd) ? invertStart + (invertEnd - invertStart) * ratio : null;
+    const crown = invert !== null && finite(od) ? invert + od / 1000 : null;
+    return {
+      chainageM: chainage, x: point.x, y: point.y, groundLevelM: ground,
+      invertLevelM: invert, crownLevelM: crown,
+      coverDepthM: ground !== null && crown !== null ? ground - crown : null,
+    };
+  });
+}
+
+export function buildWaterQuantities(document: WaterCadDocument): QuantityLine[] {
+  const buckets = new Map<string, QuantityLine>();
+  const addLine = (line: QuantityLine) => {
+    const key = [line.code, line.material ?? '', line.nominalDiameterMm ?? ''].join('|');
+    const existing = buckets.get(key);
+    if (existing) existing.quantity += line.quantity;
+    else buckets.set(key, { ...line });
+  };
+  for (const c of document.components) {
+    const p = c.properties;
+    if (c.kind === 'pipe') {
+      const length = c.geometry.slice(1).reduce((sum, point, i) => sum + Math.hypot(point.x - c.geometry[i].x, point.y - c.geometry[i].y), 0);
+      if (length > 0) addLine({ code: 'PIPE', description: 'Supply and install ' + (p.material ?? 'unspecified') + ' pipe DN' + (p.nominalDiameterMm ?? '—'), unit: 'm', quantity: length, material: p.material, nominalDiameterMm: p.nominalDiameterMm });
+    } else if (['bend', 'tee', 'reducer', 'valve', 'pump', 'tank', 'reservoir', 'chamber', 'hydrant', 'meter', 'air-valve', 'washout'].includes(c.kind)) {
+      addLine({ code: c.kind.toUpperCase().replace('-', '_'), description: c.kind + ' ' + (p.nominalDiameterMm ? 'DN' + p.nominalDiameterMm : '') + ' ' + p.tag, unit: 'nr', quantity: 1, material: p.material, nominalDiameterMm: p.nominalDiameterMm });
+    }
+  }
+  return [...buckets.values()].sort((a, b) => a.code.localeCompare(b.code) || (a.nominalDiameterMm ?? 0) - (b.nominalDiameterMm ?? 0));
+}
+
+export function buildPreliminaryBoq(document: WaterCadDocument, trenchWidthM = 0.6, workingDepthM = 1.2): QuantityLine[] {
+  if (!(trenchWidthM > 0) || !(workingDepthM > 0)) throw new Error('Trench width and working depth must be positive.');
+  const lines = buildWaterQuantities(document);
+  const pipeLength = lines.filter(l => l.code === 'PIPE').reduce((s, l) => s + l.quantity, 0);
+  if (pipeLength > 0) lines.push({ code: 'EXCAVATION', description: 'Preliminary trench excavation (' + fmt(trenchWidthM) + ' m wide × ' + fmt(workingDepthM) + ' m deep)', unit: 'm3', quantity: pipeLength * trenchWidthM * workingDepthM });
+  return lines;
+}
+
+/** Export a deliberately conservative EPANET INP model. Physical fittings are not silently converted into hydraulic devices. */
+export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExport {
+  const warnings: string[] = [];
+  const nodes = document.components.filter(c => ['junction', 'source', 'tank', 'reservoir'].includes(c.kind));
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const pipes = document.components.filter(c => c.kind === 'pipe');
+  const pumps = document.components.filter(c => c.kind === 'pump');
+  const valves = document.components.filter(c => c.kind === 'valve');
+  const lines: string[] = [
+    '[TITLE]', 'RayanAqua Water CAD export',
+    '', '[JUNCTIONS]', ';ID Elevation_m BaseDemand_LPS Pattern',
+  ];
+  nodes.filter(n => n.kind === 'junction').forEach(n => lines.push([safeId(n.id), fmt(n.geometry[0]?.z ?? 0), fmt((n.properties.flowM3h ?? 0) * 1000 / 3600), ''].join(' ')));
+  lines.push('', '[RESERVOIRS]', ';ID Head_m Pattern');
+  nodes.filter(n => n.kind === 'source' || n.kind === 'reservoir').forEach(n => lines.push([safeId(n.id), fmt(n.properties.tankOperatingLevelM ?? n.geometry[0]?.z ?? 0), ''].join(' ')));
+  lines.push('', '[TANKS]', ';ID Elevation_m InitLevel_m MinLevel_m MaxLevel_m Diameter_m MinVolume_m3');
+  nodes.filter(n => n.kind === 'tank').forEach(n => {
+    const p = n.properties;
+    const level = p.tankOperatingLevelM ?? 1;
+    lines.push([safeId(n.id), fmt(n.geometry[0]?.z ?? 0), fmt(level), '0', fmt(Math.max(level + 1, level * 1.5)), fmt(p.tankDiameterM ?? 1), '0'].join(' '));
+  });
+  lines.push('', '[PIPES]', ';ID Node1 Node2 Length_m Diameter_mm Roughness MinorLoss Status');
+  for (const p of pipes) {
+    if (!p.fromNodeId || !p.toNodeId || !nodeIds.has(p.fromNodeId) || !nodeIds.has(p.toNodeId)) {
+      warnings.push('Pipe ' + p.id + ' omitted: assign valid from/to network nodes before EPANET export.');
+      continue;
+    }
+    const length = p.geometry.slice(1).reduce((sum, point, i) => sum + Math.hypot(point.x - p.geometry[i].x, point.y - p.geometry[i].y), 0);
+    if (!(length > 0) || !(p.properties.internalDiameterMm && p.properties.internalDiameterMm > 0)) {
+      warnings.push('Pipe ' + p.id + ' omitted: positive length and internal diameter are required.');
+      continue;
+    }
+    lines.push([safeId(p.id), safeId(p.fromNodeId), safeId(p.toNodeId), fmt(length), fmt(p.properties.internalDiameterMm), fmt(p.properties.roughness ?? 130), '0', 'OPEN'].join(' '));
+  }
+  lines.push('', '[PUMPS]', ';ID Node1 Node2 Parameters');
+  pumps.forEach(p => {
+    if (!p.fromNodeId || !p.toNodeId || !nodeIds.has(p.fromNodeId) || !nodeIds.has(p.toNodeId)) warnings.push('Pump ' + p.id + ' omitted: assign valid inlet and outlet network nodes.');
+    else lines.push([safeId(p.id), safeId(p.fromNodeId), safeId(p.toNodeId), 'POWER ' + fmt(p.properties.pumpDutyHeadM ?? 0)].join(' '));
+  });
+  lines.push('', '[VALVES]', ';ID Node1 Node2 Diameter_mm Type Setting MinorLoss');
+  valves.forEach(v => {
+    if (!v.fromNodeId || !v.toNodeId || !nodeIds.has(v.fromNodeId) || !nodeIds.has(v.toNodeId)) warnings.push('Valve ' + v.id + ' omitted: assign valid inlet and outlet network nodes.');
+    else {
+      const type = v.properties.valveType === 'PRV' ? 'PRV' : v.properties.valveType === 'PSV' ? 'PSV' : v.properties.valveType === 'check' ? 'GPV' : 'TCV';
+      lines.push([safeId(v.id), safeId(v.fromNodeId), safeId(v.toNodeId), fmt(v.properties.nominalDiameterMm ?? 0), type, fmt(v.properties.valveSetting ?? 0), '0'].join(' '));
+    }
+  });
+  const unsupported = document.components.filter(c => ['bend', 'tee', 'reducer', 'chamber', 'hydrant', 'meter', 'air-valve', 'washout'].includes(c.kind));
+  if (unsupported.length) warnings.push('EPANET does not model physical ' + [...new Set(unsupported.map(c => c.kind))].join(', ') + ' as standalone hydraulic elements; preserve them in the CAD/GIS asset register and represent their hydraulic effect with appropriate nodes, pipes and minor-loss coefficients.');
+  if (document.components.some(c => c.kind === 'junction') && !document.components.some(c => c.kind === 'source' || c.kind === 'reservoir' || c.kind === 'tank')) warnings.push('No fixed-head source, reservoir or tank is defined; the hydraulic model may be unsolvable.');
+  lines.push('', '[OPTIONS]', 'UNITS LPS', 'HEADLOSS H-W', 'SPECIFIC GRAVITY 1', 'VISCOSITY 1', 'TRIALS 40', 'ACCURACY 0.001', '', '[TIMES]', 'DURATION 0', 'HYDRAULIC TIMESTEP 1:00', 'QUALITY TIMESTEP 0:05', '', '[REPORT]', 'STATUS YES', 'SUMMARY YES', 'NODES ALL', 'LINKS ALL', '', '[COORDINATES]');
+  nodes.forEach(n => { const point = n.geometry[0]; if (point) lines.push([safeId(n.id), fmt(point.x), fmt(point.y)].join(' ')); });
+  lines.push('', '[END]');
+  return { input: lines.join('\n') + '\n', warnings };
+}
