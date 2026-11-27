@@ -151,8 +151,9 @@ test('engineer opens a project, verifies precision drafting, saves and opens 3D'
   await expect(page.getByText(/Entity selected/).first()).toBeVisible();
   await ribbon.getByRole('tab', { name: 'Annotate' }).click();
   await ribbonContent.getByRole('button', { name: 'Radius' }).click();
+  await expect(page.locator('.aquacad-shell .alert').first()).toContainText(/Circle selected: click the label position/);
   await cadCanvas.click({ position: { x: 190, y: 145 } });
-  await expect(page.getByText(/Radius dimension placed/).first()).toBeVisible();
+  await expect(page.locator('.aquacad-shell .alert').first()).toContainText(/Radius dimension placed/);
   await ribbonContent.getByRole('button', { name: 'Diameter' }).click();
   await cadCanvas.click({ position: { x: 195, y: 160 } });
   await expect(page.getByText(/Diameter dimension placed/).first()).toBeVisible();
