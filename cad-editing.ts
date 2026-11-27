@@ -346,13 +346,24 @@ export function validateCadEntities(entities: CadEditableEntity[]): string[] {
     if (!entity.id || ids.has(entity.id)) issues.push(`${label}: missing or duplicate entity ID.`);
     ids.add(entity.id);
     if (!['line','polyline','rect','circle'].includes(entity.type)) issues.push(`${label}: unsupported entity type.`);
+    if (typeof entity.layer !== 'string' || !entity.layer.trim()) issues.push(`${label}: layer name must not be empty.`);
     if (!Array.isArray(entity.points)) { issues.push(`${label}: points must be an array.`); return; }
     entity.points.forEach((point, pointIndex) => {
       if (!point || !finite(point.x) || !finite(point.y)) issues.push(`${label}: point ${pointIndex + 1} has non-finite coordinates.`);
     });
-    if (entity.type === 'line' && entity.points.length !== 2) issues.push(`${label}: a line must have exactly two points.`);
-    if (entity.type === 'rect' && entity.points.length !== 2) issues.push(`${label}: a rectangle must have exactly two corner points.`);
-    if (entity.type === 'polyline' && entity.points.length < 2) issues.push(`${label}: a polyline requires at least two points.`);
+    const validPoints=entity.points.every(point=>point&&finite(point.x)&&finite(point.y));
+    if (entity.type === 'line') {
+      if (entity.points.length !== 2) issues.push(`${label}: a line must have exactly two points.`);
+      else if(validPoints&&dist(entity.points[0],entity.points[1])<=1e-12)issues.push(`${label}: a line must have non-zero length.`);
+    }
+    if (entity.type === 'rect') {
+      if (entity.points.length !== 2) issues.push(`${label}: a rectangle must have exactly two corner points.`);
+      else if(validPoints&&(Math.abs(entity.points[0].x-entity.points[1].x)<=1e-12||Math.abs(entity.points[0].y-entity.points[1].y)<=1e-12))issues.push(`${label}: a rectangle must have non-zero width and height.`);
+    }
+    if (entity.type === 'polyline') {
+      if (entity.points.length < 2) issues.push(`${label}: a polyline requires at least two points.`);
+      if(validPoints)for(let pointIndex=0;pointIndex<entity.points.length-1;pointIndex++)if(dist(entity.points[pointIndex],entity.points[pointIndex+1])<=1e-12)issues.push(`${label}: consecutive polyline vertices must not coincide (segment ${pointIndex+1}).`);
+    }
     if (entity.type === 'circle' && (entity.points.length !== 1 || !finite(entity.radius ?? NaN) || (entity.radius ?? 0) <= 0)) {
       issues.push(`${label}: a circle requires one centre point and a positive finite radius.`);
     }
