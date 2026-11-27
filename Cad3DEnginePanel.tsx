@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createHistory, pushHistory, undoHistory, redoHistory, objectSnapCandidates } from './cad-geometry';
-import { moveEntities, copyEntities, rotateEntities, mirrorEntities, stretchEntities, rectangularArray, trimLine, extendLine, offsetLine, offsetPolyline, selectEntitiesInWindow, chamferPolylineCorner, filletPolylineCorner } from './cad-editing';
+import { moveEntities, copyEntities, rotateEntities, mirrorEntities, stretchEntities, rectangularArray, trimLine, extendLine, offsetLine, offsetPolyline, selectEntitiesInWindow, chamferPolylineCorner, filletPolylineCorner, editEntityGrip, scaleEntities, validateCadEntities } from './cad-editing';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
@@ -409,6 +409,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const selectionRef = useRef<{pointerId:number;start:Point2D;current:Point2D}|null>(null);
   const suppressSelectionClick = useRef(false);
   const [commandDistance, setCommandDistance] = useState(5);
+  const [scaleFactor, setScaleFactor] = useState(1.1);
+  const [gripIndex, setGripIndex] = useState(0);
   const [commandAngle, setCommandAngle] = useState(90);
   const [commandEndpoint, setCommandEndpoint] = useState<0|1>(0);
   const [cornerIndex, setCornerIndex] = useState(1);
@@ -1028,6 +1030,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   async function saveDrawing() {
+    const geometryIssues = validateCadEntities(shapes);
+    if (geometryIssues.length) {
+      setMessage('Save blocked by CAD geometry validation: ' + geometryIssues.slice(0, 5).join(' '));
+      return;
+    }
     setBusy(true);
     try {
       await onSave({
@@ -1896,6 +1903,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <strong>Modify</strong><span className="muted" style={{fontSize:12}}>{selectedShapeIds.length} selected</span>
             <label>Distance <input type="number" value={commandDistance} step="any" onChange={e=>setCommandDistance(Number(e.target.value))} style={{width:75}}/></label>
             <label>Angle ° <input type="number" value={commandAngle} step="any" onChange={e=>setCommandAngle(Number(e.target.value))} style={{width:70}}/></label>
+            <label>Scale × <input type="number" min="0.001" step="any" value={scaleFactor} onChange={e=>setScaleFactor(Number(e.target.value))} style={{width:70}}/></label>
+            <label>Grip # <input type="number" min="0" step="1" value={gripIndex} onChange={e=>setGripIndex(Math.max(0,Math.floor(Number(e.target.value)||0)))} style={{width:48}}/></label>
+            <button className="secondary-button" disabled={selectedShapes.length!==1||!cursorPoint||!Number.isFinite(cursorPoint.x)||!Number.isFinite(cursorPoint.y)} onClick={()=>{try{const target=selectedShapes[0];previewDrawing(shapes.map(x=>x.id===target.id?editEntityGrip(x,gripIndex,cursorPoint!):x),'GRIP EDIT');}catch(e){setMessage(e instanceof Error?e.message:'Grip edit failed.');}}}>Move grip to cursor</button>
+            <button className="secondary-button" disabled={!selectedShapes.length||!Number.isFinite(scaleFactor)||scaleFactor===0} onClick={()=>{try{const base=selectedShapes[0].points[0];const scaled=scaleEntities(selectedShapes,base,scaleFactor);const byId=new Map(scaled.map(item=>[item.id,item]));previewDrawing(shapes.map(x=>byId.get(x.id)||x),'SCALE');}catch(e){setMessage(e instanceof Error?e.message:'Scale failed.');}}}>Scale</button>
             <label>Endpoint <select value={commandEndpoint} onChange={e=>setCommandEndpoint(Number(e.target.value) as 0|1)}><option value={0}>Start</option><option value={1}>End</option></select></label>
             <label>Corner # <input type="number" min="1" value={cornerIndex} onChange={e=>setCornerIndex(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
             <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?moveEntities([x],{x:commandDistance,y:commandDistance})[0]:x),'MOVE');}}>Preview move</button>
@@ -1991,6 +2002,12 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <defs><pattern id="cad-grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse"><path d={`M ${gridSize} 0 L 0 0 0 ${gridSize}`} fill="none" stroke="#e5ece9" strokeWidth={Math.max(viewBox.width / 1000, 0.2)} /></pattern></defs>
             <rect x={viewBox.x} y={viewBox.y} width={viewBox.width} height={viewBox.height} fill="url(#cad-grid)" pointerEvents="none" />
             {renderedShapes}
+            {selectedShapes.map(shape => <g key={'grips-'+shape.id} pointerEvents="none">
+              {shape.type === 'circle' ? <>
+                <circle cx={shape.points[0].x} cy={shape.points[0].y} r="4" fill="#ffffff" stroke="#176b9a" strokeWidth="1.5"/>
+                <circle cx={shape.points[0].x+(shape.radius||12)} cy={shape.points[0].y} r="4" fill="#ffffff" stroke="#176b9a" strokeWidth="1.5"/>
+              </> : shape.points.map((point,index)=><rect key={index} x={point.x-3.5} y={point.y-3.5} width="7" height="7" fill="#ffffff" stroke="#176b9a" strokeWidth="1.5"/>)}
+            </g>)}
             {renderedWaterComponents}
             {renderedAnnotations}
             {waterDraft.length>0 && <polyline points={waterDraft.map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#d59b42" strokeWidth="3" strokeDasharray="6 4" pointerEvents="none"/>}
