@@ -13,8 +13,12 @@ function pairsOf(source:string): Pair[] {
 export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, metresPerDrawingUnit=1):string {
   if(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0) throw new Error('A valid drawing calibration is required for DXF export.');
   const insunits=drafting.sheet.units==='mm'?4:6;
-  const out:string[]=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1015','9','$INSUNITS','70',String(insunits),'9','$MEASUREMENT','70','1','0','ENDSEC','0','SECTION','2','TABLES','0','TABLE','2','LAYER','70',String(drafting.layers.length)];
-  for(const layer of drafting.layers) out.push('0','LAYER','2',layer.name,'70',layer.locked?'4':'0','62',layer.visible? '7':'-7','6',layer.lineType,'370',String(Math.round(layer.lineWeightMm*100)));
+  const layerMap = new Map(drafting.layers.map(layer => [layer.name.toUpperCase(), layer]));
+  shapes.forEach(shape => { const name = shape.layer || '0'; if (!layerMap.has(name.toUpperCase())) layerMap.set(name.toUpperCase(), { name, color: '#666666', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }); });
+  drafting.annotations.forEach(item => { if (!layerMap.has(item.layer.toUpperCase())) layerMap.set(item.layer.toUpperCase(), { name: item.layer, color: '#666666', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }); });
+  const exportLayers = [...layerMap.values()];
+  const out:string[]=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1015','9','$INSUNITS','70',String(insunits),'9','$MEASUREMENT','70','1','0','ENDSEC','0','SECTION','2','TABLES','0','TABLE','2','LAYER','70',String(exportLayers.length)];
+  for(const layer of exportLayers) out.push('0','LAYER','2',layer.name,'70',layer.locked?'4':'0','62',layer.visible? '7':'-7','6',layer.lineType,'370',String(Math.round(layer.lineWeightMm*100)));
   out.push('0','ENDTAB','0','ENDSEC','0','SECTION','2','ENTITIES');
   for(const shape of shapes){
     const layer=shape.layer||'0';
