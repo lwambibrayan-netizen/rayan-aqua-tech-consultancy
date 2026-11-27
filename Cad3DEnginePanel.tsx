@@ -1233,6 +1233,21 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     light.position.set(300, 700, 500);
     scene.add(light);
     // Engineering model grid is sized after model extents are calculated.
+    // Render the engineering network from project-metre XYZ geometry, not as a flat 2D extrusion.
+    const horizontalScale = waterCad.horizontalUnits === 'ft' ? 0.3048 : 1;
+    const networkPoints = waterCad.components.flatMap(component => component.geometry);
+    const cadPoints = shapes.flatMap(shape => shape.points.map(point=>({x:point.x*(calibratedMetresPerUnit??1),y:point.y*(calibratedMetresPerUnit??1)})));
+    const terrainAligned = !!terrainGrid && waterCad.horizontalUnits === 'm' && waterCad.horizontalCrs === terrainGrid.crs && waterCad.verticalDatum === terrainGrid.verticalDatum;
+    const terrainValues = (terrainAligned ? terrainGrid?.elevationsM : undefined)?.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
+    const verticalBase = terrainValues.length ? Math.min(...terrainValues) : networkPoints.length ? Math.min(...networkPoints.map(point => point.z ?? point.invertLevelM ?? 0)) : 0;
+    const allX = [...networkPoints.map(point => point.x*horizontalScale), ...cadPoints.map(point=>point.x), ...(terrainAligned && terrainGrid ? [terrainGrid.originX, terrainGrid.originX + (terrainGrid.width-1)*terrainGrid.cellSizeX] : [])];
+    const allY = [...networkPoints.map(point => point.y*horizontalScale), ...cadPoints.map(point=>point.y), ...(terrainAligned && terrainGrid ? [terrainGrid.originY, terrainGrid.originY + (terrainGrid.height-1)*terrainGrid.cellSizeY] : [])];
+    const centreX = allX.length ? (Math.min(...allX)+Math.max(...allX))/2 : 0;
+    const centreY = allY.length ? (Math.min(...allY)+Math.max(...allY))/2 : 0;
+    const span = Math.max(allX.length ? Math.max(...allX)-Math.min(...allX) : 0, allY.length ? Math.max(...allY)-Math.min(...allY) : 0, 10);
+    scene.add(new THREE.GridHelper(span*1.5,Math.max(10,Math.round(span/5))));
+    camera.position.set(span*0.9, span*0.8, span*1.1);
+    camera.lookAt(0,0,0);
     shapes.forEach(shape => {
       const material = new THREE.MeshStandardMaterial({ color: '#167b78' });
       if (shape.type === 'circle') {
@@ -1253,24 +1268,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         const curve = new THREE.CatmullRomCurve3(
           (shape.type==='polyline'?expandedPolylinePoints(shape):shape.points).map(point => new THREE.Vector3(point.x*(calibratedMetresPerUnit??1)-centreX, 0, point.y*(calibratedMetresPerUnit??1)-centreY))
         );
-        scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 30, 1.8, 8, false), material));
+        scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 30, Math.max(0.02,1.8*(calibratedMetresPerUnit??1)), 8, false), material));
       }
     });
-    // Render the engineering network from project-metre XYZ geometry, not as a flat 2D extrusion.
-    const horizontalScale = waterCad.horizontalUnits === 'ft' ? 0.3048 : 1;
-    const networkPoints = waterCad.components.flatMap(component => component.geometry);
-    const cadPoints = shapes.flatMap(shape => shape.points.map(point=>({x:point.x*(calibratedMetresPerUnit??1),y:point.y*(calibratedMetresPerUnit??1)})));
-    const terrainAligned = !!terrainGrid && waterCad.horizontalUnits === 'm' && waterCad.horizontalCrs === terrainGrid.crs && waterCad.verticalDatum === terrainGrid.verticalDatum;
-    const terrainValues = (terrainAligned ? terrainGrid?.elevationsM : undefined)?.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
-    const verticalBase = terrainValues.length ? Math.min(...terrainValues) : networkPoints.length ? Math.min(...networkPoints.map(point => point.z ?? point.invertLevelM ?? 0)) : 0;
-    const allX = [...networkPoints.map(point => point.x*horizontalScale), ...cadPoints.map(point=>point.x), ...(terrainAligned && terrainGrid ? [terrainGrid.originX, terrainGrid.originX + (terrainGrid.width-1)*terrainGrid.cellSizeX] : [])];
-    const allY = [...networkPoints.map(point => point.y*horizontalScale), ...cadPoints.map(point=>point.y), ...(terrainAligned && terrainGrid ? [terrainGrid.originY, terrainGrid.originY + (terrainGrid.height-1)*terrainGrid.cellSizeY] : [])];
-    const centreX = allX.length ? (Math.min(...allX)+Math.max(...allX))/2 : 0;
-    const centreY = allY.length ? (Math.min(...allY)+Math.max(...allY))/2 : 0;
-    const span = Math.max(allX.length ? Math.max(...allX)-Math.min(...allX) : 0, allY.length ? Math.max(...allY)-Math.min(...allY) : 0, 10);
-    scene.add(new THREE.GridHelper(span*1.5,Math.max(10,Math.round(span/5))));
-    camera.position.set(span*0.9, span*0.8, span*1.1);
-    camera.lookAt(0,0,0);
+
     if (terrainAligned && terrainGrid) {
       const positions:number[]=[]; const indices:number[]=[];
       for(let row=0;row<terrainGrid.height;row++) for(let col=0;col<terrainGrid.width;col++) {
