@@ -52,7 +52,7 @@ export function calculateRadiusDimension(center:DimensionPoint,edge:DimensionPoi
   assertPoint(center,'Circle center');assertPoint(edge,'Circle edge');assertPoint(leaderPoint,'Leader point');
   const radius=distance(center,edge);if(radius<=1e-12)throw new Error('Radius dimension requires a non-zero radius.');
   if(distance(center,leaderPoint)<=1e-12)throw new Error('Radius leader cannot end at the circle center.');
-  return {centerMark:[{a:{x:center.x- radius*.08,y:center.y},b:{x:center.x+radius*.08,y:center.y}},{a:{x:center.x,y:center.y-radius*.08},b:{x:center.x,y:center.y+radius*.08}}],leader:{a:center,b:leaderPoint},radius,labelPoint:leaderPoint};
+  return {centerMark:[{a:{x:center.x- radius*.08,y:center.y},b:{x:center.x+radius*.08,y:center.y}},{a:{x:center.x,y:center.y-radius*.08},b:{x:center.x,y:center.y+radius*.08}}],leader:{a:edge,b:leaderPoint},radius,labelPoint:leaderPoint};
 }
 export function calculateDiameterDimension(center:DimensionPoint,edge:DimensionPoint,leaderPoint:DimensionPoint):DiameterDimensionGeometry {
   const radial=calculateRadiusDimension(center,edge,leaderPoint);
