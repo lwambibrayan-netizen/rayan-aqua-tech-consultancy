@@ -7,9 +7,13 @@ const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
 export function buildHydraulicOverlay(document:WaterCadDocument,results:HydraulicResults,metric:HydraulicOverlayMetric,limits:{minimum?:number;maximum?:number}={}):HydraulicOverlay {
  const source=metric==='pressureM'?results.nodes:results.links;
  const ids=new Set(document.components.map(c=>c.id));
+ const components=new Map(document.components.map(component=>[component.id,component]));
  const items=source.filter(item=>ids.has(item.id)).map(item=>{
   const raw=(item as Record<string,unknown>)[metric];const value=finite(raw)?raw:null;
-  const severity:HydraulicOverlayItem['severity']=value===null?'warning':limits.minimum!==undefined&&value<limits.minimum||limits.maximum!==undefined&&value>limits.maximum?'critical':'normal';
+  const component=components.get(item.id);
+  const minimum=limits.minimum ?? (metric==='velocityMs'&&component?.kind==='pipe'?component.properties.velocityMinMs:undefined);
+  const maximum=limits.maximum ?? (metric==='velocityMs'&&component?.kind==='pipe'?component.properties.velocityMaxMs:undefined);
+  const severity:HydraulicOverlayItem['severity']=value===null?'warning':minimum!==undefined&&value<minimum||maximum!==undefined&&value>maximum?'critical':'normal';
   const colour=value===null?'#8a8f98':severity==='critical'?'#d43b35':metric==='flowLps'?'#1678c8':metric==='velocityMs'?'#d58a24':'#15936d';
   return {componentId:item.id,value,label:value===null?'No result':value.toFixed(2),colour,severity};
  });
