@@ -69,7 +69,8 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
       description:'Imported from EPANET pump link',
       epanetPumpCurveId:curveId,
       pumpCurvePoints:points,
-      ...(points?.length===1?{pumpDutyFlowM3h:points[0].flowM3h,pumpDutyHeadM:points[0].headM}:{})
+      pumpDutyFlowM3h:points?.length===1?points[0].flowM3h:undefined,
+      pumpDutyHeadM:points?.length===1?points[0].headM:undefined
     });
     if(curveId&&!points?.length)warnings.push('Pump '+r.values[0]+' references missing curve '+curveId+'; add or repair its pump curve before simulation.');
     if(!curveId)warnings.push('Pump '+r.values[0]+' uses a non-HEAD or unsupported pump definition; manual pump model review is required.');
