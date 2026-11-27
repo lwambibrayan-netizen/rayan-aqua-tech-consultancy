@@ -1250,7 +1250,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
           <button className="secondary-button" onClick={validateDrafting}>Validate drafting</button>
-          <button className="secondary-button" onClick={exportSheetSvg}>Export sheet SVG</button>
+          <button className="secondary-button" onClick={() => exportSheetSvg()}>Export sheet SVG</button>
           <button className="secondary-button" onClick={() => exportSheetSvg(true)}>Print / Save as PDF</button>
           <button className="secondary-button" onClick={printAllDrawingSheets} disabled={drafting.sheets.length < 2}>Print complete sheet set</button>
           <span className="muted" style={{ fontSize: 12 }}>{sheetDimensionsMm(drafting.sheet).widthMm} × {sheetDimensionsMm(drafting.sheet).heightMm} mm · {drafting.annotations.length} annotations</span>
