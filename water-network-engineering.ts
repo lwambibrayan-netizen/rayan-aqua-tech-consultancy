@@ -331,7 +331,9 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   const warnings: string[] = [];
   const nodes = document.components.filter(c => ['junction', 'source', 'tank', 'reservoir'].includes(c.kind));
   const hydraulic = resolveHydraulicNodes(document);
-  const nodeIds = new Set([...nodes.map(n => safeId(n.id)), ...hydraulic.syntheticNodes.map(n => n.id)]);
+  const nodeIdList=[...nodes.map(n=>safeId(n.id)),...hydraulic.syntheticNodes.map(n=>n.id)];
+  const nodeIds = new Set(nodeIdList);
+  if(nodeIds.size!==nodeIdList.length)warnings.push('EPANET node ID collision between CAD nodes and generated hydraulic junctions. Rename conflicting IDs before simulation/export.');
   const idMap:EpanetIdMap[]=[
     ...nodes.map(node=>({epanetId:safeId(node.id),cadId:node.id,kind:'node' as const})),
     ...document.components.filter(component=>['pipe','pump','valve'].includes(component.kind)).map(link=>({epanetId:safeId(link.id),cadId:link.id,kind:'link' as const}))
