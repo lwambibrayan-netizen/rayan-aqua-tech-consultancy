@@ -1,3 +1,4 @@
+import type { DimensionStyle } from './cad-dimension-standards';
 /** Professional drafting primitives. Model geometry is stored in metres; plotted annotation sizes are paper millimetres. */
 export type DraftLayer = {
   name: string;
@@ -22,6 +23,7 @@ export type DrawingSheet = {
 export type DrawingRevisionEntry = { revision: string; date: string; description: string; drawnBy: string; checkedBy: string; approvedBy: string; status: 'PRELIMINARY' | 'FOR REVIEW' | 'FOR APPROVAL' | 'FOR CONSTRUCTION' | 'AS BUILT' };
 export type DraftingDocument = {
   revisionHistory: DrawingRevisionEntry[];
+  dimensionStyle?: DimensionStyle;
   standard: 'ISO' | 'BS' | 'ANSI';
   layers: DraftLayer[];
   annotations: DraftAnnotation[];
