@@ -1261,10 +1261,16 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     // Render the engineering network from project-metre XYZ geometry, not as a flat 2D extrusion.
     const horizontalScale = waterCad.horizontalUnits === 'ft' ? 0.3048 : 1;
     const networkPoints = waterCad.components.flatMap(component => component.geometry);
+    const nodeElevations = new Map(waterCad.components.filter(component=>['junction','source','tank','reservoir'].includes(component.kind)).map(component=>[component.id,component.properties.hydraulicElevationM??component.properties.hydraulicHeadM??component.geometry[0]?.z]));
     const cadPoints = shapes.flatMap(shape => shape.points.map(point=>({x:point.x*(calibratedMetresPerUnit??1),y:point.y*(calibratedMetresPerUnit??1)})));
     const terrainAligned = !!terrainGrid && waterCad.horizontalUnits === 'm' && waterCad.horizontalCrs === terrainGrid.crs && waterCad.verticalDatum === terrainGrid.verticalDatum;
     const terrainValues = (terrainAligned ? terrainGrid?.elevationsM : undefined)?.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
-    const verticalBase = terrainValues.length ? terrainValues.reduce((minimum,value)=>Math.min(minimum,value),Infinity) : networkPoints.length ? networkPoints.reduce((minimum,point)=>Math.min(minimum,point.z??point.invertLevelM??0),Infinity) : 0;
+    const networkElevations = [
+      ...networkPoints.flatMap(point=>[point.z,point.invertLevelM]),
+      ...waterCad.components.map(component=>component.properties.hydraulicElevationM??component.properties.hydraulicHeadM),
+      ...[...nodeElevations.values()],
+    ].filter((value):value is number=>typeof value==='number'&&Number.isFinite(value));
+    const verticalBase = terrainValues.length ? terrainValues.reduce((minimum,value)=>Math.min(minimum,value),Infinity) : networkElevations.length ? Math.min(...networkElevations) : 0;
     const allX = [...networkPoints.map(point => point.x*horizontalScale), ...cadPoints.map(point=>point.x), ...(terrainAligned && terrainGrid ? [terrainGrid.originX, terrainGrid.originX + (terrainGrid.width-1)*terrainGrid.cellSizeX] : [])];
     const allY = [...networkPoints.map(point => point.y*horizontalScale), ...cadPoints.map(point=>point.y), ...(terrainAligned && terrainGrid ? [terrainGrid.originY, terrainGrid.originY + (terrainGrid.height-1)*terrainGrid.cellSizeY] : [])];
     const centreX = allX.length ? (Math.min(...allX)+Math.max(...allX))/2 : 0;
@@ -1328,9 +1334,20 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       }
     };
     waterCad.components.forEach(component=>{
-      const baseLevel=component.properties.hydraulicElevationM??component.geometry[0]?.z??component.geometry[0]?.invertLevelM??0;
-      const to3d=(point:{x:number;y:number;z?:number;invertLevelM?:number})=>new THREE.Vector3(point.x*horizontalScale-centreX,(point.z??point.invertLevelM??baseLevel)-verticalBase,point.y*horizontalScale-centreY);
-      const points=component.geometry.map(to3d);
+      const fromElevation=component.fromNodeId?nodeElevations.get(component.fromNodeId):undefined;
+      const toElevation=component.toNodeId?nodeElevations.get(component.toNodeId):undefined;
+      const baseLevel=component.properties.hydraulicElevationM??fromElevation??toElevation??component.geometry[0]?.z??component.geometry[0]?.invertLevelM??0;
+      const routeLengths=[0];
+      for(let index=1;index<component.geometry.length;index++){const a=component.geometry[index-1],b=component.geometry[index];routeLengths.push(routeLengths[index-1]+Math.hypot(b.x-a.x,b.y-a.y));}
+      const totalRouteLength=routeLengths[routeLengths.length-1]??0;
+      const pointElevation=(point:{x:number;y:number;z?:number;invertLevelM?:number},index:number)=>{
+        if(typeof point.z==='number'&&Number.isFinite(point.z))return point.z;
+        if(typeof point.invertLevelM==='number'&&Number.isFinite(point.invertLevelM))return point.invertLevelM;
+        if(fromElevation!==undefined&&toElevation!==undefined&&totalRouteLength>0)return fromElevation+(toElevation-fromElevation)*(routeLengths[index]??0)/totalRouteLength;
+        return baseLevel;
+      };
+      const to3d=(point:{x:number;y:number;z?:number;invertLevelM?:number},index=0)=>new THREE.Vector3(point.x*horizontalScale-centreX,pointElevation(point,index)-verticalBase,point.y*horizontalScale-centreY);
+      const points=component.geometry.map((point,index)=>to3d(point,index));
       const overlayItem=hydraulicOverlay?.items.find(item=>item.componentId===component.id);
       const colour=overlayItem?.colour??'#087e83';
       const radius=Math.max((component.properties.externalDiameterMm??component.properties.nominalDiameterMm??100)/2000,0.025);
