@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
+import { api } from './client';
 
 type Point2D = { x: number; y: number };
 type Shape = {
@@ -12,6 +13,7 @@ type Shape = {
   layer: string;
 };
 type Props = {
+  projectId: string;
   initialData?: any;
   gisFeatures?: any[];
   onSave: (data: any) => Promise<void> | void;
@@ -186,7 +188,7 @@ function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled:
   return best;
 }
 
-export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave }: Props) {
+export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures = [], onSave }: Props) {
   const [shapes, setShapes] = useState<Shape[]>(initialData?.shapes || []);
   const [mode, setMode] = useState<'select' | 'line' | 'polyline' | 'rect' | 'circle'>('select');
   const [draft, setDraft] = useState<Point2D[]>([]);
@@ -294,40 +296,82 @@ export default function Cad3DEnginePanel({ initialData, gisFeatures = [], onSave
     if (fileRef.current) fileRef.current.value = '';
   }
 
-  function importGisDraft() {
-    const features = gisFeatures.filter(feature =>
-      feature.geometry?.type === 'Point' || feature.geometry?.type === 'LineString'
-    );
-    if (!features.length) {
-      setMessage('No saved GIS points or pipeline routes were found in this project.');
+  async function importGisDraft() {
+    let sourceFeatures = gisFeatures;
+    try {
+      const response = await api.get('/api/projects/' + projectId + '/gis-drafts');
+      const drafts = response.data.drafts || [];
+      const newest = drafts.slice().sort((a: any, b: any) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0];
+      const savedFeatures = newest?.data?.featureCollection?.features;
+      if (Array.isArray(savedFeatures) && savedFeatures.length) sourceFeatures = savedFeatures;
+    } catch (error) {
+      setMessage(error instanceof Error ? 'Could not load saved GIS drafts: ' + error.message : 'Could not load saved GIS drafts.');
       return;
     }
-    const coordinates: number[][] = [];
-    features.forEach(feature => {
-      if (feature.geometry.type === 'Point') coordinates.push(feature.geometry.coordinates);
-      else feature.geometry.coordinates.forEach((coordinate: number[]) => coordinates.push(coordinate));
-    });
-    const minX = Math.min(...coordinates.map(point => point[0]));
-    const maxX = Math.max(...coordinates.map(point => point[0]));
-    const minY = Math.min(...coordinates.map(point => point[1]));
-    const maxY = Math.max(...coordinates.map(point => point[1]));
+    const features = sourceFeatures.filter(feature =>
+      ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon'].includes(feature.geometry?.type)
+    );
+    if (!features.length) {
+      setMessage('No supported saved GIS features were found. Save the GIS draft first, then retry CAD import.');
+      return;
+    }
+    // GeoJSON geometries are nested to different depths. Flatten coordinates only
+    // for extents, then preserve each line/ring as its own CAD polyline.
+    const coordinatePairs: number[][] = [];
+    const collectPairs = (value: unknown): void => {
+      if (!Array.isArray(value)) return;
+      if (value.length >= 2 && typeof value[0] === 'number' && typeof value[1] === 'number') {
+        if (Number.isFinite(value[0]) && Number.isFinite(value[1])) coordinatePairs.push([value[0], value[1]]);
+        return;
+      }
+      value.forEach(collectPairs);
+    };
+    features.forEach(feature => collectPairs(feature.geometry.coordinates));
+    if (!coordinatePairs.length) {
+      setMessage('The saved GIS draft contains no valid coordinate pairs to import.');
+      return;
+    }
+    const minX = Math.min(...coordinatePairs.map(point => point[0]));
+    const maxX = Math.max(...coordinatePairs.map(point => point[0]));
+    const minY = Math.min(...coordinatePairs.map(point => point[1]));
+    const maxY = Math.max(...coordinatePairs.map(point => point[1]));
     const span = Math.max(maxX - minX, maxY - minY, 0.0001);
     const convert = (coordinate: number[]) => ({
       x: 80 + ((coordinate[0] - minX) / span) * 800,
       y: 570 - ((coordinate[1] - minY) / span) * 500,
     });
-    const added: Shape[] = features.map(feature => feature.geometry.type === 'Point'
-      ? {
-          id: makeId(), type: 'circle', points: [convert(feature.geometry.coordinates)],
-          radius: 5, layer: String(feature.properties?.category || 'GIS').toUpperCase(),
-        }
-      : {
-          id: makeId(), type: 'polyline',
-          points: feature.geometry.coordinates.map(convert),
-          layer: String(feature.properties?.category || 'GIS').toUpperCase(),
+    const added: Shape[] = [];
+    const layerFor = (feature: any) => String(feature.properties?.category || 'GIS').toUpperCase();
+    const addLine = (coords: unknown, layer: string) => {
+      if (!Array.isArray(coords)) return;
+      const points = coords.filter((point: any) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1]))).map(convert);
+      if (points.length >= 2) added.push({ id: makeId(), type: 'polyline', points, layer });
+    };
+    features.forEach(feature => {
+      const geometry = feature.geometry;
+      const layer = layerFor(feature);
+      if (geometry.type === 'Point') {
+        added.push({ id: makeId(), type: 'circle', points: [convert(geometry.coordinates)], radius: 5, layer });
+      } else if (geometry.type === 'MultiPoint') {
+        geometry.coordinates.forEach((point: number[]) => added.push({ id: makeId(), type: 'circle', points: [convert(point)], radius: 5, layer }));
+      } else if (geometry.type === 'LineString') {
+        addLine(geometry.coordinates, layer);
+      } else if (geometry.type === 'MultiLineString') {
+        geometry.coordinates.forEach((line: unknown) => addLine(line, layer));
+      } else if (geometry.type === 'Polygon') {
+        geometry.coordinates.forEach((ring: unknown) => addLine(ring, layer));
+      } else if (geometry.type === 'MultiPolygon') {
+        geometry.coordinates.forEach((polygon: unknown) => {
+          if (Array.isArray(polygon)) polygon.forEach((ring: unknown) => addLine(ring, layer));
         });
+      }
+    });
+    if (!added.length) {
+      setMessage('The saved GIS draft contains no CAD-compatible points or lines.');
+      return;
+    }
     setShapes(current => [...current, ...added]);
-    setMessage('Imported ' + added.length + ' GIS features. The CAD view is a drawing-space conversion, not survey-control coordinates.');
+    setMessage('Imported ' + added.length + ' CAD elements from the saved GIS draft. Coordinates are normalized drawing space, not survey-control coordinates.');
   }
 
   const selectedShape: SelectedShape = shapes.find(shape => shape.id === selectedShapeId) || null;
