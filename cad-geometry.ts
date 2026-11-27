@@ -160,3 +160,160 @@ export function segmentIntersection(
     y >= Math.min(p.y, q.y) - tolerance && y <= Math.max(p.y, q.y) + tolerance;
   return within(a, b) && within(c, d) ? { x, y } : null;
 }
+
+
+/** Standard CSS reference density; callers may supply the actual display density. */
+export const CSS_PIXELS_PER_INCH = 96;
+
+/** Derive CSS pixels per model metre for a paper scale such as 1:100. */
+export function pixelsPerMetreAtScale(
+  scaleDenominator: number,
+  pixelsPerInch = CSS_PIXELS_PER_INCH,
+): number {
+  if (!Number.isFinite(scaleDenominator) || scaleDenominator <= 0) {
+    throw new Error('Scale denominator must be a finite number greater than zero.');
+  }
+  if (!Number.isFinite(pixelsPerInch) || pixelsPerInch <= 0) {
+    throw new Error('Pixels per inch must be a finite number greater than zero.');
+  }
+  // One model metre is 1000 mm; at 1:N it occupies 1000/N paper mm.
+  return (1000 / scaleDenominator) * (pixelsPerInch / 25.4);
+}
+
+/** Zoom around a screen-space anchor while keeping the world point under it fixed. */
+export function zoomViewportAt(
+  viewport: CadViewport,
+  screenAnchor: Point2D,
+  zoomFactor: number,
+  minPixelsPerMetre = 0.001,
+  maxPixelsPerMetre = 1e7,
+): CadViewport {
+  assertViewport(viewport);
+  assertFinite(screenAnchor.x, 'Zoom anchor X');
+  assertFinite(screenAnchor.y, 'Zoom anchor Y');
+  if (!Number.isFinite(zoomFactor) || zoomFactor <= 0) throw new Error('Zoom factor must be greater than zero.');
+  if (!Number.isFinite(minPixelsPerMetre) || !Number.isFinite(maxPixelsPerMetre) ||
+      minPixelsPerMetre <= 0 || maxPixelsPerMetre < minPixelsPerMetre) {
+    throw new Error('Invalid zoom limits.');
+  }
+  const anchorWorld = screenToWorld(screenAnchor, viewport);
+  const pixelsPerMetre = Math.min(maxPixelsPerMetre, Math.max(minPixelsPerMetre, viewport.pixelsPerMetre * zoomFactor));
+  return {
+    ...viewport,
+    pixelsPerMetre,
+    worldOrigin: {
+      x: anchorWorld.x - (screenAnchor.x - viewport.screenOrigin.x) / pixelsPerMetre,
+      y: anchorWorld.y + (screenAnchor.y - viewport.screenOrigin.y) / pixelsPerMetre,
+    },
+  };
+}
+
+/** Pan by a screen-pixel delta. Positive screen Y moves the drawing down. */
+export function panViewport(viewport: CadViewport, deltaScreen: Point2D): CadViewport {
+  assertViewport(viewport);
+  assertFinite(deltaScreen.x, 'Pan delta X');
+  assertFinite(deltaScreen.y, 'Pan delta Y');
+  return {
+    ...viewport,
+    worldOrigin: {
+      x: viewport.worldOrigin.x - deltaScreen.x / viewport.pixelsPerMetre,
+      y: viewport.worldOrigin.y + deltaScreen.y / viewport.pixelsPerMetre,
+    },
+  };
+}
+
+export type SnapKind = 'ENDPOINT' | 'MIDPOINT' | 'CENTER' | 'QUADRANT' | 'NEAREST' | 'INTERSECTION';
+export type SnapCandidate = { point: Point2D; kind: SnapKind };
+
+/** Closest point on a finite segment, including endpoints. */
+export function nearestPointOnSegment(point: Point2D, a: Point2D, b: Point2D): Point2D {
+  [point, a, b].forEach(p => {
+    assertFinite(p.x, 'Point X');
+    assertFinite(p.y, 'Point Y');
+  });
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return { ...a };
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared));
+  return { x: a.x + t * dx, y: a.y + t * dy };
+}
+
+/** Build deterministic object-snap candidates from line segments and circles. */
+export function objectSnapCandidates(
+  cursor: Point2D,
+  segments: Array<[Point2D, Point2D]>,
+  circles: Array<{ center: Point2D; radius: number }> = [],
+): SnapCandidate[] {
+  assertFinite(cursor.x, 'Cursor X');
+  assertFinite(cursor.y, 'Cursor Y');
+  const candidates: SnapCandidate[] = [];
+  segments.forEach(([a, b]) => {
+    candidates.push({ point: { ...a }, kind: 'ENDPOINT' }, { point: { ...b }, kind: 'ENDPOINT' });
+    candidates.push({ point: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, kind: 'MIDPOINT' });
+    candidates.push({ point: nearestPointOnSegment(cursor, a, b), kind: 'NEAREST' });
+  });
+  circles.forEach(({ center, radius }) => {
+    assertFinite(center.x, 'Circle centre X');
+    assertFinite(center.y, 'Circle centre Y');
+    if (!Number.isFinite(radius) || radius <= 0) throw new Error('Circle radius must be greater than zero.');
+    candidates.push({ point: { ...center }, kind: 'CENTER' });
+    const dx = cursor.x - center.x;
+    const dy = cursor.y - center.y;
+    const length = Math.hypot(dx, dy);
+    if (length > 0) candidates.push({
+      point: { x: center.x + dx / length * radius, y: center.y + dy / length * radius },
+      kind: 'NEAREST',
+    });
+    [0, Math.PI / 2, Math.PI, Math.PI * 1.5].forEach(angle => candidates.push({
+      point: { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius },
+      kind: 'QUADRANT',
+    }));
+  });
+  for (let i = 0; i < segments.length; i++) {
+    for (let j = i + 1; j < segments.length; j++) {
+      const point = segmentIntersection(segments[i][0], segments[i][1], segments[j][0], segments[j][1]);
+      if (point) candidates.push({ point, kind: 'INTERSECTION' });
+    }
+  }
+  return candidates;
+}
+
+export type HistoryState<T> = {
+  past: T[];
+  present: T;
+  future: T[];
+};
+
+/** Immutable undo/redo history suitable for CAD document snapshots. */
+export function createHistory<T>(initial: T): HistoryState<T> {
+  return { past: [], present: initial, future: [] };
+}
+
+export function pushHistory<T>(history: HistoryState<T>, next: T, limit = 100): HistoryState<T> {
+  if (!Number.isInteger(limit) || limit < 1) throw new Error('History limit must be a positive integer.');
+  if (Object.is(history.present, next)) return history;
+  return {
+    past: [...history.past, history.present].slice(-limit),
+    present: next,
+    future: [],
+  };
+}
+
+export function undoHistory<T>(history: HistoryState<T>): HistoryState<T> {
+  if (!history.past.length) return history;
+  return {
+    past: history.past.slice(0, -1),
+    present: history.past[history.past.length - 1],
+    future: [history.present, ...history.future],
+  };
+}
+
+export function redoHistory<T>(history: HistoryState<T>): HistoryState<T> {
+  if (!history.future.length) return history;
+  return {
+    past: [...history.past, history.present],
+    present: history.future[0],
+    future: history.future.slice(1),
+  };
+}
