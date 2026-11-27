@@ -7,7 +7,7 @@ const water:WaterCadDocument={schemaVersion:1,units:'m',verticalDatum:'Project d
 describe('integrated engineering drawing audit',()=>{
  it('passes a calibrated drawing with valid water CAD and geometry',()=>{
   const result=auditEngineeringDrawing({drafting:createDraftingDocument(),waterCad:water,shapes:[{id:'L1',type:'line',points:[{x:0,y:0},{x:10,y:0}],layer:'WATER_NETWORK'}],metresPerDrawingUnit:1});
-  expect(result.status).toBe('PASS_WITH_WARNINGS'); // default network layer may not exist in every layer template
+  expect(result.status).toBe('PASS');
   expect(result.errors).toBe(0);
   expect(result.summary.waterComponentCount).toBe(1);
  });
