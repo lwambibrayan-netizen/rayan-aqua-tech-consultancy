@@ -27,6 +27,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const lengthToM=(value:number)=>usUnits?value*0.3048:value;
   const diameterToMm=(value:number)=>usUnits?value*25.4:value;
   const headToM=(value:number)=>usUnits?value*0.3048:value;
+  const pressureToM=(value:number)=>usUnits?value*0.70307:value;
   const nodes=new Map<string,WaterCadComponent>();
   const addNode=(idRaw:string,kind:WaterComponentKind,elevation:number,extra?:{flow?:number;level?:number;diameter?:number;head?:number})=>{
     const id=safe(idRaw); if(nodes.has(id)){warnings.push('Duplicate node '+id+' at import line; duplicate skipped.');return;}
@@ -89,7 +90,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   bySection('VALVES').forEach(r=>{
     if(r.values.length<5){warnings.push('Malformed valve at line '+r.line+'.');return;}
     const type=r.values[4].toUpperCase();const map:Record<string,WaterCadComponent['properties']['valveType']>={PRV:'PRV',PSV:'PSV',PBV:'PBV',FCV:'FCV',TCV:'TCV',GPV:'GPV',PCV:'PCV'};
-    const rawSetting=num(r.values[5]);const setting=type==='FCV'?flowToM3h(rawSetting)*1000/3600:['PRV','PSV','PBV'].includes(type)?headToM(rawSetting):rawSetting;
+    const rawSetting=num(r.values[5]);const setting=type==='FCV'?flowToM3h(rawSetting)*1000/3600:['PRV','PSV','PBV'].includes(type)?pressureToM(rawSetting):rawSetting;
     addLink(r.values[0],'valve',r.values[1],r.values[2],diameterToMm(num(r.values[3])),{valveType:map[type]??'control',valveSetting:setting,description:'Imported EPANET '+type+' valve'});
     if(!map[type]||type==='GPV'||type==='PCV')warnings.push('Valve '+r.values[0]+' type '+type+' requires a supported curve/engine mapping review before re-export.');
   });
