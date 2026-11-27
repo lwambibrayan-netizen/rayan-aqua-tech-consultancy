@@ -155,6 +155,7 @@ export function validateWaterCad(document: WaterCadDocument): WaterCadIssue[] {
       if (length <= 0) add('error', 'ZERO_LENGTH_PIPE', 'Pipe must have a positive plan length.');
       if (!positive(p.internalDiameterMm)) add('error', 'PIPE_BORE_REQUIRED', 'Set a positive internal pipe diameter.');
       if (!positive(p.nominalDiameterMm)) add('error', 'PIPE_ND_REQUIRED', 'Set a positive nominal pipe diameter.');
+      if (p.minorLossCoefficient !== undefined && (!finite(p.minorLossCoefficient) || p.minorLossCoefficient < 0)) add('error', 'INVALID_MINOR_LOSS', 'Minor-loss coefficient K must be non-negative.');
       if (finite(p.invertInletM) && finite(p.invertOutletM) && length > 0 && Math.abs((p.invertOutletM - p.invertInletM) / length) > 1) add('warning', 'EXTREME_SLOPE', 'Pipe invert gradient exceeds 100%; verify levels and units.');
       if (finite(p.flowM3h) && positive(p.internalDiameterMm)) {
         const velocity = pipeVelocityMs(p.flowM3h, p.internalDiameterMm);
