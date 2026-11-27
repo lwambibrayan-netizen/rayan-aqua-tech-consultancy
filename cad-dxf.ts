@@ -3,7 +3,16 @@ export type DxfShape = { id: string; type: 'line'|'polyline'|'rect'|'circle'; po
 export type DxfImportResult = { shapes: DxfShape[]; annotations: DraftAnnotation[]; layerNames: string[]; layers: DraftLayer[]; warnings: string[]; metresPerDrawingUnit: number | null };
 type Pair = [string,string];
 const fmt = (n:number) => Number.isFinite(n) ? String(Number(n.toPrecision(12))) : '0';
-const entity = (kind:string, values:(string|number)[]) => ['0',kind,...values.map(String)];
+const entity = (kind:string, values:(string|number)[]) => {
+  const subclasses:Record<string,string>={LINE:'AcDbLine',CIRCLE:'AcDbCircle',LWPOLYLINE:'AcDbPolyline',TEXT:'AcDbText'};
+  const layerIndex=values.findIndex(value=>String(value)==='8');
+  const output=['0',kind,'100','AcDbEntity'];
+  if(layerIndex>=0){output.push(String(values[layerIndex]),String(values[layerIndex+1]));}
+  output.push('100',subclasses[kind]||'AcDbEntity');
+  const remaining=layerIndex>=0?[...values.slice(0,layerIndex),...values.slice(layerIndex+2)]:values;
+  output.push(...remaining.map(String));
+  return output;
+};
 function pairsOf(source:string): Pair[] {
   const rows=source.replace(/\r/g,'').split('\n');
   const pairs:Pair[]=[];
