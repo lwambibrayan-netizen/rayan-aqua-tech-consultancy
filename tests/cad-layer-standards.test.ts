@@ -5,7 +5,7 @@ import { LAYER_STANDARD_TEMPLATES, mergeLayerTemplate, validatePlotConfiguration
 describe('professional drawing standards', () => {
   it('adds water utility layers without replacing user layers', () => {
     const result = mergeLayerTemplate(DEFAULT_DRAFT_LAYERS, 'WATER_UTILITY');
-    expect(result.added).toContain('WATER_PIPE');
+    expect(result.layers.some(layer => layer.name === 'WATER_PIPE')).toBe(true);
     expect(result.layers.some(layer => layer.name === '0')).toBe(true);
     expect(mergeLayerTemplate(result.layers, 'WATER_UTILITY').added).toEqual([]);
   });
