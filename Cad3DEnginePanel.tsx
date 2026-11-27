@@ -8,6 +8,8 @@ import { api } from './client';
 import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
 import { createDraftingDocument, makeAlignedDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
 import { exportDraftingDxf, importDraftingDxf, type DxfShape } from './cad-dxf';
+import { DIMENSION_STYLES, formatStyledDimension, validateDimensionStyle, appendDrawingRevision, type DimensionStyle } from './cad-dimension-standards';
+import { mergeLayerTemplate, validatePlotConfiguration, type LayerStandard } from './cad-layer-standards';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
@@ -323,6 +325,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [annotationText, setAnnotationText] = useState('');
   const [dimensionOffset, setDimensionOffset] = useState(2);
   const [dimensionPrecision, setDimensionPrecision] = useState(3);
+  const [dimensionStyle, setDimensionStyle] = useState<DimensionStyle>(() => initialData?.drafting?.dimensionStyle || DIMENSION_STYLES.ISO);
+  const [layerTemplate, setLayerTemplate] = useState<LayerStandard>('WATER_UTILITY');
+  const [revisionDraft, setRevisionDraft] = useState({ revision: '', date: new Date().toISOString().slice(0,10), description: '', drawnBy: '', checkedBy: '', approvedBy: '', status: 'FOR REVIEW' as const });
   const [newLayerName, setNewLayerName] = useState('');
   const [selectedWaterId, setSelectedWaterId] = useState('');
   const [activeWaterTool, setActiveWaterTool] = useState<WaterComponentKind | null>(null);
@@ -376,6 +381,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setHistory(createHistory<Shape[]>(initialData?.shapes || []));
     setWaterCad(initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
     setDrafting(createDraftingDocument(initialData?.drafting));
+    setDimensionStyle(initialData?.drafting?.dimensionStyle || DIMENSION_STYLES.ISO);
     setDraftTool('none');
     setAnnotationDraft([]);
     setSelectedWaterId('');
@@ -459,7 +465,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       if (next.length < 2) { setAnnotationDraft(next); setMessage('First point set. Choose the second point.'); return; }
       if (draftTool === 'dimension') {
         try {
-          const item = makeAlignedDimension(makeId(), next[0], next[1], dimensionOffset * (calibratedMetresPerUnit || 1), 'DIMENSIONS', dimensionPrecision);
+          const item = makeAlignedDimension(makeId(), next[0], next[1], dimensionOffset * (calibratedMetresPerUnit || 1), 'DIMENSIONS', dimensionStyle.precision);
+          item.textOverride = formatStyledDimension(Math.hypot(next[1].x-next[0].x,next[1].y-next[0].y), dimensionStyle);
           setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
           setMessage('Aligned dimension placed.'); 
         } catch (error) { setMessage(error instanceof Error ? error.message : 'Dimension could not be placed.'); }
@@ -740,7 +747,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       await onSave({
         shapes,
         waterCad,
-        drafting,
+        drafting: { ...drafting, dimensionStyle },
         units,
         schemaVersion: 1,
         coordinateSystem: calibratedMetresPerUnit ? 'calibrated-local-grid' : 'legacy-unscaled-drawing-units',
@@ -811,8 +818,22 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setDrafting(current => ({ ...current, layers: [...current.layers, { name, color: '#555555', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }] }));
     setNewLayerName('');
   }
+  function applyLayerTemplate() {
+    const result = mergeLayerTemplate(drafting.layers, layerTemplate);
+    setDrafting(current => ({ ...current, layers: result.layers }));
+    setMessage(result.added.length ? 'Added ' + result.added.length + ' standard layers: ' + result.added.join(', ') : 'All layers in this template already exist.');
+  }
+  function addRevisionEntry() {
+    try {
+      const revision = { ...revisionDraft, status: drafting.sheet.status };
+      const history = appendDrawingRevision(drafting.revisionHistory || [], revision);
+      setDrafting(current => ({ ...current, revisionHistory: history, sheet: { ...current.sheet, revision: revision.revision, status: revision.status }, sheets: current.sheets.map((sheet,index) => index === current.activeSheetIndex ? { ...sheet, revision: revision.revision, status: revision.status } : sheet) }));
+      setRevisionDraft(current => ({ ...current, revision: '', description: '' }));
+      setMessage('Revision ' + revision.revision + ' added to this drawing sheet history.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Revision could not be added.'); }
+  }
   function validateDrafting() {
-    const issues = validateDraftingDocument(drafting);
+    const issues = [...validateDraftingDocument(drafting), ...validateDimensionStyle(dimensionStyle), ...validatePlotConfiguration(drafting.layers)];
     setMessage(issues.length ? 'Drafting check: ' + issues.join(' ') : 'Drafting standards check passed. Check the drawing visually before issue.');
   }
   function removeAnnotation(id: string) {
