@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
 import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
-import { createDraftingDocument, makeAlignedDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
+import { createDraftingDocument, makeAlignedDimension, makeLinearDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
 import { exportDraftingDxf, importDraftingDxf, type DxfShape } from './cad-dxf';
 import { DIMENSION_STYLES, formatStyledDimension, validateDimensionStyle, appendDrawingRevision, type DimensionStyle } from './cad-dimension-standards';
 import { mergeLayerTemplate, validatePlotConfiguration, type LayerStandard } from './cad-layer-standards';
@@ -325,6 +325,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [annotationText, setAnnotationText] = useState('');
   const [dimensionOffset, setDimensionOffset] = useState(2);
   const [dimensionPrecision, setDimensionPrecision] = useState(3);
+  const [dimensionKind, setDimensionKind] = useState<'aligned' | 'linear'>('aligned');
   const [dimensionStyle, setDimensionStyle] = useState<DimensionStyle>(() => initialData?.drafting?.dimensionStyle || DIMENSION_STYLES.ISO);
   const [layerTemplate, setLayerTemplate] = useState<LayerStandard>('WATER_UTILITY');
   const [revisionDraft, setRevisionDraft] = useState({ revision: '', date: new Date().toISOString().slice(0,10), description: '', drawnBy: '', checkedBy: '', approvedBy: '', status: 'FOR REVIEW' as const });
@@ -465,8 +466,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       if (next.length < 2) { setAnnotationDraft(next); setMessage('First point set. Choose the second point.'); return; }
       if (draftTool === 'dimension') {
         try {
-          const item = makeAlignedDimension(makeId(), next[0], next[1], dimensionOffset * (calibratedMetresPerUnit || 1), 'DIMENSIONS', dimensionStyle.precision);
-          item.textOverride = formatStyledDimension(Math.hypot(next[1].x-next[0].x,next[1].y-next[0].y), dimensionStyle);
+          const item = dimensionKind === 'linear' ? makeLinearDimension(makeId(), next[0], next[1], dimensionOffset * (calibratedMetresPerUnit || 1), 'DIMENSIONS', dimensionStyle.precision) : makeAlignedDimension(makeId(), next[0], next[1], dimensionOffset * (calibratedMetresPerUnit || 1), 'DIMENSIONS', dimensionStyle.precision);
+          item.textOverride = formatStyledDimension(dimensionKind === 'linear' ? Math.abs(next[1].x-next[0].x) : Math.hypot(next[1].x-next[0].x,next[1].y-next[0].y), dimensionStyle);
           setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
           setMessage('Aligned dimension placed.'); 
         } catch (error) { setMessage(error instanceof Error ? error.message : 'Dimension could not be placed.'); }
@@ -879,7 +880,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len,off=item.offsetM*1000/denominator;
       const p1={x:a.x+nx*off,y:a.y+ny*off},p2={x:b.x+nx*off,y:b.y+ny*off};
       const label=item.textOverride||formatDimension(measureDimension(item),item.precision,drafting.sheet.units),mid={x:(p1.x+p2.x)/2,y:(p1.y+p2.y)/2},arrow=2;
-      return '<line x1="'+a.x+'" y1="'+a.y+'" x2="'+p1.x+'" y2="'+p1.y+'" stroke="'+color+'" stroke-width="0.18"/><line x1="'+b.x+'" y1="'+b.y+'" x2="'+p2.x+'" y2="'+p2.y+'" stroke="'+color+'" stroke-width="0.18"/><line x1="'+p1.x+'" y1="'+p1.y+'" x2="'+p2.x+'" y2="'+p2.y+'" stroke="'+color+'" stroke-width="0.18"/><path d="M '+p1.x+' '+p1.y+' l '+(nx*arrow+dx/len*arrow)+' '+(ny*arrow+dy/len*arrow)+' M '+p1.x+' '+p1.y+' l '+(nx*arrow-dx/len*arrow)+' '+(ny*arrow-dy/len*arrow)+' M '+p2.x+' '+p2.y+' l '+(-nx*arrow+dx/len*arrow)+' '+(-ny*arrow+dy/len*arrow)+' M '+p2.x+' '+p2.y+' l '+(-nx*arrow-dx/len*arrow)+' '+(-ny*arrow-dy/len*arrow)+'" stroke="'+color+'" fill="none" stroke-width="0.18"/><text x="'+mid.x+'" y="'+(mid.y-1.5)+'" text-anchor="middle" font-size="2.5" fill="'+color+'">'+safe(label)+'</text>';
+      return '<line x1="'+a.x+'" y1="'+a.y+'" x2="'+p1.x+'" y2="'+p1.y+'" stroke="'+color+'" stroke-width="0.18"/><line x1="'+b.x+'" y1="'+b.y+'" x2="'+p2.x+'" y2="'+p2.y+'" stroke="'+color+'" stroke-width="0.18"/><line x1="'+p1.x+'" y1="'+p1.y+'" x2="'+p2.x+'" y2="'+p2.y+'" stroke="'+color+'" stroke-width="0.18"/><path d="M '+p1.x+' '+p1.y+' l '+(nx*arrow+dx/len*arrow)+' '+(ny*arrow+dy/len*arrow)+' M '+p1.x+' '+p1.y+' l '+(nx*arrow-dx/len*arrow)+' '+(ny*arrow-dy/len*arrow)+' M '+p2.x+' '+p2.y+' l '+(-nx*arrow+dx/len*arrow)+' '+(-ny*arrow+dy/len*arrow)+' M '+p2.x+' '+p2.y+' l '+(-nx*arrow-dx/len*arrow)+' '+(-ny*arrow-dy/len*arrow)+'" stroke="'+color+'" fill="none" stroke-width="0.18"/><text x="'+mid.x+'" y="'+(mid.y-1.5)+'" text-anchor="middle" font-size="'+dimensionStyle.textHeightMm+'" fill="'+color+'">'+safe(label)+'</text>';
     }).join('');
     const titleX=widthMm-170,titleY=heightMm-42;
     const titleBlock='<rect x="'+titleX+'" y="'+titleY+'" width="160" height="32" fill="white" stroke="black" stroke-width="0.25"/><line x1="'+titleX+'" y1="'+(titleY+8)+'" x2="'+(titleX+160)+'" y2="'+(titleY+8)+'" stroke="black" stroke-width="0.18"/><line x1="'+titleX+'" y1="'+(titleY+22)+'" x2="'+(titleX+160)+'" y2="'+(titleY+22)+'" stroke="black" stroke-width="0.18"/><line x1="'+(titleX+105)+'" y1="'+titleY+'" x2="'+(titleX+105)+'" y2="'+(titleY+32)+'" stroke="black" stroke-width="0.18"/><text x="'+(titleX+2)+'" y="'+(titleY+5.5)+'" font-size="3.2">'+safe(drafting.sheet.company)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+14)+'" font-size="3">'+safe(drafting.sheet.title)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+19)+'" font-size="2.5">'+safe(drafting.sheet.status)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+27)+'" font-size="2.2">DES: '+safe(drafting.sheet.designer)+'</text><text x="'+(titleX+54)+'" y="'+(titleY+27)+'" font-size="2.2">CHK: '+safe(drafting.sheet.checker)+'</text><text x="'+(titleX+2)+'" y="'+(titleY+30.5)+'" font-size="2.2">APP: '+safe(drafting.sheet.approver)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+5.5)+'" font-size="2.5">DWG '+safe(drafting.sheet.drawingNumber)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+11)+'" font-size="2.5">REV '+safe(drafting.sheet.revision)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+16)+'" font-size="2.5">SCALE '+safe(drafting.sheet.scale)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+21)+'" font-size="2.5">'+safe(drafting.sheet.date)+'</text><text x="'+(titleX+107)+'" y="'+(titleY+27)+'" font-size="2.2">UNITS '+safe(drafting.sheet.units)+'</text>';
@@ -888,7 +889,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const revisionTable=revisionRows?'<text x="15" y="'+(heightMm-61)+'" font-size="2.4" font-weight="bold">REVISION HISTORY</text>'+revisionRows:'';
     const notes=(drafting.sheet.generalNotes||'').split('\\n').filter(Boolean).slice(0,8).map((line,i)=>'<text x="15" y="'+(heightMm-24-i*3.2)+'" font-size="2.2">'+safe(line)+'</text>').join('');
     const keyPlan=drafting.sheet.keyPlanText?'<text x="15" y="14" font-size="3" font-weight="bold">KEY PLAN · '+safe(drafting.sheet.keyPlanText)+'</text>':'';
-    const northArrow=drafting.sheet.showNorthArrow===false?'':'<g transform="translate('+(widthMm-22)+' 24)+'"><path d="M 0 9 L 0 -9 M 0 -9 L -3 -3 M 0 -9 L 3 -3" stroke="black" fill="none" stroke-width="0.6"/><text x="0" y="-12" text-anchor="middle" font-size="3">N</text></g>';
+    const northArrow=drafting.sheet.showNorthArrow===false?'':'<g transform="translate('+(widthMm-22)+' 24)'><path d="M 0 9 L 0 -9 M 0 -9 L -3 -3 M 0 -9 L 3 -3" stroke="black" fill="none" stroke-width="0.6"/><text x="0" y="-12" text-anchor="middle" font-size="3">N</text></g>';
     const scaleBar=drafting.sheet.showScaleBar===false?'':'<g transform="translate(18 '+(heightMm-18)+')"><rect x="0" y="0" width="25" height="2" fill="black"/><rect x="25" y="0" width="25" height="2" fill="white" stroke="black" stroke-width="0.25"/><text x="25" y="-2" text-anchor="middle" font-size="2.5">5 m</text><text x="25" y="6" text-anchor="middle" font-size="2">GRAPHIC SCALE</text></g>';
     const legendItems=drafting.layers.filter(item=>item.visible&&item.plot&&item.name!=='0').slice(0,10).map((item,i)=>'<line x1="15" y1="'+(25+i*4)+'" x2="24" y2="'+(25+i*4)+'" stroke="'+item.color+'" stroke-width="'+Math.max(0.25,item.lineWeightMm)+'"/><text x="27" y="'+(26+i*4)+'" font-size="2.4">'+safe(item.name)+'</text>').join('');
     const legend=legendItems?'<text x="15" y="22" font-size="2.8" font-weight="bold">LEGEND</text>'+legendItems:'';
@@ -1054,7 +1055,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const nx = -dy / length, ny = dx / length, off = item.offsetM / (calibratedMetresPerUnit || 1);
     const p1 = { x: a.x + nx * off, y: a.y + ny * off }, p2 = { x: b.x + nx * off, y: b.y + ny * off };
     const label = item.textOverride || formatDimension(measureDimension(item), item.precision, drafting.sheet.units);
-    const h = paperHeight(2.5), mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    const h = paperHeight(dimensionStyle.textHeightMm), mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
     return <g key={item.id} fill='none' stroke={color} strokeWidth={Math.max(viewBox.width / 1800, 0.45)}><line x1={a.x} y1={a.y} x2={p1.x} y2={p1.y}/><line x1={b.x} y1={b.y} x2={p2.x} y2={p2.y}/><line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}/><text x={mid.x} y={mid.y - h * 0.2} textAnchor='middle' fontSize={h} fill={color} stroke='none'>{label}</text></g>;
   });
   const renderedShapes = visibleShapes.map(shape => {
@@ -1110,7 +1111,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         <span className="eyebrow muted">PROFESSIONAL DRAFTING</span>
         <h3 style={{ margin: "5px 0" }}>Dimensions, annotations, layers & drawing sheets</h3>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
-          <button className={draftTool === "dimension" ? "primary-button" : "secondary-button"} onClick={() => { setDraftTool("dimension"); setAnnotationDraft([]); setMessage("Select two points to dimension."); }}>Aligned dimension</button>
+          <button className={draftTool === "dimension" && dimensionKind === "aligned" ? "primary-button" : "secondary-button"} onClick={() => { setDimensionKind("aligned"); setDraftTool("dimension"); setAnnotationDraft([]); setMessage("Select two points for an aligned dimension."); }}>Aligned dimension</button>
+          <button className={draftTool === "dimension" && dimensionKind === "linear" ? "primary-button" : "secondary-button"} onClick={() => { setDimensionKind("linear"); setDraftTool("dimension"); setAnnotationDraft([]); setMessage("Select two points for a horizontal/vertical linear dimension."); }}>Linear dimension</button>
           <button className={draftTool === "text" ? "primary-button" : "secondary-button"} onClick={() => { setDraftTool("text"); setMessage("Click the drawing to place text."); }}>Place text</button>
           <button className={draftTool === "leader" ? "primary-button" : "secondary-button"} onClick={() => { setDraftTool("leader"); setAnnotationDraft([]); setMessage("Click leader arrow point, then text landing point."); }}>Leader</button>
           {draftTool !== "none" && <button className="secondary-button" onClick={() => { setDraftTool("none"); setAnnotationDraft([]); }}>Cancel annotation</button>}
