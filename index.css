@@ -1727,3 +1727,12 @@ button:disabled {
 .aquacad-shell>.alert{order:2}
 .aquacad-shell>.panel:has(.aquacad-drawing-stage) .aquacad-drawing-stage{flex:1}
 .aquacad-shell>.panel:has(.aquacad-drawing-stage) .aquacad-dock{max-height:68vh}
+
+.aquacad-quick-access{display:flex;align-items:center;gap:2px;margin-left:10px}
+.aquacad-quick-access button{padding:3px 7px;border:1px solid transparent;border-radius:3px;background:transparent;color:#526170;font-size:9px}
+.aquacad-quick-access button:hover{border-color:#cfd6df;background:#fff}
+.aquacad-quick-access button:disabled{opacity:.35}
+.aquacad-command-history{padding:3px 9px;background:#f5f7fa;border-bottom:1px solid #e1e6eb;color:#66727f;font:10px ui-monospace,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aquacad-shell>.panel:has(.aquacad-drawing-stage)>div[style]{display:none!important}
+.aquacad-shell>.panel:has(.aquacad-drawing-stage)>p{display:none!important}
+@media(max-width:620px){.aquacad-quick-access{margin-left:4px}.aquacad-quick-access button{padding:3px 4px;font-size:8px}.aquacad-titlelockup small{display:none}.aquacad-title-actions{margin-left:auto}}
