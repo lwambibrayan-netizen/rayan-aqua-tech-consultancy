@@ -174,7 +174,7 @@ async function handleRequest(request: VercelRequest): Promise<Response> {
       if (path[2] === 'gis-terrain' && path.length === 4 && path[3] !== 'status' && method === 'POST') {
         const service = process.env.PYQGIS_API_URL; const key = process.env.PYQGIS_API_KEY;
         if (!service || !key) return fail('PyQGIS terrain service is not configured. Configure PYQGIS_API_URL and PYQGIS_API_KEY.', 503);
-        const operation = path[3]; if (!['profile', 'compare', 'least-cost', 'contours', 'slope', 'analyze'].includes(operation)) return fail('Unknown terrain operation.', 404);
+        const operation = path[3]; if (!['profile', 'compare', 'least-cost', 'contours', 'slope', 'analyze', 'grid'].includes(operation)) return fail('Unknown terrain operation.', 404);
         const upstream = new URL(`/terrain/${operation}`, service);
         try { const result = await upstreamJson(upstream, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body: JSON.stringify({ ...(await bodyOf(request)), userId, projectId }) }); return json(result); }
         catch (error) { return fail(error instanceof Error ? error.message : 'PyQGIS service request failed.', 502); }
