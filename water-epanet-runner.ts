@@ -41,7 +41,7 @@ export async function runEpanetHydraulicSimulation(input: string): Promise<Epane
           id: project.getLinkId(i),
           flowLps: project.getLinkValue(i, LinkProperty.Flow),
           velocityMs: project.getLinkValue(i, LinkProperty.Velocity),
-          headlossM: project.getLinkValue(i, LinkProperty.HeadLoss),
+          headlossM: project.getLinkValue(i, LinkProperty.Headloss),
           status: String(project.getLinkValue(i, LinkProperty.Status)),
         };
       });
