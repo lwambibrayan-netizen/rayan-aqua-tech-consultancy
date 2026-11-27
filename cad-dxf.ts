@@ -123,7 +123,8 @@ function sampleCatmullRom(points:{x:number;y:number}[],steps=8):{x:number;y:numb
 
 export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, metresPerDrawingUnit=1):string {
   if(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0) throw new Error('A valid drawing calibration is required for DXF export.');
-  const insunits=Math.abs(metresPerDrawingUnit-1)<1e-9?6:Math.abs(metresPerDrawingUnit-0.001)<1e-9?4:0;
+  const insunitFactors: Array<[number,number]> = [[0.0254,1],[0.3048,2],[1609.344,3],[0.001,4],[0.01,5],[1,6],[1000,7],[1e-6,8],[0.0000254,9],[0.9144,10],[1e-10,11],[1e-9,12],[1e-6,13],[0.1,14],[10,15],[100,16],[1e9,17]];
+  const insunits=insunitFactors.find(([factor])=>Math.abs(factor-metresPerDrawingUnit)<1e-12)?.[1]??0;
   const layerMap = new Map(drafting.layers.map(layer => [layer.name.toUpperCase(), layer]));
   shapes.forEach(shape => { const name = shape.layer || '0'; if (!layerMap.has(name.toUpperCase())) layerMap.set(name.toUpperCase(), { name, color: '#666666', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }); });
   drafting.annotations.forEach(item => { if (!layerMap.has(item.layer.toUpperCase())) layerMap.set(item.layer.toUpperCase(), { name: item.layer, color: '#666666', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }); });
@@ -142,10 +143,11 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
   out.push('0','ENDTAB','0','ENDSEC','0','SECTION','2','ENTITIES');
   for(const shape of shapes){
     const layer=shape.layer||'0';
-    if(shape.type==='line') out.push(...entity('LINE',['8',layer,'10',fmt(shape.points[0].x),'20',fmt(shape.points[0].y),'11',fmt(shape.points[1].x),'21',fmt(shape.points[1].y)]));
-    else if(shape.type==='circle') out.push(...entity('CIRCLE',['8',layer,'10',fmt(shape.points[0].x),'20',fmt(shape.points[0].y),'40',fmt(shape.radius||1)]));
+    const drawingPoints=shape.points.map(point=>({x:point.x/metresPerDrawingUnit,y:point.y/metresPerDrawingUnit}));
+    if(shape.type==='line') out.push(...entity('LINE',['8',layer,'10',fmt(drawingPoints[0].x),'20',fmt(drawingPoints[0].y),'11',fmt(drawingPoints[1].x),'21',fmt(drawingPoints[1].y)]));
+    else if(shape.type==='circle') out.push(...entity('CIRCLE',['8',layer,'10',fmt(drawingPoints[0].x),'20',fmt(drawingPoints[0].y),'40',fmt((shape.radius||1)/metresPerDrawingUnit)]));
     else {
-      const pts=shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y}]:shape.points;
+      const pts=shape.type==='rect'?[drawingPoints[0],{x:drawingPoints[1].x,y:drawingPoints[0].y},drawingPoints[1],{x:drawingPoints[0].x,y:drawingPoints[1].y}]:drawingPoints;
       out.push(...entity('LWPOLYLINE',['8',layer,'90',pts.length,'70',shape.type==='rect'?'1':'0']));
       pts.forEach((p,i)=>out.push('10',fmt(p.x),'20',fmt(p.y),...(shape.bulges?.[i]?[ '42',fmt(shape.bulges[i]) ]:[])));
     }
@@ -176,11 +178,16 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
   out.push('0','ENDSEC','0','EOF');
   return out.join('\n');
 }
-export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDenominator=100):DxfImportResult {
-  if(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0) throw new Error('Drawing calibration must be positive.');
+export function importDraftingDxf(source:string, metresPerDrawingUnit?:number, scaleDenominator=100):DxfImportResult {
+  if(metresPerDrawingUnit!==undefined&&(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0)) throw new Error('Drawing calibration must be positive.');
   if(!Number.isFinite(scaleDenominator)||scaleDenominator<=0) throw new Error('Drawing scale denominator must be positive.');
   const warnings:string[]=[];
-  const pairs=expandBlockInserts(normalizeLegacyPolylines(pairsOf(source), warnings), warnings);
+  const rawPairs=pairsOf(source);
+  const unitHeader=rawPairs.findIndex(pair=>pair[0]==='9'&&pair[1]==='$INSUNITS');
+  const declaredUnits=unitHeader>=0?Number(rawPairs.slice(unitHeader+1).find(pair=>pair[0]==='70')?.[1]):0;
+  const metresByInsunits:Record<number,number>={1:0.0254,2:0.3048,3:1609.344,4:0.001,5:0.01,6:1,7:1000,8:1e-6,9:0.0000254,10:0.9144,11:1e-10,12:1e-9,13:1e-6,14:0.1,15:10,16:100,17:1e9};
+  const effectiveMetresPerDrawingUnit=metresPerDrawingUnit??metresByInsunits[declaredUnits]??1;
+  const pairs=expandBlockInserts(normalizeLegacyPolylines(rawPairs, warnings), warnings);
   const importedLayers:DraftLayer[]=[];
   const indexedColors:Record<number,string>={1:'#ff0000',2:'#ffff00',3:'#00ff00',4:'#00ffff',5:'#0000ff',6:'#ff00ff',7:'#222222'};
   const supportedLineTypes=new Set(['CONTINUOUS','DASHED','CENTER','HIDDEN','PHANTOM']);
@@ -220,7 +227,7 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
       if(points.length>1){if((num('70')&1)===1)points.push({...points[0]});shapes.push({id,type:'polyline',points,bulges,layer});}
     } else if(current.type==='TEXT'||current.type==='MTEXT'){
       const raw=v.filter(p=>p[0]==='3'||p[0]==='1').map(p=>p[1]).join('');
-      annotations.push({id,kind:'text',layer,at:{x:num('10')*metresPerDrawingUnit,y:num('20')*metresPerDrawingUnit},text:raw.replace(/\\P/g,'\n'),heightMm:Math.max(0.5,num('40')*1000*metresPerDrawingUnit/scaleDenominator),rotationDeg:num('50')});
+      annotations.push({id,kind:'text',layer,at:{x:num('10')*effectiveMetresPerDrawingUnit,y:num('20')*effectiveMetresPerDrawingUnit},text:raw.replace(/\\P/g,'\n'),heightMm:Math.max(0.5,num('40')*1000*effectiveMetresPerDrawingUnit/scaleDenominator),rotationDeg:num('50')});
     } else if(current.type==='ARC'){
       const cx=num('10'),cy=num('20'),r=num('40'),a=num('50')*Math.PI/180,b=num('51')*Math.PI/180;
       let sweep=b-a;if(sweep<=0)sweep+=Math.PI*2;
@@ -256,9 +263,9 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
       if(unique.length>=3){unique.push({...unique[0]});shapes.push({id,type:'polyline',points:unique,layer});if(v.some(([code,value])=>['30','31','32','33'].includes(code)&&Math.abs(Number(value))>1e-9))warnings.push('Converted '+current.type+' '+id+' to a 2D boundary; elevation/Z values were not retained.');}
       else warnings.push('Skipped '+current.type+' without three distinct valid vertices.');
     } else if(current.type==='DIMENSION') {
-      const a={x:num('13')*metresPerDrawingUnit,y:num('23')*metresPerDrawingUnit};
-      const b={x:num('14')*metresPerDrawingUnit,y:num('24')*metresPerDrawingUnit};
-      if(Math.hypot(b.x-a.x,b.y-a.y)>1e-9) { const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),nx=-dy/len,ny=dx/len,locX=num('10')*metresPerDrawingUnit,locY=num('20')*metresPerDrawingUnit; const offsetM=(locX-a.x)*nx+(locY-a.y)*ny; annotations.push({id,kind:(num('70')&1)?'aligned':'linear',layer,a,b,offsetM,precision:3,textOverride:get('1')&&get('1')!=='<>'?get('1'):undefined}); }
+      const a={x:num('13')*effectiveMetresPerDrawingUnit,y:num('23')*effectiveMetresPerDrawingUnit};
+      const b={x:num('14')*effectiveMetresPerDrawingUnit,y:num('24')*effectiveMetresPerDrawingUnit};
+      if(Math.hypot(b.x-a.x,b.y-a.y)>1e-9) { const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),nx=-dy/len,ny=dx/len,locX=num('10')*effectiveMetresPerDrawingUnit,locY=num('20')*effectiveMetresPerDrawingUnit; const offsetM=(locX-a.x)*nx+(locY-a.y)*ny; annotations.push({id,kind:(num('70')&1)?'aligned':'linear',layer,a,b,offsetM,precision:3,textOverride:get('1')&&get('1')!=='<>'?get('1'):undefined}); }
       else warnings.push('Skipped DIMENSION with missing definition points.');
     } else if(current.type==='POINT') {
       shapes.push({id,type:'circle',points:[{x:num('10'),y:num('20')}],radius:0.03,layer});
@@ -274,5 +281,6 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
   if(!shapes.length&&!annotations.length)throw new Error('No supported LINE, CIRCLE, ARC, LWPOLYLINE, TEXT or MTEXT entities found.');
   const importedByName=new Set(importedLayers.map(layer=>layer.name.toUpperCase()));
   for(const name of layers)if(!importedByName.has(name.toUpperCase()))importedLayers.push({name,color:'#666666',lineType:'CONTINUOUS',lineWeightMm:0.18,visible:true,locked:false,plot:true});
+  for(const shape of shapes){shape.points=shape.points.map(point=>({x:point.x*effectiveMetresPerDrawingUnit,y:point.y*effectiveMetresPerDrawingUnit}));if(shape.radius!==undefined)shape.radius*=effectiveMetresPerDrawingUnit;}
   return {shapes,annotations,layerNames:[...layers],layers:importedLayers,warnings};
 }
