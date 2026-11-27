@@ -38,6 +38,7 @@ const add = (a: WaterPoint, b: WaterPoint): WaterPoint => ({ x: a.x + b.x, y: a.
 const scale = (a: WaterPoint, n: number): WaterPoint => ({ x: a.x * n, y: a.y * n, z: a.z });
 const dist = (a: WaterPoint, b: WaterPoint) => Math.hypot(a.x - b.x, a.y - b.y, finite(a.z) && finite(b.z) ? a.z - b.z : 0);
 const fmt = (n: number) => Number(n.toFixed(4)).toString();
+const fmtTime = (seconds:number) => { const total=Math.max(0,Math.round(seconds)); return Math.floor(total/3600)+':'+String(Math.floor((total%3600)/60)).padStart(2,'0'); };
 const safeId = (s: string) => s.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 31) || 'N';
 
 function componentAxis(c: WaterCadComponent): WaterPoint {
@@ -335,6 +336,10 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   const lines: string[] = ['[TITLE]', 'RayanAqua Water CAD export', '', '[JUNCTIONS]', ';ID Elevation_m BaseDemand_LPS Pattern'];
   nodes.filter(n => n.kind === 'junction').forEach(n => lines.push([safeId(n.id), fmt(n.properties.hydraulicElevationM ?? n.geometry[0]?.z ?? 0), fmt((n.properties.flowM3h ?? 0) * 1000 / 3600), n.properties.demandPatternId ? safeId(n.properties.demandPatternId) : ''].join(' ')));
   hydraulic.syntheticNodes.forEach(n => lines.push([n.id, fmt(n.elevationM), '0', ''].join(' ')));
+  lines.push('', '[DEMANDS]', ';JunctionID Demand_LPS Pattern');
+  nodes.filter(n=>n.kind==='junction').forEach(n=>(n.properties.additionalDemands??[]).forEach(demand=>lines.push([safeId(n.id),fmt(demand.flowM3h*1000/3600),demand.patternId?safeId(demand.patternId):''].join(' '))));
+  lines.push('', '[EMITTERS]', ';JunctionID Coefficient');
+  nodes.filter(n=>n.kind==='junction'&&n.properties.emitterCoefficient!==undefined).forEach(n=>lines.push([safeId(n.id),fmt(n.properties.emitterCoefficient??0)].join(' ')));
   lines.push('', '[RESERVOIRS]', ';ID Head_m Pattern');
   nodes.filter(n => n.kind === 'source' || n.kind === 'reservoir').forEach(n => lines.push([safeId(n.id), fmt(n.properties.hydraulicHeadM ?? n.properties.tankOperatingLevelM ?? n.geometry[0]?.z ?? 0), ''].join(' ')));
   lines.push('', '[TANKS]', ';ID Elevation_m InitLevel_m MinLevel_m MaxLevel_m Diameter_m MinVolume_m3');
@@ -399,7 +404,15 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
     const points=p.properties.pumpCurvePoints?.length ? p.properties.pumpCurvePoints : [{flowM3h:p.properties.pumpDutyFlowM3h??0,headM:p.properties.pumpDutyHeadM??0}];
     points.forEach(point=>lines.push([safeId('CURVE_' + p.id),fmt(point.flowM3h*1000/3600),fmt(point.headM)].join(' ')));
   });
-  lines.push('', '[OPTIONS]', 'UNITS LPS', 'HEADLOSS H-W', 'SPECIFIC GRAVITY 1', 'VISCOSITY 1', 'TRIALS 40', 'ACCURACY 0.001', '', '[TIMES]', 'DURATION 0', 'HYDRAULIC TIMESTEP 1:00', 'QUALITY TIMESTEP 0:05', '', '[REPORT]', 'STATUS YES', 'SUMMARY YES', 'NODES ALL', 'LINKS ALL', '', '[COORDINATES]');
+  lines.push('', '[OPTIONS]', 'UNITS LPS', 'HEADLOSS '+(document.epanetHeadlossFormula??'H-W'), 'SPECIFIC GRAVITY '+fmt(document.epanetSpecificGravity??1), 'VISCOSITY '+fmt(document.epanetViscosity??1), 'TRIALS '+fmt(document.epanetTrials??40), 'ACCURACY '+fmt(document.epanetAccuracy??0.001), '', '[TIMES]',
+    'DURATION '+fmtTime(document.epanetTimes?.durationSeconds??0),
+    'HYDRAULIC TIMESTEP '+fmtTime(document.epanetTimes?.hydraulicStepSeconds??3600),
+    'QUALITY TIMESTEP 0:05',
+    'PATTERN TIMESTEP '+fmtTime(document.epanetTimes?.patternStepSeconds??3600),
+    'PATTERN START '+fmtTime(document.epanetTimes?.patternStartSeconds??0),
+    'REPORT TIMESTEP '+fmtTime(document.epanetTimes?.reportStepSeconds??3600),
+    'REPORT START '+fmtTime(document.epanetTimes?.reportStartSeconds??0),
+    '', '[REPORT]', 'STATUS YES', 'SUMMARY YES', 'NODES ALL', 'LINKS ALL', '', '[COORDINATES]');
   nodes.forEach(n => { const point = n.geometry[0]; if (point) lines.push([safeId(n.id), fmt(point.x), fmt(point.y)].join(' ')); });
   lines.push('', '[END]');
   return { input: lines.join('\n') + '\n', warnings };
