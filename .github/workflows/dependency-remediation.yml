@@ -1,0 +1,69 @@
+name: RayanAqua dependency remediation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "feature/project-professional-reports-2026-11-26"
+    paths:
+      - "package.json"
+      - ".github/workflows/dependency-remediation.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rayan-aqua-dependency-remediation
+  cancel-in-progress: false
+
+jobs:
+  remediate:
+    name: Resolve audited dependency vulnerabilities and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out preview branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/project-professional-reports-2026-11-26
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Generate a reproducible lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Apply non-breaking security fixes
+        run: npm audit fix --no-fund
+      - name: Require no moderate-or-higher vulnerabilities
+        run: npm audit --audit-level=moderate
+      - name: Clean install from the generated lockfile
+        run: npm ci --no-audit --no-fund
+      - name: TypeScript typecheck
+        run: npm run typecheck
+      - name: Run application tests
+        run: npm test
+      - name: Check PyQGIS service syntax
+        run: python3 -m py_compile app.py
+      - name: Set up Python 3.11 for EPANET reference
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install independent WNTR reference engine
+        run: python -m pip install --disable-pip-version-check wntr==1.3.2 six
+      - name: Compare EPANET-JS with independent WNTR / EPANET 2.2
+        run: python scripts/compare_net3_reference.py
+      - name: Build production bundle
+        run: npm run build
+      - name: Commit verified lockfile
+        run: |
+          if git status --short -- package-lock.json | grep -q .; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "Add audited npm lockfile and resolve dependency advisories"
+            git push origin HEAD:feature/project-professional-reports-2026-11-26
+          else
+            echo "Lockfile already current; no commit needed."
+          fi
