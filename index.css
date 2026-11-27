@@ -1805,3 +1805,5 @@ button:disabled {
 .aquacad-ribbon-extra label{min-width:0}
 .aquacad-ribbon-extra input,.aquacad-ribbon-extra select,.aquacad-ribbon-extra textarea{max-width:100%;box-sizing:border-box}
 @media(max-width:760px){.aquacad-ribbon-extra{max-height:36vh;padding:5px 2px}.aquacad-ribbon-extra>.panel{padding:9px!important}.aquacad-ribbon-extra>.panel>div{min-width:0}}
+/* Expanded ribbon panels must not clip the drawing stage or command bar below them. */
+.aquacad-shell:not(.aquacad-fullscreen){height:auto!important;min-height:620px!important;overflow:visible!important}
