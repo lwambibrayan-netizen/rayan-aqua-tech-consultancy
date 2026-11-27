@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createHistory, pushHistory, undoHistory, redoHistory } from './cad-geometry';
+import { moveEntities, copyEntities, rotateEntities, mirrorEntities, stretchEntities, rectangularArray, trimLine, extendLine, offsetLine, chamferPolylineCorner, filletPolylineCorner } from './cad-editing';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
@@ -271,6 +272,15 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [hiddenLayers, setHiddenLayers] = useState<string[]>([]);
   const [snapMarker, setSnapMarker] = useState<SnapPoint | null>(null);
   const [selectedShapeId, setSelectedShapeId] = useState('');
+  const [selectedShapeIds, setSelectedShapeIds] = useState<string[]>([]);
+  const [selectionBox, setSelectionBox] = useState<{start:Point2D;end:Point2D}|null>(null);
+  const selectionRef = useRef<{pointerId:number;start:Point2D;current:Point2D}|null>(null);
+  const [commandDistance, setCommandDistance] = useState(5);
+  const [commandAngle, setCommandAngle] = useState(90);
+  const [arrayRows, setArrayRows] = useState(2);
+  const [arrayColumns, setArrayColumns] = useState(2);
+  const [arraySpacing, setArraySpacing] = useState(20);
+  const [previewShapes, setPreviewShapes] = useState<Shape[]|null>(null);
   const [cursorPoint, setCursorPoint] = useState<Point2D | null>(null);
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: WIDTH, height: HEIGHT });
   const [panMode, setPanMode] = useState(false);
@@ -285,6 +295,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setViewBox(initialData?.viewport && [initialData.viewport.x, initialData.viewport.y, initialData.viewport.width, initialData.viewport.height].every(Number.isFinite)
       ? initialData.viewport : { x: 0, y: 0, width: WIDTH, height: HEIGHT });
     setDraft([]);
+    setSelectedShapeId('');
+    setSelectedShapeIds([]);
   }, [initialData]);
 
   const counts = useMemo(() => ({
@@ -315,6 +327,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
+    if (selectionRef.current && selectionRef.current.pointerId===event.pointerId) {
+      const point=toSvgPoint(event.currentTarget,event.clientX,event.clientY);
+      selectionRef.current.current=point; setSelectionBox({start:selectionRef.current.start,end:point}); return;
+    }
     if (panRef.current && panRef.current.pointerId === event.pointerId) {
       const svg = event.currentTarget;
       const rect = svg.getBoundingClientRect();
@@ -338,8 +354,15 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (panRef.current || panMode) return;
     if (mode === 'select') {
       const target = (event.target as SVGElement).closest('[data-shape-id]') as SVGElement | null;
-      setSelectedShapeId(target?.getAttribute('data-shape-id') || '');
-      setMessage(target ? 'Entity selected. Edit its properties in the inspector.' : 'No entity selected.');
+      const id = target?.getAttribute('data-shape-id') || '';
+      if (event.shiftKey && id) {
+        setSelectedShapeIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+        setSelectedShapeId(id);
+      } else {
+        setSelectedShapeId(id);
+        setSelectedShapeIds(id ? [id] : []);
+      }
+      setMessage(id ? 'Entity selected. Hold Shift to add/remove entities from the selection.' : 'No entity selected.');
       return;
     }
     const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
@@ -631,7 +654,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const renderedShapes = visibleShapes.map(shape => {
     const color = shape.layer === 'WATER_NETWORK' ? '#167b78' : '#c08c3c';
     if (shape.type === 'circle') {
-      return <circle data-shape-id={shape.id} key={shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius || 12} fill="none" stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 4 : 2.5} />;
+      return <circle data-shape-id={shape.id} key={shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius || 12} fill="none" stroke={selectedShapeIds.includes(shape.id) ? '#d04d3f' : color} strokeWidth={selectedShapeIds.includes(shape.id) ? 4 : 2.5} />;
     }
     if (shape.type === 'rect') {
       const a = shape.points[0];
@@ -675,6 +698,27 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
 
       {view === '2d' ? (
         <div className="panel" style={{ padding: 12 }}>
+          <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>
+            <strong>Modify</strong><span className="muted" style={{fontSize:12}}>{selectedShapeIds.length} selected</span>
+            <label>Distance <input type="number" value={commandDistance} step="any" onChange={e=>setCommandDistance(Number(e.target.value))} style={{width:75}}/></label>
+            <label>Angle ° <input type="number" value={commandAngle} step="any" onChange={e=>setCommandAngle(Number(e.target.value))} style={{width:70}}/></label>
+            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{const preview=moveEntities(selectedShapes,{x:commandDistance,y:commandDistance});setPreviewShapes(preview);setMessage('MOVE preview: apply to commit or cancel preview.');}}>Preview move</button>
+            <button className="primary-button" disabled={!selectedShapes.length} onClick={()=>{setShapes(cur=>[...cur.filter(x=>!selectedShapeIds.includes(x.id)),...moveEntities(selectedShapes,{x:commandDistance,y:commandDistance})]);setPreviewShapes(null);setMessage('MOVE committed.');}}>Move</button>
+            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{setShapes(cur=>[...cur,...copyEntities(selectedShapes,{x:commandDistance,y:commandDistance})]);setPreviewShapes(null);setMessage('COPY committed.');}}>Copy</button>
+            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{const pivot=selectedShapes[0].points[0];setShapes(cur=>cur.map(x=>selectedShapeIds.includes(x.id)?rotateEntities([x],pivot,commandAngle)[0]:x));setMessage('ROTATE committed.');}}>Rotate</button>
+            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{const a=selectedShapes[0].points[0],b={x:a.x,y:a.y+1};setShapes(cur=>cur.map(x=>selectedShapeIds.includes(x.id)?mirrorEntities([x],a,b)[0]:x));setMessage('MIRROR committed about a vertical axis through the first selected point.');}}>Mirror</button>
+            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{setShapes(cur=>[...cur,...rectangularArray(selectedShapes,arrayRows,arrayColumns,arraySpacing,arraySpacing)]);setMessage('ARRAY committed.');}}>Array</button>
+            <label>Rows <input type="number" min="1" value={arrayRows} onChange={e=>setArrayRows(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
+            <label>Cols <input type="number" min="1" value={arrayColumns} onChange={e=>setArrayColumns(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
+            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{setShapes(cur=>cur.map(x=>selectedShapeIds.includes(x.id)?stretchEntities([x],{minX:-Infinity,minY:-Infinity,maxX:Infinity,maxY:Infinity},{x:commandDistance,y:0})[0]:x));setMessage('STRETCH applied to selected entities.');}}>Stretch</button>
+            <button className="secondary-button" disabled={selectedShapes.length!==1||selectedShapes[0].type!=='line'} onClick={()=>{setShapes(cur=>[...cur,...selectedShapes.map(x=>offsetLine(x,commandDistance))]);setMessage('OFFSET created parallel geometry.');}}>Offset</button>
+            <button className="secondary-button" disabled={selectedShapes.length!==2||selectedShapes[0].type!=='line'||selectedShapes[1].type!=='line'} onClick={()=>{try{setShapes(cur=>cur.map(x=>x.id===selectedShapes[0].id?trimLine(x,selectedShapes[1],x.points[0]):x));setMessage('TRIM committed.');}catch(e){setMessage(e instanceof Error?e.message:'TRIM failed.');}}}>Trim</button>
+            <button className="secondary-button" disabled={selectedShapes.length!==2||selectedShapes[0].type!=='line'||selectedShapes[1].type!=='line'} onClick={()=>{try{setShapes(cur=>cur.map(x=>x.id===selectedShapes[0].id?extendLine(x,selectedShapes[1],1):x));setMessage('EXTEND committed.');}catch(e){setMessage(e instanceof Error?e.message:'EXTEND failed.');}}}>Extend</button>
+            <button className="secondary-button" disabled={selectedShapes.length!==1||selectedShapes[0].type!=='polyline'} onClick={()=>{try{setShapes(cur=>cur.map(x=>x.id===selectedShapes[0].id?chamferPolylineCorner(x,1,commandDistance):x));setMessage('CHAMFER committed at first internal vertex.');}catch(e){setMessage(e instanceof Error?e.message:'CHAMFER failed.');}}}>Chamfer</button>
+            <button className="secondary-button" disabled={selectedShapes.length!==1||selectedShapes[0].type!=='polyline'} onClick={()=>{try{setShapes(cur=>cur.map(x=>x.id===selectedShapes[0].id?filletPolylineCorner(x,1,commandDistance):x));setMessage('FILLET committed at first internal vertex.');}catch(e){setMessage(e instanceof Error?e.message:'FILLET failed.');}}}>Fillet</button>
+            <button className="secondary-button" onClick={()=>{setPreviewShapes(null);setMessage('Preview cancelled.');}}>Cancel preview</button>
+            <button className="secondary-button" onClick={()=>{setSelectedShapeIds([]);setSelectedShapeId('');}}>Clear selection</button>
+          </div>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
             {(['select', 'line', 'polyline', 'rect', 'circle'] as const).map(tool => (
               <button key={tool} className={mode === tool ? 'primary-button' : 'secondary-button'} onClick={() => { setMode(tool); setDraft([]); }}>
@@ -702,6 +746,13 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               });
             }}
             onPointerDown={event => {
+              if (!panMode && mode==='select' && event.button===0 && !(event.target as SVGElement).closest('[data-shape-id]')) {
+                const start=toSvgPoint(event.currentTarget,event.clientX,event.clientY);
+                selectionRef.current={pointerId:event.pointerId,start,current:start};
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setSelectionBox({start,end:start});
+                return;
+              }
               if (panMode || event.button === 1) {
                 event.preventDefault();
                 event.currentTarget.setPointerCapture(event.pointerId);
@@ -713,8 +764,21 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
                 panRef.current = null;
                 if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
               }
+              if (selectionRef.current?.pointerId === event.pointerId) {
+                const end = selectionRef.current.current;
+                const start = selectionRef.current.start;
+                const left=Math.min(start.x,end.x), right=Math.max(start.x,end.x), top=Math.min(start.y,end.y), bottom=Math.max(start.y,end.y);
+                const crossing=end.x<start.x;
+                const hits=visibleShapes.filter(shape=>{
+                  const pts=shape.type==='circle'?[{x:shape.points[0].x-(shape.radius||0),y:shape.points[0].y-(shape.radius||0)},{x:shape.points[0].x+(shape.radius||0),y:shape.points[0].y+(shape.radius||0)}]:shape.type==='rect'?[shape.points[0],shape.points[1]]:shape.points;
+                  const minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x)),minY=Math.min(...pts.map(p=>p.y)),maxY=Math.max(...pts.map(p=>p.y));
+                  return crossing ? maxX>=left&&minX<=right&&maxY>=top&&minY<=bottom : minX>=left&&maxX<=right&&minY>=top&&maxY<=bottom;
+                }).map(shape=>shape.id);
+                setSelectedShapeIds(hits); setSelectedShapeId(hits[0]||''); setMessage(`${hits.length} entities ${crossing?'crossing':'inside'}-selected.`);
+                selectionRef.current=null; setSelectionBox(null);
+              }
             }}
-            onPointerCancel={() => { panRef.current = null; }}
+            onPointerCancel={() => { panRef.current = null; selectionRef.current=null; setSelectionBox(null); }}
             onPointerMove={handlePointerMove}
             onPointerLeave={handlePointerLeave}
             style={{
@@ -731,6 +795,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <defs><pattern id="cad-grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse"><path d={`M ${gridSize} 0 L 0 0 0 ${gridSize}`} fill="none" stroke="#e5ece9" strokeWidth={Math.max(viewBox.width / 1000, 0.2)} /></pattern></defs>
             <rect x={viewBox.x} y={viewBox.y} width={viewBox.width} height={viewBox.height} fill="url(#cad-grid)" pointerEvents="none" />
             {renderedShapes}
+            {selectionBox && <rect x={Math.min(selectionBox.start.x,selectionBox.end.x)} y={Math.min(selectionBox.start.y,selectionBox.end.y)} width={Math.abs(selectionBox.end.x-selectionBox.start.x)} height={Math.abs(selectionBox.end.y-selectionBox.start.y)} fill={selectionBox.end.x<selectionBox.start.x?'rgba(30,130,190,.12)':'rgba(20,150,110,.12)'} stroke={selectionBox.end.x<selectionBox.start.x?'#2684c7':'#15966e'} strokeDasharray="6 4" pointerEvents="none" />}
+            {previewShapes && previewShapes.map(shape => shape.type==='circle' ? <circle key={'preview-'+shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius||12} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/> : <polyline key={'preview-'+shape.id} points={(shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]]:shape.points).map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>)}
             {draft.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="5" fill="#d59b42" />)}
             {draft.length > 1 && <polyline points={draft.map(point => point.x + ',' + point.y).join(' ')} fill="none" stroke="#d59b42" strokeDasharray="7 5" />}
             {cursorPoint && mode !== 'select' && (
