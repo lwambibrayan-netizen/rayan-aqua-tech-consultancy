@@ -128,7 +128,16 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
   shapes.forEach(shape => { const name = shape.layer || '0'; if (!layerMap.has(name.toUpperCase())) layerMap.set(name.toUpperCase(), { name, color: '#666666', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }); });
   drafting.annotations.forEach(item => { if (!layerMap.has(item.layer.toUpperCase())) layerMap.set(item.layer.toUpperCase(), { name: item.layer, color: '#666666', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }); });
   const exportLayers = [...layerMap.values()];
-  const out:string[]=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1015','9','$INSUNITS','70',String(insunits),'9','$MEASUREMENT','70','1','0','ENDSEC','0','SECTION','2','TABLES','0','TABLE','2','LAYER','70',String(exportLayers.length)];
+  const lineTypes: Array<{name:string;description:string;pattern:number[]}> = [
+    {name:'CONTINUOUS',description:'Solid line',pattern:[]},
+    {name:'DASHED',description:'Dashed __ __ __',pattern:[4,-2]},
+    {name:'CENTER',description:'Center ____ _ ____ _',pattern:[6,-2,1,-2]},
+    {name:'HIDDEN',description:'Hidden __ __ __',pattern:[1.5,-1.5]},
+    {name:'PHANTOM',description:'Phantom ____ _ _ ____',pattern:[6,-2,1,-2,1,-2]},
+  ];
+  const out:string[]=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1015','9','$INSUNITS','70',String(insunits),'9','$MEASUREMENT','70','1','0','ENDSEC','0','SECTION','2','TABLES','0','TABLE','2','LTYPE','70',String(lineTypes.length)];
+  for(const item of lineTypes) out.push('0','LTYPE','2',item.name,'70','0','3',item.description,'72','65','73',String(item.pattern.length),'40',fmt(item.pattern.reduce((sum,value)=>sum+Math.abs(value),0)),...item.pattern.flatMap(value=>['49',fmt(value),'74','0']));
+  out.push('0','ENDTAB','0','TABLE','2','LAYER','70',String(exportLayers.length));
   for(const layer of exportLayers) out.push('0','LAYER','2',layer.name,'70',layer.locked?'4':'0','62',layer.visible? '7':'-7','420',String(parseInt(layer.color.slice(1),16)),'6',layer.lineType,'370',String(Math.round(layer.lineWeightMm*100)));
   out.push('0','ENDTAB','0','ENDSEC','0','SECTION','2','ENTITIES');
   for(const shape of shapes){
