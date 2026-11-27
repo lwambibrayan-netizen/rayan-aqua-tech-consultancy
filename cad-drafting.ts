@@ -112,7 +112,7 @@ export function validateDraftingDocument(doc: DraftingDocument): string[] {
   if (doc.sheet.size === 'CUSTOM' && (!(doc.sheet.widthMm && doc.sheet.heightMm) || doc.sheet.widthMm < 180 || doc.sheet.heightMm < 120 || doc.sheet.widthMm > 5000 || doc.sheet.heightMm > 5000)) issues.push('Custom sheet width and height must each be between 180 × 120 mm and 5000 × 5000 mm.');
   const revisionIds = new Set<string>();
   for (const revision of doc.revisionHistory) { const key = revision.revision.trim().toUpperCase(); if (!key || revisionIds.has(key)) issues.push('Revision identifiers must be unique and non-empty.'); revisionIds.add(key); if (!revision.date || !revision.description.trim()) issues.push('Each revision requires a date and change description.'); }
-  if (!/^1:\\d+(?:\\.\\d+)?$/.test(doc.sheet.scale)) issues.push('Sheet scale must use a ratio such as 1:100.');
+  if (!/^1:\d+(?:\.\d+)?$/.test(doc.sheet.scale)) issues.push('Sheet scale must use a ratio such as 1:100.');
   if (!doc.sheet.drawingNumber.trim() || !doc.sheet.title.trim()) issues.push('Drawing title and drawing number are required.');
   return issues;
 }
