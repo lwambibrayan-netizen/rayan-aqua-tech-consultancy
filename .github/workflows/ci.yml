@@ -39,3 +39,28 @@ jobs:
         run: python scripts/compare_net3_reference.py
       - name: Build production bundle
         run: npm run build
+
+  browser-e2e:
+    name: Browser workflow and PyQGIS smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify
+    env:
+      CI: "true"
+      VITE_SUPABASE_URL: https://crqvhmcnsktxlpteiryk.supabase.co
+      VITE_SUPABASE_ANON_KEY: e2e-placeholder-public-key
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install application dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install Playwright test runner
+        run: npm install --no-save --package-lock=false --no-audit --no-fund @playwright/test
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser end-to-end tests
+        run: npx playwright test
