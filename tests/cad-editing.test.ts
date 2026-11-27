@@ -83,7 +83,7 @@ describe('CAD editing geometry operations', () => {
     const expanded=offsetPolyline(closed,1,-1);
     expect(expanded.points).toEqual([{x:-1,y:-1},{x:11,y:-1},{x:11,y:11},{x:-1,y:11},{x:-1,y:-1}]);
     expect(()=>offsetPolyline(closed,6)).toThrow(/collapses\/inverts/);
-    expect(()=>offsetPolyline({...straight,points:[{x:0,y:0},{x:5,y:0},{x:0,y:0}]},2)).toThrow(/degenerate|parallel/);
+    expect(()=>offsetPolyline({...straight,points:[{x:0,y:0},{x:5,y:0},{x:0,y:0}]},2)).toThrow(/three distinct vertices/);
 
   });
   it('chamfers and fillets an internal polyline corner', () => {
