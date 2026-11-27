@@ -8,7 +8,7 @@ export type TerrainGrid = {
   originY: number;
   cellSizeX: number;
   cellSizeY: number;
-  /** Row-major elevations in metres; null represents NoData. */
+  /** Row-major elevations in metres; first sample is at originX/originY and rows advance in +Y; null represents NoData. */
   elevationsM: Array<number | null>;
   crs: string;
   verticalDatum: string;
