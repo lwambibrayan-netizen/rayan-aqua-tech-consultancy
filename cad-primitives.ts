@@ -55,3 +55,14 @@ export function arcFromThreePoints(start: CadPoint, through: CadPoint, end: CadP
   if (Math.abs(sweep)<1e-9 || Math.abs(Math.abs(sweep)-tau)<1e-9) throw new Error('Arc points do not define a valid sweep.');
   return {id,type:'polyline',points:[{...start},{...end}],bulges:[Math.tan(sweep/4),0],layer};
 }
+
+export function arcFromCenterStartAngle(center: CadPoint, start: CadPoint, sweepDegrees: number, id: string, layer: string): CadPolyline {
+  if (![center,start].every(validPoint) || !Number.isFinite(sweepDegrees) || Math.abs(sweepDegrees) < 0.001 || Math.abs(sweepDegrees) >= 360) {
+    throw new Error('Arc centre, start point and sweep angle must define a non-zero arc smaller than 360 degrees.');
+  }
+  const dx=start.x-center.x, dy=start.y-center.y, radius=Math.hypot(dx,dy);
+  if (radius <= 1e-9) throw new Error('Arc radius must be greater than zero.');
+  const sweep=sweepDegrees*Math.PI/180, cos=Math.cos(sweep), sin=Math.sin(sweep);
+  const end={x:center.x+dx*cos-dy*sin,y:center.y+dx*sin+dy*cos};
+  return {id,type:'polyline',points:[{...start},end],bulges:[Math.tan(sweep/4),0],layer};
+}
