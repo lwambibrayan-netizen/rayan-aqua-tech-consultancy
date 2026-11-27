@@ -838,7 +838,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       if (block.waterKind && block.name !== 'PIPE_BREAK') {
         const id = block.name + '-' + makeId();
         const component = createWaterComponent(block.waterKind, id, atMetres.x, atMetres.y);
-        component.properties = { ...component.properties, ...block.defaultProperties };
+        component.properties = { ...component.properties, ...block.defaultProperties, rotationDeg: libraryRotationDeg };
         setWaterCad(current => ({ ...current, components: [...current.components, component] }));
         setSelectedWaterId(id);
       }
