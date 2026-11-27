@@ -78,6 +78,48 @@ J1 10 0
   expect(pump.properties.pumpCurvePoints?.[1].flowM3h).toBeCloseTo(18);
   expect(pump.customPorts?.map(p=>p.point.x)).toEqual([0,10]);
  });
+ it('converts US customary EPANET units into project metres and metric diameters',()=>{
+  const model=`[JUNCTIONS]
+J1 100 10
+[RESERVOIRS]
+R1 200
+[PIPES]
+P1 R1 J1 100 4 100 0 OPEN
+[OPTIONS]
+UNITS GPM
+[COORDINATES]
+R1 0 0
+J1 100 0
+[END]`;
+  const result=importEpanetInp(model);
+  const junction=result.document.components.find(c=>c.id==='J1')!;
+  const pipe=result.document.components.find(c=>c.id==='P1')!;
+  expect(junction.properties.hydraulicElevationM).toBeCloseTo(30.48);
+  expect(junction.properties.flowM3h).toBeCloseTo(2.271247);
+  expect(pipe.properties.hydraulicLengthM).toBeCloseTo(30.48);
+  expect(pipe.properties.internalDiameterMm).toBeCloseTo(101.6);
+ });
+ it('retains time patterns used by junction demand and pump speed',()=>{
+  const model=`[JUNCTIONS]
+J1 100 1 PAT1
+[RESERVOIRS]
+R1 110
+[PUMPS]
+PU1 R1 J1 HEAD PC1 PATTERN PAT1
+[PATTERNS]
+PAT1 1 2 3
+[CURVES]
+PC1 0 50
+PC1 5 40
+[COORDINATES]
+R1 0 0
+J1 10 0
+[END]`;
+  const result=importEpanetInp(model);
+  expect(result.document.epanetPatterns?.[0].multipliers).toEqual([1,2,3]);
+  expect(result.document.components.find(c=>c.id==='J1')?.properties.demandPatternId).toBe('PAT1');
+  expect(result.document.components.find(c=>c.id==='PU1')?.properties.pumpSpeedPattern).toBe('PAT1');
+ });
  it('warns when EPANET coordinates are absent rather than pretending the layout is surveyed',()=>{
   const result=importEpanetInp('[JUNCTIONS]\nJ1 10 1\n[RESERVOIRS]\nR1 20\n[PIPES]\nP1 R1 J1 50 100 130 0 OPEN\n[END]');
   expect(result.warnings.some(w=>w.includes('Synthetic layout positions'))).toBe(true);
