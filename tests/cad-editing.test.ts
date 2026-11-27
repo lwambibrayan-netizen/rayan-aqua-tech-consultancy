@@ -39,7 +39,7 @@ describe('CAD editing geometry operations', () => {
     expect(extendLine(line, cutter, 1).points[1]).toEqual({ x: 5, y: 0 });
   });
   it('offsets a line by a true perpendicular distance', () => {
-    expect(offsetLine(line, 2)[0].points).toEqual([{ x: 0, y: 2 }, { x: 10, y: 2 }]);
+    expect(offsetLine(line, 2).points).toEqual([{ x: 0, y: 2 }, { x: 10, y: 2 }]);
   });
   it('chamfers and fillets an internal polyline corner', () => {
     const poly: CadEditableEntity = { id: 'p', type: 'polyline', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], layer: 'WATER' };
