@@ -116,6 +116,13 @@ describe('structured DXF exchange', () => {
     expect(dxf).toContain('6\\nPHANTOM');
   });
 
+  it('round-trips DXF layer colour, linetype, lineweight, visibility, lock and plot state', () => {
+    const doc = createDraftingDocument({ layers: [{ name:'WATER_PIPE', color:'#087e83', lineType:'DASHED', lineWeightMm:0.35, visible:false, locked:true, plot:false }] });
+    const shape = { id:'P1', type:'line' as const, points:[{x:0,y:0},{x:10,y:0}], layer:'WATER_PIPE' };
+    const imported = importDraftingDxf(exportDraftingDxf([shape],doc,1));
+    expect(imported.layers).toContainEqual({ name:'WATER_PIPE', color:'#087e83', lineType:'DASHED', lineWeightMm:0.35, visible:false, locked:true, plot:false });
+  });
+
   it('exports paper-scaled dimension text and arrow linework from the selected dimension style', () => {
     const doc = createDraftingDocument();
     doc.dimensionStyle = { name:'TEST', textHeightMm:3, arrowSizeMm:2, extensionOffsetMm:1, extensionBeyondMm:1.5, textGapMm:1, precision:2, decimalSeparator:'.', zeroSuppress:'trailing', unit:'m', prefix:'', suffix:'', tolerance:{mode:'none',upper:0,lower:0} };
