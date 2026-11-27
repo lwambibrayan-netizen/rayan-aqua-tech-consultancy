@@ -12,7 +12,7 @@ import { DIMENSION_STYLES, formatStyledDimension, validateDimensionStyle, append
 import { mergeLayerTemplate, validatePlotConfiguration, type LayerStandard } from './cad-layer-standards';
 import { auditEngineeringDrawing, type EngineeringDrawingAudit } from './cad-engineering-verification';
 import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringBlock, type BlockInsert } from './cad-object-library';
-import { fitViewportScale, validatePaperLayout, type PaperLayout } from './cad-paper-space';
+import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
@@ -906,7 +906,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const { widthMm, heightMm } = sheetDimensionsMm(sheet);
     const denominator = Number(sheet.scale.split(':')[1]) || 100;
     const metresPerUnit = calibratedMetresPerUnit || 1;
-    const factor = metresPerUnit * 1000 / denominator;
+    const paperLayout = paperLayouts.find(layout => layout.id === 'LAY-' + sheet.drawingNumber && Math.abs(layout.widthMm - widthMm) < 0.5 && Math.abs(layout.heightMm - heightMm) < 0.5);
+    const viewport = paperLayout?.viewports.find(item => item.visible);
+    const factor = metresPerUnit * 1000 / (viewport?.scaleDenominator || denominator);
     const margin = 10, titleBlockHeight = 42, usableWidth = widthMm - margin * 2, usableHeight = heightMm - margin * 2 - titleBlockHeight;
     const allPoints = shapes.flatMap(shape => shape.points)
       .concat(waterCad.components.flatMap(item => item.geometry.map(p => ({ x: p.x / metresPerUnit, y: p.y / metresPerUnit }))))
@@ -917,7 +919,14 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const maxY = allPoints.length ? Math.max(...allPoints.map(p=>p.y)) : 1;
     const tx = margin + (usableWidth - (maxX-minX)*factor)/2 - minX*factor;
     const ty = margin + (usableHeight - (maxY-minY)*factor)/2 + maxY*factor;
-    const mapPoint = (p: {x:number;y:number}) => ({ x: tx + p.x*factor, y: ty - p.y*factor });
+    const mapPoint = (p: {x:number;y:number}) => {
+      if (viewport) {
+        const dx = p.x * metresPerUnit - viewport.modelCenter.x, dy = p.y * metresPerUnit - viewport.modelCenter.y;
+        const angle = viewport.rotationDeg * Math.PI / 180, cosine = Math.cos(angle), sine = Math.sin(angle);
+        return { x: viewport.xMm + viewport.widthMm / 2 + factor * (dx * cosine - dy * sine), y: viewport.yMm + viewport.heightMm / 2 - factor * (dx * sine + dy * cosine) };
+      }
+      return { x: tx + p.x * factor, y: ty - p.y * factor };
+    };
     const layer = (name:string) => drafting.layers.find(x=>x.name===name);
     const allowed = new Set(drafting.layers.filter(x=>x.visible&&x.plot).map(x=>x.name));
     const safe = (value:string) => value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -956,11 +965,15 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const scaleBar=sheet.showScaleBar===false?'':'<g transform="translate(18 '+(heightMm-18)+')"><rect x="0" y="0" width="'+(scaleBarLengthMm/2)+'" height="2" fill="black"/><rect x="'+(scaleBarLengthMm/2)+'" y="0" width="'+(scaleBarLengthMm/2)+'" height="2" fill="white" stroke="black" stroke-width="0.25"/><text x="'+(scaleBarLengthMm/2)+'" y="-2" text-anchor="middle" font-size="2.5">'+scaleBarModelM.toFixed(2)+' m</text><text x="'+(scaleBarLengthMm/2)+'" y="6" text-anchor="middle" font-size="2">GRAPHIC SCALE</text></g>';
     const legendItems=drafting.layers.filter(item=>item.visible&&item.plot&&item.name!=='0').slice(0,10).map((item,i)=>'<line x1="15" y1="'+(25+i*4)+'" x2="24" y2="'+(25+i*4)+'" stroke="'+item.color+'" stroke-width="'+Math.max(0.25,item.lineWeightMm)+'"/><text x="27" y="'+(26+i*4)+'" font-size="2.4">'+safe(item.name)+'</text>').join('');
     const legend=legendItems?'<text x="15" y="22" font-size="2.8" font-weight="bold">LEGEND</text>'+legendItems:'';
-    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+widthMm+'mm" height="'+heightMm+'mm" viewBox="0 0 '+widthMm+' '+heightMm+'"><rect width="100%" height="100%" fill="white"/>'+border+titleBlock+'<g>'+drawing+water+annotations+'</g><g>'+keyPlan+northArrow+legend+revisionTable+notes+scaleBar+'</g></svg>';
+    const viewportClip = viewport ? '<defs><clipPath id="ra-model-viewport"><rect x="'+viewport.xMm+'" y="'+viewport.yMm+'" width="'+viewport.widthMm+'" height="'+viewport.heightMm+'"/></clipPath></defs>' : '';
+    const viewportFrame = viewport ? '<rect x="'+viewport.xMm+'" y="'+viewport.yMm+'" width="'+viewport.widthMm+'" height="'+viewport.heightMm+'" fill="none" stroke="#333333" stroke-width="0.25"/>' : '';
+    const drawingGroup = viewport ? '<g clip-path="url(#ra-model-viewport)">'+drawing+water+annotations+'</g>' : '<g>'+drawing+water+annotations+'</g>';
+    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+widthMm+'mm" height="'+heightMm+'mm" viewBox="0 0 '+widthMm+' '+heightMm+'"><rect width="100%" height="100%" fill="white"/>'+border+titleBlock+viewportClip+drawingGroup+viewportFrame+'<g>'+keyPlan+northArrow+legend+revisionTable+notes+scaleBar+'</g></svg>';
     if (batch) return svg;
     downloadWaterFile((sheet.drawingNumber||'drawing')+'.svg',svg,'image/svg+xml');
     if (printToPdf) { const printWindow = window.open('', '_blank'); if (printWindow) { printWindow.document.open(); printWindow.document.write('<!doctype html><html><head><title>'+safe(sheet.drawingNumber)+'</title><style>@page{size:'+widthMm+'mm '+heightMm+'mm;margin:0}html,body{margin:0;padding:0}svg{display:block;width:100%;height:auto}</style></head><body>'+svg+'</body></html>'); printWindow.onload = () => printWindow.print(); printWindow.document.close(); } else setMessage('Print window was blocked. Allow pop-ups for this app, then retry Print / Save as PDF.'); }
-    const fits=(maxX-minX)*factor<=usableWidth&&(maxY-minY)*factor<=usableHeight;
+    const mapped = viewport ? allPoints.map(mapPoint) : [];
+    const fits = viewport ? mapped.every(point => pointInsideViewport(point, viewport)) : (maxX-minX)*factor<=usableWidth&&(maxY-minY)*factor<=usableHeight;
     if (!batch) setMessage(fits?'Drawing sheet SVG exported at '+sheet.scale+'. Review title block and plotted scale before issue.':'Sheet exported, but geometry exceeds the selected sheet at '+sheet.scale+'. Choose a larger sheet or smaller scale.');
   }
 
