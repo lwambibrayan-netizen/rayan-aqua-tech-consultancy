@@ -60,7 +60,7 @@ describe('water network topology export', () => {
     reducer.properties.nominalDiameterMm = 160;
     reducer.properties.outletDiameterMm = 90;
     const large = createWaterComponent('pipe', 'LARGE', -1, 0);
-    large.geometry = [{ x: -1, y: 0 }, { x: 0, y: 0 }];
+    large.geometry = [{ x: -0.75, y: 0 }, { x: 0.25, y: 0 }];
     const mismatched: NetworkDocument = { schemaVersion: 1, units: 'm', verticalDatum: 'test', components: [reducer, large] };
     expect(() => connectWaterPorts(mismatched, 'LARGE:P2', 'RED:P2', 0)).toThrow(/diameters do not match/);
   });
