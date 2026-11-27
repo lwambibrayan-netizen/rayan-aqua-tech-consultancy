@@ -15,7 +15,7 @@ import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringB
 import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
 import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension, calculateBaselineDimensions, calculateChainDimensions } from './cad-dimension-geometry';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
-import { applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, sampleGroundProfile, type TerrainGrid } from './water-terrain-engineering';
+import { applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, sampleGroundProfile, sampleTerrainElevation, type TerrainGrid } from './water-terrain-engineering';
 import { importEpanetInp, type HydraulicResults } from './water-epanet-bridge';
 import { buildHydraulicOverlay, type HydraulicOverlay, type HydraulicOverlayMetric } from './water-hydraulic-overlays';
 import { runEpanetHydraulicSimulation } from './water-epanet-runner';
@@ -916,6 +916,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     try {
       const grid = JSON.parse(await file.text()) as TerrainGrid;
       if (!grid || !Number.isInteger(grid.width) || !Number.isInteger(grid.height) || !Array.isArray(grid.elevationsM) || !grid.crs || !grid.verticalDatum) throw new Error('Terrain JSON must include width, height, origin, cell sizes, elevationsM, crs and verticalDatum.');
+      sampleTerrainElevation(grid,grid.originX,grid.originY);
       setTerrainGrid(grid);
       setMessage('Terrain grid loaded: ' + grid.width + ' × ' + grid.height + ' cells · ' + grid.crs + ' · vertical datum ' + grid.verticalDatum + '. Save the drawing to persist it.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Terrain import failed.'); }
@@ -1745,7 +1746,12 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <button className="secondary-button" onClick={() => { const issues = buildTerrainIssues(waterCad); setMessage('Terrain check: ' + issues.length + ' issue(s). ' + issues.slice(0,5).map(issue => issue.componentId + ': ' + issue.message).join(' ')); }}>Check terrain cover</button>
           </div>
           <p className="muted" style={{ fontSize: 11, margin: '6px 0' }}>Terrain JSON requires width, height, originX/Y, cellSizeX/Y, row-major elevationsM, crs and verticalDatum. Values must be metres in the same projected CRS as this water network. {terrainGrid ? 'Terrain loaded · '+terrainGrid.width+' × '+terrainGrid.height+' · '+terrainGrid.crs+' · datum '+terrainGrid.verticalDatum : 'No terrain surface loaded. Import a regular-grid elevation JSON in project metres.'} {hydraulicResults ? ' · Hydraulic results at '+hydraulicResults.timeSeconds+' s' : ' · No hydraulic results loaded.'}</p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end', marginTop: 8 }}>
+            <label style={{ fontSize: 12 }}>Simulation duration (hours)<input type="number" min="0" step="1" value={(waterCad.epanetTimes?.durationSeconds??0)/3600} onChange={e=>setWaterCad(current=>({...current,epanetTimes:{...current.epanetTimes,durationSeconds:Math.max(0,Number(e.target.value))*3600}}))} style={{display:'block',width:110}} /></label>
+            <label style={{ fontSize: 12 }}>Hydraulic step (minutes)<input type="number" min="1" step="1" value={(waterCad.epanetTimes?.hydraulicStepSeconds??3600)/60} onChange={e=>setWaterCad(current=>({...current,epanetTimes:{...current.epanetTimes,hydraulicStepSeconds:Math.max(60,Number(e.target.value)*60)}}))} style={{display:'block',width:110}} /></label>
+            <label style={{ fontSize: 12 }}>Headloss formula<select value={waterCad.epanetHeadlossFormula??'H-W'} onChange={e=>setWaterCad(current=>({...current,epanetHeadlossFormula:e.target.value as WaterCadDocument['epanetHeadlossFormula']}))} style={{display:'block'}}><option value="H-W">Hazen-Williams</option><option value="D-W">Darcy-Weisbach</option><option value="C-M">Chezy-Manning</option></select></label>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end', marginTop: 8 }}>
             <label style={{ fontSize: 12 }}>Target crown cover (m)<input type="number" min="0" step="0.05" value={terrainCoverM} onChange={e => setTerrainCoverM(Number(e.target.value))} style={{ display: 'block', width: 100 }}/></label>
             <label style={{ fontSize: 12 }}>Profile sample spacing (m)<input type="number" min="0.1" step="0.5" value={terrainProfileSpacingM} onChange={e => setTerrainProfileSpacingM(Number(e.target.value))} style={{ display: 'block', width: 100 }}/></label>
             <button className="primary-button" onClick={applyTerrainToSelectedPipe} disabled={!terrainGrid || selectedWaterComponent?.kind !== 'pipe'}>Route selected pipe to cover</button>
