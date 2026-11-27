@@ -138,9 +138,9 @@ async function findLeastCostRoute(start: number[], end: number[], obstacles: Fea
   return {coordinates:path,cost:dist[target],length_m:path.slice(1).reduce((sum,p,i)=>sum+Math.hypot((p[0]-path[i][0])*111320*latScale,(p[1]-path[i][1])*111320),0),maxSlope_percent:maxSlope};
 }
 
-export default function GisEnginePanel({ projectId, projectTitle, initialData, hydraulicNetwork, hydraulicSimulation, onSave, onSendToEpanet }: {
+export default function GisEnginePanel({ projectId, projectTitle, initialData, hydraulicNetwork, hydraulicSimulation, onSave, onSendToEpanet, onSendTerrainGrid }: {
   projectId: string; projectTitle?: string; initialData?: any; hydraulicNetwork?: any; hydraulicSimulation?: any;
-  onSave: (data: any) => void | Promise<void>; onSendToEpanet?: (features: any[], metadata?: any) => void;
+  onSave: (data: any) => void | Promise<void>; onSendToEpanet?: (features: any[], metadata?: any) => void; onSendTerrainGrid?: (grid: any) => void | Promise<void>;
 }) {
   const [features, setFeatures] = useState<Feature[]>([]);
   const [drafts, setDrafts] = useState<any[]>([]);
@@ -367,6 +367,21 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
     if(!bbox){setMessage('Add a project boundary or GIS features first.');return;}
     await runTerrainOperation('analyze',{bbox,contourIntervalM:Number(contourInterval)});
   }
+  async function sendTerrainSurfaceToCad() {
+    if(!onSendTerrainGrid){setMessage('CAD terrain handoff is unavailable in this workspace.');return;}
+    const bbox=projectTerrainBounds();
+    if(!bbox){setMessage('Add project GIS features first so the DEM surface can be clipped to the project area.');return;}
+    setTerrainBusy(true);
+    try{
+      const response=await api.post('/api/projects/'+projectId+'/gis-terrain/grid',{bbox,maxDimension:64});
+      const grid=response.data?.grid;
+      if(!grid||!Number.isInteger(grid.width)||!Number.isInteger(grid.height)||!Array.isArray(grid.elevationsM)||!grid.crs||!grid.verticalDatum)throw new Error('PyQGIS returned an incomplete CAD terrain grid.');
+      await onSendTerrainGrid(grid);
+      setMessage('Terrain surface transferred to this project’s CAD drawing ('+grid.width+' × '+grid.height+' samples, '+grid.crs+'). CAD will enable co-registered 3D terrain only when its network coordinates and vertical datum match.');
+    }catch(error){setMessage(error instanceof Error?'Terrain-to-CAD transfer failed: '+error.message:'Terrain-to-CAD transfer failed.');}
+    finally{setTerrainBusy(false);}
+  }
+
   async function checkTerrainService() {
     setTerrainStatusBusy(true);
     try {
@@ -789,6 +804,7 @@ export default function GisEnginePanel({ projectId, projectTitle, initialData, h
       <div className="gis-toolbar">
         <div className="gis-tool-group">
           <button className="secondary-button" onClick={() => void applyTerrainElevation()} disabled={elevationBusy || !features.some(feature => feature.type === 'Point')}><Mountain size={15}/>{elevationBusy ? 'Sampling elevations…' : 'Fetch terrain elevations'}</button>
+          <button className="secondary-button" onClick={() => void sendTerrainSurfaceToCad()} disabled={terrainBusy || !features.length}><Mountain size={15}/>{terrainBusy ? 'Preparing DEM surface…' : 'Send DEM surface to CAD / 3D'}</button>
           <button className="secondary-button" onClick={() => syncFromEpanet()} disabled={!hydraulicNetwork?.geo?.nodes}>Synchronize from EPANET</button>
           <button className="primary-button" onClick={sendToEpanet} disabled={!features.length || draftBusy}>{draftBusy ? "Opening EPANET…" : "Save and open EPANET"}</button>
         </div>
