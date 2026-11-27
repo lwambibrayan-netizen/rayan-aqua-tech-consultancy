@@ -101,6 +101,8 @@ J1 10 0
 J1 100 10
 [RESERVOIRS]
 R1 200
+[TANKS]
+TK1 100 10 2 20 10 1000
 [PIPES]
 P1 R1 J1 100 4 100 0 OPEN
 [OPTIONS]
@@ -116,6 +118,9 @@ J1 100 0
   expect(junction.properties.flowM3h).toBeCloseTo(2.271247);
   expect(pipe.properties.hydraulicLengthM).toBeCloseTo(30.48);
   expect(pipe.properties.internalDiameterMm).toBeCloseTo(101.6);
+  expect(result.document.components.find(c=>c.id==='R1')?.properties.hydraulicHeadM).toBeCloseTo(60.96);
+  expect(result.document.components.find(c=>c.id==='TK1')?.properties.tankOperatingLevelM).toBeCloseTo(3.048);
+  expect(result.document.components.find(c=>c.id==='TK1')?.properties.tankMinVolumeM3).toBeCloseTo(28.3168);
  });
  it('retains time patterns used by junction demand and pump speed',()=>{
   const model=`[JUNCTIONS]
