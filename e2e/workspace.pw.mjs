@@ -104,7 +104,7 @@ test('engineer opens a project, uses visible CAD navigation, saves and opens 3D'
   await ribbon.getByRole('tab', { name: 'Water Network' }).click();
   await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="water-network"]')).toContainText('Network component library');
   await ribbon.getByRole('tab', { name: '3D Modeling' }).click();
-  await expect(ribbon.getByRole('button', { name: /Fetch DEM from GIS/ })).toBeVisible();
+  await expect(page.locator('.aquacad-shell .aquacad-ribbon-content').getByRole('button', { name: /Fetch DEM from GIS/ })).toBeVisible();
   await ribbon.getByRole('tab', { name: 'Home' }).click();
 
   const pan = page.getByRole('button', { name: 'Pan drawing' });
