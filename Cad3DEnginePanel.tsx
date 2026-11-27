@@ -12,6 +12,7 @@ type Shape = {
   type: 'line' | 'polyline' | 'rect' | 'circle';
   points: Point2D[];
   radius?: number;
+  bulges?: number[];
   layer: string;
 };
 type Props = {
@@ -74,7 +75,11 @@ function exportDxf(shapes: Shape[]) {
       );
     } else {
       output.push('90', String(shape.points.length), '70', '0');
-      shape.points.forEach(point => output.push('10', String(point.x), '20', String(point.y)));
+      shape.points.forEach((point,index) => {
+        output.push('10', String(point.x), '20', String(point.y));
+        const bulge=shape.bulges?.[index]||0;
+        if(Math.abs(bulge)>1e-12)output.push('42',String(bulge));
+      });
     }
   });
   return output.concat(['0', 'ENDSEC', '0', 'EOF']).join('\n');
@@ -112,15 +117,18 @@ function importDxf(source: string): Shape[] {
     }
     if (entity.type === 'LWPOLYLINE') {
       const points: Point2D[] = [];
+      const bulges: number[] = [];
       let x: number | null = null;
       entity.values.forEach(([code, value]) => {
         if (code === '10') x = Number(value);
         if (code === '20' && x !== null) {
           points.push({ x, y: Number(value) });
+          bulges.push(0);
           x = null;
         }
+        if (code === '42' && bulges.length) bulges[bulges.length-1]=Number(value);
       });
-      if (points.length > 1) result.push({ id: makeId(), type: 'polyline', points, layer });
+      if (points.length > 1) result.push({ id: makeId(), type: 'polyline', points, bulges, layer });
     }
     entity = null;
   };
@@ -164,6 +172,39 @@ function screenDistance(svg: SVGSVGElement, a: Point2D, b: Point2D): number {
   const sa = pa.matrixTransform(matrix);
   const sb = pb.matrixTransform(matrix);
   return Math.hypot(sa.x - sb.x, sa.y - sb.y);
+}
+
+
+function bulgeSegmentPoints(a:Point2D,b:Point2D,bulge:number,steps=16):Point2D[] {
+  if(!Number.isFinite(bulge)||Math.abs(bulge)<1e-12)return [a,b];
+  const dx=b.x-a.x,dy=b.y-a.y,chord=Math.hypot(dx,dy);
+  if(chord<1e-12)return [a,b];
+  const sweep=4*Math.atan(bulge),radius=chord*(1+bulge*bulge)/(4*Math.abs(bulge));
+  const midpoint={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+  const offset=chord*(1-bulge*bulge)/(4*bulge);
+  const center={x:midpoint.x-dy/chord*offset,y:midpoint.y+dx/chord*offset};
+  const start=Math.atan2(a.y-center.y,a.x-center.x);
+  return Array.from({length:steps+1},(_,i)=>{const angle=start+sweep*i/steps;return {x:center.x+radius*Math.cos(angle),y:center.y+radius*Math.sin(angle)};});
+}
+function expandedPolylinePoints(shape:{points:Point2D[];bulges?:number[]}):Point2D[] {
+  const result:Point2D[]=[];
+  for(let i=0;i<shape.points.length-1;i++){
+    const segment=bulgeSegmentPoints(shape.points[i],shape.points[i+1],shape.bulges?.[i]||0);
+    result.push(...(i?segment.slice(1):segment));
+  }
+  return result;
+}
+function polylineSvgPath(shape:{points:Point2D[];bulges?:number[]}):string {
+  if(!shape.points.length)return '';
+  let path='M '+shape.points[0].x+' '+shape.points[0].y;
+  for(let i=0;i<shape.points.length-1;i++){
+    const a=shape.points[i],b=shape.points[i+1],bulge=shape.bulges?.[i]||0;
+    if(Math.abs(bulge)<1e-12){path+=' L '+b.x+' '+b.y;continue;}
+    const chord=Math.hypot(b.x-a.x,b.y-a.y),radius=chord*(1+bulge*bulge)/(4*Math.abs(bulge));
+    const sweep=4*Math.atan(bulge),large=Math.abs(sweep)>Math.PI?1:0,flag=bulge>0?1:0;
+    path+=' A '+radius+' '+radius+' 0 '+large+' '+flag+' '+b.x+' '+b.y;
+  }
+  return path;
 }
 
 function getSnapCandidates(shapes: Shape[], cursor: Point2D): Array<{ point: Point2D; kind: string }> {
@@ -218,7 +259,8 @@ function getSegments(shapes: Shape[]): Array<[Point2D, Point2D]> {
   const segments: Array<[Point2D, Point2D]> = [];
   shapes.forEach(shape => {
     if (shape.type === 'line' || shape.type === 'polyline') {
-      for (let i = 0; i < shape.points.length - 1; i++) segments.push([shape.points[i], shape.points[i + 1]]);
+      const expanded=shape.type==='polyline'?expandedPolylinePoints(shape):shape.points;
+      for (let i = 0; i < expanded.length - 1; i++) segments.push([expanded[i], expanded[i + 1]]);
     } else if (shape.type === 'rect') {
       const [a, b] = shape.points;
       const corners = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
@@ -615,7 +657,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         scene.add(mesh);
       } else if (shape.points.length > 1) {
         const curve = new THREE.CatmullRomCurve3(
-          shape.points.map(point => new THREE.Vector3(point.x - 500, 3, point.y - 325))
+          (shape.type==='polyline'?expandedPolylinePoints(shape):shape.points).map(point => new THREE.Vector3(point.x - 500, 3, point.y - 325))
         );
         scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 30, 1.8, 8, false), material));
       }
@@ -664,7 +706,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     }
     const points = selectedShape.points;
     let total = 0;
-    for (let i = 1; i < points.length; i++) total += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    for (let i = 0; i < points.length-1; i++) {
+      const bulge=selectedShape.bulges?.[i]||0;
+      const chord=Math.hypot(points[i+1].x-points[i].x,points[i+1].y-points[i].y);
+      total += Math.abs(bulge)<1e-12?chord:(chord*(1+bulge*bulge)/(4*Math.abs(bulge)))*Math.abs(4*Math.atan(bulge));
+    }
     return (selectedShape.type === 'line' ? 'Length: ' : 'Total path length: ') + formatLength(total);
   })() : '';
   const layerNames = Array.from(new Set(shapes.map(shape => shape.layer || '0'))).sort();
@@ -682,7 +728,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (shape.type === 'line') {
       return <line data-shape-id={shape.id} key={shape.id} x1={shape.points[0].x} y1={shape.points[0].y} x2={shape.points[1].x} y2={shape.points[1].y} stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 5 : 3} />;
     }
-    return <polyline data-shape-id={shape.id} key={shape.id} points={shape.points.map(point => point.x + ',' + point.y).join(' ')} fill="none" stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 5 : 3} />;
+    return <path data-shape-id={shape.id} key={shape.id} d={polylineSvgPath(shape)} fill="none" stroke={selectedShapeId === shape.id ? '#d04d3f' : color} strokeWidth={selectedShapeId === shape.id ? 5 : 3} />;
   });
 
   return (
@@ -816,7 +862,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <rect x={viewBox.x} y={viewBox.y} width={viewBox.width} height={viewBox.height} fill="url(#cad-grid)" pointerEvents="none" />
             {renderedShapes}
             {selectionBox && <rect x={Math.min(selectionBox.start.x,selectionBox.end.x)} y={Math.min(selectionBox.start.y,selectionBox.end.y)} width={Math.abs(selectionBox.end.x-selectionBox.start.x)} height={Math.abs(selectionBox.end.y-selectionBox.start.y)} fill={selectionBox.end.x<selectionBox.start.x?'rgba(30,130,190,.12)':'rgba(20,150,110,.12)'} stroke={selectionBox.end.x<selectionBox.start.x?'#2684c7':'#15966e'} strokeDasharray="6 4" pointerEvents="none" />}
-            {previewShapes && previewShapes.map(shape => shape.type==='circle' ? <circle key={'preview-'+shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius||12} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/> : <polyline key={'preview-'+shape.id} points={(shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]]:shape.points).map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>)}
+            {previewShapes && previewShapes.map(shape => shape.type==='circle' ? <circle key={'preview-'+shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius||12} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/> : <polyline key={'preview-'+shape.id} points={(shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]]:shape.type==='polyline'?expandedPolylinePoints(shape):shape.points).map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>)}
             {draft.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="5" fill="#d59b42" />)}
             {draft.length > 1 && <polyline points={draft.map(point => point.x + ',' + point.y).join(' ')} fill="none" stroke="#d59b42" strokeDasharray="7 5" />}
             {cursorPoint && mode !== 'select' && (
