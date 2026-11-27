@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   chamferPolylineCorner, copyEntities, extendLine, filletPolylineCorner,
-  mirrorEntities, moveEntities, offsetLine, rectangularArray, rotateEntities,
+  mirrorEntities, moveEntities, offsetLine, offsetPolyline, rectangularArray, rotateEntities,
   stretchEntities, trimLine, selectEntitiesInWindow, type CadEditableEntity,
 } from '../cad-editing';
 
@@ -59,6 +59,17 @@ describe('CAD editing geometry operations', () => {
   });
   it('offsets a line by a true perpendicular distance', () => {
     expect(offsetLine(line, 2).points).toEqual([{ x: 0, y: 2 }, { x: 10, y: 2 }]);
+  });
+
+  it('offsets open polylines with perpendicular segments and safe joins', () => {
+    const poly:CadEditableEntity={id:'offset-me',type:'polyline',points:[{x:0,y:0},{x:10,y:0},{x:10,y:10}],layer:'WATER'};
+    const result=offsetPolyline(poly,2);
+    expect(result.points[0]).toEqual({x:0,y:2});
+    expect(result.points[1].x).toBeCloseTo(8);
+    expect(result.points[1].y).toBeCloseTo(2);
+    expect(result.points[2]).toEqual({x:8,y:10});
+    expect(result.id).not.toBe(poly.id);
+    expect(()=>offsetPolyline({...poly,points:[{x:0,y:0},{x:0,y:0},{x:2,y:2}]},2)).toThrow(/zero-length/);
   });
   it('chamfers and fillets an internal polyline corner', () => {
     const poly: CadEditableEntity = { id: 'p', type: 'polyline', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], layer: 'WATER' };
