@@ -919,6 +919,52 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const selectedShape: SelectedShape = shapes.find(shape => shape.id === selectedShapeId) || null;
   const selectedShapes = shapes.filter(shape => selectedShapeIds.includes(shape.id));
 
+  function placeRadialDimensionFromSelection(kind: 'radius' | 'diameter') {
+    if (!selectedShape || selectedShape.type !== 'circle') return false;
+    const scale = calibratedMetresPerUnit || 1;
+    const centre = { x: selectedShape.points[0].x * scale, y: selectedShape.points[0].y * scale };
+    const radiusM = (selectedShape.radius || 0) * scale;
+    if (!Number.isFinite(radiusM) || radiusM <= 1e-9) {
+      setMessage('Cannot dimension this circle: its radius is zero or invalid.');
+      return true;
+    }
+    if (drafting.layers.find(item => item.name === 'DIMENSIONS')?.locked) {
+      setMessage('The DIMENSIONS layer is locked. Unlock it before placing this dimension.');
+      return true;
+    }
+    try {
+      const edge = { x: centre.x + radiusM, y: centre.y };
+      const offsetM = Math.max(radiusM * 0.35, Math.abs(dimensionOffset * scale), 0.01);
+      const leaderPoint = { x: centre.x + (radiusM + offsetM) * Math.cos(-Math.PI / 4), y: centre.y + (radiusM + offsetM) * Math.sin(-Math.PI / 4) };
+      const geometry = kind === 'radius'
+        ? calculateRadiusDimension(centre, edge, leaderPoint)
+        : calculateDiameterDimension(centre, edge, leaderPoint);
+      const graphics: Shape[] = [];
+      const pushLine = (a: Point2D, b: Point2D) => graphics.push({
+        id: makeId(), type: 'line',
+        points: [{ x: a.x / scale, y: a.y / scale }, { x: b.x / scale, y: b.y / scale }],
+        layer: 'DIMENSIONS'
+      });
+      geometry.centerMark.forEach(line => pushLine(line.a, line.b));
+      pushLine(geometry.leader.a, geometry.leader.b);
+      if (kind === 'diameter') pushLine(geometry.oppositePoint, geometry.leader.a);
+      const value = kind === 'radius' ? geometry.radius : geometry.diameter;
+      const annotation: DraftAnnotation = {
+        id: makeId(), kind: 'text', layer: 'DIMENSIONS', at: geometry.labelPoint,
+        text: (kind === 'radius' ? 'R ' : 'Ø ') + formatStyledDimension(value, dimensionStyle),
+        heightMm: dimensionStyle.textHeightMm, rotationDeg: 0
+      };
+      setShapes(current => [...current, ...graphics]);
+      setDrafting(current => ({ ...current, annotations: [...current.annotations, annotation] }));
+      setDraftTool('none');
+      setAnnotationDraft([]);
+      setMessage((kind === 'radius' ? 'Radius' : 'Diameter') + ' dimension placed from selected circle. The measured value is captured as editable drawing geometry.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Radial dimension could not be placed.');
+    }
+    return true;
+  }
+
   function previewDrawing(next: Shape[], label: string) {
     if (selectedShapes.some(shape => drafting.layers.find(item => item.name === shape.layer)?.locked)) { setMessage('Selection includes locked-layer entities. Unlock the layer before modifying them.'); return; }
     setPreviewShapes(next);
@@ -1842,7 +1888,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             </>}
             {ribbonTab==='Annotate' && <>
               <div className="aquacad-ribbon-group"><strong>Dimensions</strong><div className="aquacad-tool-grid">
-                {(['aligned','linear','angular','radius','diameter','ordinate'] as const).map(kind=><button key={kind} className={draftTool==='dimension'&&dimensionKind===kind?'selected':''} onClick={()=>{setDimensionKind(kind);setDraftTool('dimension');setAnnotationDraft([]);setMessage('Select the required points to place a '+kind+' dimension.')}}><i>↔</i><span>{kind[0].toUpperCase()+kind.slice(1)}</span></button>)}
+                {(['aligned','linear','angular','radius','diameter','ordinate'] as const).map(kind=><button key={kind} className={draftTool==='dimension'&&dimensionKind===kind?'selected':''} onClick={()=>{setDimensionKind(kind);setAnnotationDraft([]);if((kind==='radius'||kind==='diameter')&&placeRadialDimensionFromSelection(kind))return;setDraftTool('dimension');setMessage(kind==='radius'||kind==='diameter'?'Select circle centre, circle edge and leader landing point, or select a circle first for one-click dimensioning.':'Select the required points to place a '+kind+' dimension.')}}><i>↔</i><span>{kind[0].toUpperCase()+kind.slice(1)}</span></button>)}
               </div></div>
               <div className="aquacad-ribbon-group"><strong>Text & Leaders</strong><div className="aquacad-tool-grid">
                 <button onClick={()=>{setDraftTool('text');setMessage('Click the drawing to place text.')}}><i>A</i><span>Text</span></button>
