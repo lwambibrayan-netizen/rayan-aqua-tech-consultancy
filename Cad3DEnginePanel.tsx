@@ -15,7 +15,7 @@ import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringB
 import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
 import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension, calculateBaselineDimensions, calculateChainDimensions } from './cad-dimension-geometry';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
-import { applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, sampleGroundProfile, sampleTerrainElevation, type TerrainGrid } from './water-terrain-engineering';
+import { applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, sampleGroundProfile, sampleTerrainElevation, samplePipeCentrelineElevation, type TerrainGrid } from './water-terrain-engineering';
 import { importEpanetInp, mergeEpanetRoundTrip, type HydraulicResults } from './water-epanet-bridge';
 import { buildHydraulicOverlay, type HydraulicOverlay, type HydraulicOverlayMetric } from './water-hydraulic-overlays';
 import { runEpanetHydraulicSimulation } from './water-epanet-runner';
@@ -1415,6 +1415,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const pointElevation=(point:{x:number;y:number;z?:number;invertLevelM?:number},index:number)=>{
         if(typeof point.z==='number'&&Number.isFinite(point.z))return point.z;
         if(typeof point.invertLevelM==='number'&&Number.isFinite(point.invertLevelM))return point.invertLevelM;
+        if(component.kind==='pipe'&&terrainAligned&&terrainGrid){const terrainCentreline=samplePipeCentrelineElevation(component,point,terrainGrid,terrainCoverM);if(terrainCentreline!==null)return terrainCentreline;}
         if(fromElevation!==undefined&&toElevation!==undefined&&totalRouteLength>0)return fromElevation+(toElevation-fromElevation)*(routeLengths[index]??0)/totalRouteLength;
         return baseLevel;
       };
