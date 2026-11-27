@@ -155,7 +155,7 @@ J1 10 0
   expect(result.document.components.find(c=>c.id==='V1')?.properties.initialStatus).toBe('OPEN');
   expect(exportWaterNetworkToEpanet(result.document).input).toContain('PU1 CLOSED');
   expect(exportWaterNetworkToEpanet(result.document).input).toContain('V1 R1 J1 100 PRV 25 0.4');
-  expect(exportWaterNetworkToEpanet(result.document).input).toContain('V1 CLOSED');
+  expect(exportWaterNetworkToEpanet(result.document).input).toContain('V1 OPEN');
   expect(exportWaterNetworkToEpanet(result.document).input).toContain('SPEED 1.1 PATTERN PAT1');
  });
  it('round-trips pipe vertices, additional demands, emitters, solver options and simulation times',()=>{
