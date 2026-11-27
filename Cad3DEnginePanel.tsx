@@ -934,6 +934,22 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     return <g key={component.id} data-water-id={component.id} fill="none" stroke={stroke} strokeWidth={sw*2}>{symbol}<text x={p.x+13*sw} y={p.y} fontSize={Math.max(viewBox.width/90,8)} fill={stroke} stroke="none">{component.properties.tag}</text></g>;
   });
 
+  const renderedAnnotations = drafting.annotations.filter(item => drafting.layers.find(l => l.name === item.layer)?.visible !== false).map(item => {
+    const layerStyle = drafting.layers.find(l => l.name === item.layer);
+    const color = layerStyle?.color || '#202020';
+    const scale = Number(drafting.sheet.scale.split(':')[1]) || 100;
+    const paperHeight = (mm: number) => mm * scale / 1000 / (calibratedMetresPerUnit || 1);
+    const toDrawing = (p: Point2D) => ({ x: p.x / (calibratedMetresPerUnit || 1), y: p.y / (calibratedMetresPerUnit || 1) });
+    if (item.kind === 'text') { const at = toDrawing(item.at); return <text key={item.id} x={at.x} y={at.y} fontSize={paperHeight(item.heightMm)} fill={color}>{item.text}</text>; }
+    if (item.kind === 'leader') { const pts = item.points.map(toDrawing); const last = pts[pts.length - 1]; return <g key={item.id}><polyline points={pts.map(p => p.x + ',' + p.y).join(' ')} fill='none' stroke={color}/><text x={last.x + paperHeight(1.5)} y={last.y - paperHeight(1)} fontSize={paperHeight(item.textHeightMm)} fill={color}>{item.text}</text></g>; }
+    const a = toDrawing(item.a), b = toDrawing(item.b);
+    const dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy) || 1;
+    const nx = -dy / length, ny = dx / length, off = item.offsetM / (calibratedMetresPerUnit || 1);
+    const p1 = { x: a.x + nx * off, y: a.y + ny * off }, p2 = { x: b.x + nx * off, y: b.y + ny * off };
+    const label = item.textOverride || formatDimension(measureDimension(item), item.precision, drafting.sheet.units);
+    const h = paperHeight(2.5), mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    return <g key={item.id} fill='none' stroke={color} strokeWidth={Math.max(viewBox.width / 1800, 0.45)}><line x1={a.x} y1={a.y} x2={p1.x} y2={p1.y}/><line x1={b.x} y1={b.y} x2={p2.x} y2={p2.y}/><line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}/><text x={mid.x} y={mid.y - h * 0.2} textAnchor='middle' fontSize={h} fill={color} stroke='none'>{label}</text></g>;
+  });
   const renderedShapes = visibleShapes.map(shape => {
     const color = shape.layer === 'WATER_NETWORK' ? '#167b78' : '#c08c3c';
     if (shape.type === 'circle') {
@@ -1202,7 +1218,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               backgroundColor: '#fbfdfc',
               border: '1px solid #dce5e2',
               borderRadius: 8,
-              cursor: panMode ? 'grab' : mode === 'select' ? 'default' : 'crosshair',
+              cursor: panMode ? 'grab' : (mode !== 'select' || draftTool !== 'none') ? 'crosshair' : 'default',
               touchAction: 'none',
             }}
           >
@@ -1210,6 +1226,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <rect x={viewBox.x} y={viewBox.y} width={viewBox.width} height={viewBox.height} fill="url(#cad-grid)" pointerEvents="none" />
             {renderedShapes}
             {renderedWaterComponents}
+            {renderedAnnotations}
             {waterDraft.length>0 && <polyline points={waterDraft.map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#d59b42" strokeWidth="3" strokeDasharray="6 4" pointerEvents="none"/>}
             {selectionBox && <rect x={Math.min(selectionBox.start.x,selectionBox.end.x)} y={Math.min(selectionBox.start.y,selectionBox.end.y)} width={Math.abs(selectionBox.end.x-selectionBox.start.x)} height={Math.abs(selectionBox.end.y-selectionBox.start.y)} fill={selectionBox.end.x<selectionBox.start.x?'rgba(30,130,190,.12)':'rgba(20,150,110,.12)'} stroke={selectionBox.end.x<selectionBox.start.x?'#2684c7':'#15966e'} strokeDasharray="6 4" pointerEvents="none" />}
             {previewShapes && previewShapes.map(shape => shape.type==='circle' ? <circle key={'preview-'+shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius||12} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/> : shape.type==='polyline' ? <path key={'preview-'+shape.id} d={polylineSvgPath(shape)} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/> : <polyline key={'preview-'+shape.id} points={(shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]]:shape.points).map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>)}
