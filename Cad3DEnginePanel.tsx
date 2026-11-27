@@ -1314,6 +1314,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const radius=Math.max((component.properties.externalDiameterMm??component.properties.nominalDiameterMm??100)/2000,0.025);
       if(component.kind==='pipe') {
         addPipeTube(points,radius,colour);
+        if(overlayItem?.direction&&overlayItem.direction!=='stagnant'&&points.length>1){
+          let from=points[0],to=points[points.length-1];if(overlayItem.direction==='reverse'){const swap=from;from=to;to=swap;}
+          const direction=to.clone().sub(from);const arrow=new THREE.Mesh(new THREE.ConeGeometry(Math.max(radius*2,0.08),Math.max(radius*5,0.2),12),new THREE.MeshStandardMaterial({color:colour}));
+          arrow.position.copy(from).add(to).multiplyScalar(0.5);arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.normalize());scene.add(arrow);
+        }
       } else if(component.kind==='bend') {
         const route=buildBendCentreline(component,24).map(point=>to3d({...point,z:point.z??baseLevel}));
         addPipeTube(route,radius,colour);
