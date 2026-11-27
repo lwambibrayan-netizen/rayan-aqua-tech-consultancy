@@ -266,6 +266,24 @@ export function offsetPolyline<T extends CadEditableEntity>(entity:T,distance:nu
       (inwardOffset&&outputMagnitude>=inputMagnitude-1e-9)||(!inwardOffset&&outputMagnitude<=inputMagnitude+1e-9)) {
       throw new Error('OFFSET failed: the closed boundary is degenerate or the offset collapses/inverts the polygon.');
     }
+    if(inwardOffset&&distance>1e-9){
+      const insidePolygon=(point:Point2D)=>{
+        let inside=false;
+        for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+          const a=pts[i],b=pts[j];
+          if(((a.y>point.y)!==(b.y>point.y))&&point.x<(b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x)inside=!inside;
+        }
+        return inside;
+      };
+      const distanceToSegment=(point:Point2D,a:Point2D,b:Point2D)=>{
+        const dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;
+        const t=len2?Math.max(0,Math.min(1,((point.x-a.x)*dx+(point.y-a.y)*dy)/len2)):0;
+        return Math.hypot(point.x-(a.x+t*dx),point.y-(a.y+t*dy));
+      };
+      const remainsValid=result.slice(0,-1).every(point=>insidePolygon(point)&&
+        Math.min(...pts.map((a,index)=>distanceToSegment(point,a,pts[(index+1)%pts.length])))+1e-8>=distance);
+      if(!remainsValid)throw new Error('OFFSET failed: inward offset exceeds the polygon inradius and collapses the boundary.');
+    }
     const edges=result.slice(0,-1).map((point,index)=>[point,result[index+1]] as [Point2D,Point2D]);
     for(let i=0;i<edges.length;i++)for(let j=i+1;j<edges.length;j++){
       if(j===i+1||(i===0&&j===edges.length-1))continue;
