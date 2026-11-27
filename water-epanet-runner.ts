@@ -20,7 +20,7 @@ export async function runEpanetHydraulicSimulation(input: string): Promise<Epane
     const results: HydraulicResults[] = [];
     project.openH();
     hydraulicsOpen = true;
-    project.initH(InitHydOption.NoSave);
+    project.initH(InitHydOption.InitFlow);
     let nextStep = 1;
     let iterations = 0;
     while (nextStep > 0) {
