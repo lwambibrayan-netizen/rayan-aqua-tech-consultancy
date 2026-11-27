@@ -1783,7 +1783,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             {ribbonTab==='3D Modeling' && <div className="aquacad-ribbon-group"><strong>3D workspace</strong><div className="aquacad-tool-grid">
               <button className={view==='3d'?'selected':''} onClick={()=>setView('3d')}><i>▣</i><span>3D Model</span></button>
               <button className={view==='2d'?'selected':''} onClick={()=>setView('2d')}><i>▱</i><span>2D Wireframe</span></button>
-              <button onClick={()=>setMessage('3D editing tools are available in the 3D model workspace.')}><i>⤢</i><span>3D Tools</span></button>
+              <button className={view==='3d'?'selected':''} onClick={()=>setView('3d')}><i>⤢</i><span>Open 3D View</span></button>
             </div></div>}
             {ribbonTab==='Analyze' && <>
               <div className="aquacad-ribbon-group"><strong>Hydraulic Analysis</strong><div className="aquacad-tool-grid">
@@ -1802,13 +1802,13 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               <button onClick={()=>setPanMode(v=>!v)} className={panMode?'selected':''}><i>✋</i><span>Pan</span></button>
               <button onClick={()=>setViewBox({x:0,y:0,width:WIDTH,height:HEIGHT})}><i>⌕</i><span>Zoom Extents</span></button>
               <button onClick={toggleCadFullscreen}><i>⛶</i><span>{isFullscreen?'Restore':'Maximize'}</span></button>
-              <button onClick={()=>setMessage('Use the right-side project palette to inspect network objects.')}><i>▤</i><span>Palettes</span></button>
+
             </div></div>}
             {ribbonTab==='Output' && <div className="aquacad-ribbon-group"><strong>Plot, Export & Reports</strong><div className="aquacad-tool-grid">
               <button onClick={()=>exportSheetSvg(true)}><i>⎙</i><span>Plot / PDF</span></button>
               <button onClick={downloadDxf}><i>DXF</i><span>Export DXF</span></button>
               <button onClick={downloadEpanetInput}><i>INP</i><span>Export EPANET</span></button>
-              <button onClick={()=>setMessage('Use the engineering schedules and audit panel below for project reports.')}><i>▤</i><span>Reports</span></button>
+
             </div></div>}
             {ribbonTab==='Manage' && <div className="aquacad-ribbon-group"><strong>Drawing Standards & Settings</strong><div className="aquacad-tool-grid">
               <label>Layer <select value={layer} onChange={e=>setLayer(e.target.value)}>{drafting.layers.map(item=><option key={item.name} value={item.name}>{item.name}</option>)}</select></label>
