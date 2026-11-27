@@ -43,6 +43,10 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     const id=safe(idRaw);if(components.some(c=>c.id===id)){warnings.push('Duplicate link ID '+id+' was skipped.');return;}
     const c=createWaterComponent(kind,id,from.geometry[0].x,from.geometry[0].y);
     c.geometry=[{...from.geometry[0]},{...to.geometry[0]}];c.fromNodeId=from.id;c.toNodeId=to.id;
+    if(kind!=='pipe') c.customPorts=[
+      {id:'INLET',point:{...from.geometry[0]},role:'inlet',diameterMm:diameterMm||undefined},
+      {id:'OUTLET',point:{...to.geometry[0]},role:'outlet',diameterMm:diameterMm||undefined},
+    ];
     c.properties={...c.properties,tag:id,nominalDiameterMm:diameterMm||c.properties.nominalDiameterMm,...(props as object)};
     if(kind==='pipe')c.properties.internalDiameterMm=diameterMm;
     components.push(c);
@@ -51,7 +55,8 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     if(r.values.length<6){warnings.push('Malformed pipe at line '+r.line+'.');return;}
     const length=num(r.values[3]);const diameter=num(r.values[4]);
     if(!(length>0)||!(diameter>0)){warnings.push('Pipe '+r.values[0]+' has invalid length or diameter and was skipped.');return;}
-    addLink(r.values[0],'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),description:'Imported from EPANET'});
+    const checkValve=(r.values[7]??'OPEN').toUpperCase()==='CV';
+    addLink(r.values[0],checkValve?'valve':'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),valveType:checkValve?'check':undefined,description:'Imported from EPANET'});
   });
   bySection('PUMPS').forEach(r=>{if(r.values.length<3){warnings.push('Malformed pump at line '+r.line+'.');return;}addLink(r.values[0],'pump',r.values[1],r.values[2],0,{description:'Imported from EPANET pump link'});if(r.values.slice(3).join(' ').toUpperCase().includes('HEAD'))warnings.push('Pump '+r.values[0]+' curve reference imported as a link; curve data requires review before simulation.');});
   bySection('VALVES').forEach(r=>{
