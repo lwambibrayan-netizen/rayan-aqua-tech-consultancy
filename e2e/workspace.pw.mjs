@@ -151,16 +151,14 @@ test('engineer opens a project, verifies precision drafting, saves and opens 3D'
   await expect(page.getByText(/Entity selected/).first()).toBeVisible();
   await expect(page.getByText(/Radius: .*Diameter:/).first()).toBeVisible();
   await ribbon.getByRole('tab', { name: 'Annotate' }).click();
+  const shapesBeforeRadius = await cadCanvas.locator('[data-shape-id]').count();
   await ribbonContent.getByRole('button', { name: 'Radius' }).click();
-  await cadCanvas.click({ position: { x: 120, y: 120 } });
-  await cadCanvas.click({ position: { x: 160, y: 120 } });
-  await cadCanvas.click({ position: { x: 190, y: 145 } });
-  await expect(page.locator('.aquacad-shell .alert').first()).toContainText(/Radius dimension placed/);
+  await expect(page.locator('.aquacad-shell .alert').first()).toContainText(/Radius dimension placed from selected circle/);
+  const shapesAfterRadius = await cadCanvas.locator('[data-shape-id]').count();
+  expect(shapesAfterRadius).toBeGreaterThan(shapesBeforeRadius);
   await ribbonContent.getByRole('button', { name: 'Diameter' }).click();
-  await cadCanvas.click({ position: { x: 120, y: 120 } });
-  await cadCanvas.click({ position: { x: 160, y: 120 } });
-  await cadCanvas.click({ position: { x: 195, y: 160 } });
-  await expect(page.locator('.aquacad-shell .alert').first()).toContainText(/Diameter dimension placed/);
+  await expect(page.locator('.aquacad-shell .alert').first()).toContainText(/Diameter dimension placed from selected circle/);
+  expect(await cadCanvas.locator('[data-shape-id]').count()).toBeGreaterThan(shapesAfterRadius);
   await ribbon.getByRole('tab', { name: 'Home' }).click();
 
   const pan = page.getByRole('button', { name: 'Pan drawing' });
