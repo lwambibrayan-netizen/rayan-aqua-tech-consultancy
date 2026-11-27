@@ -19,6 +19,10 @@
 - GIS now has a **Send DEM surface to CAD / 3D** action. It transfers the validated grid into the project's saved drawing document; CAD's 3D view uses terrain-derived buried pipe centreline elevations when the network CRS, metre units and vertical datum match the DEM. Explicit surveyed Z/invert values take precedence.
 - The PyQGIS self-test now validates DEM-grid dimensions, positive cell spacing and valid elevation samples in addition to profiles, contours and slope processing.
 - EPANET import/export now preserves unrecognised INP sections and unsupported control/rule blocks rather than silently dropping them.
+- CAD now has a direct **Send CAD network to EPANET** handoff. The project EPANET editor imports the generated INP, validates the network, and persists the INP plus a stable EPANET-to-CAD entity ID map with its saved model and simulation.
+- On reopening CAD, the latest saved EPANET model is merged back into the drawing. CAD-only fittings and matching surveyed geometry are retained; generated junction IDs are mapped without painting node pressure results onto unrelated pipe objects.
+- Saved EPANET hydraulic snapshots are converted into CAD result frames for pressure, flow, velocity and headloss overlays in 2D and 3D. The CAD view selects the latest frame by default and clears stale overlays when the linked EPANET model has no saved results.
+- EPANET INP exchange now preserves closed pump and valve states through the [STATUS] section. Round-trip tests cover node elevations, pipe geometry/diameters/lengths, generated junction-to-CAD mapping, coordinate-reference retention and hydraulic result frames.
 
 ## Deployment protection
 - A **staged Railway configuration change** has been prepared for the existing PyQGIS Processing API. It updates only that service's start command to the feature-branch processor.
