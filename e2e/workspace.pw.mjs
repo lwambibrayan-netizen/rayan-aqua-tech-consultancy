@@ -131,6 +131,22 @@ test('engineer opens a project, uses visible CAD navigation, saves and opens 3D'
   await expect(page.locator('.aquacad-shell .aquacad-ribbon-content').getByRole('button', { name: /Fetch DEM from GIS/ })).toBeVisible();
   await ribbon.getByRole('tab', { name: 'Home' }).click();
 
+  await circleMethod.selectOption('center-radius');
+  await ribbonContent.getByRole('button', { name: 'Circle' }).click();
+  const cadCanvas = page.getByRole('application', { name: /AquaCAD drawing canvas/ });
+  await cadCanvas.click({ position: { x: 120, y: 120 } });
+  await cadCanvas.click({ position: { x: 160, y: 120 } });
+  await expect(page.getByText(/Circle created using center-radius/).first()).toBeVisible();
+  await cadCanvas.click({ position: { x: 160, y: 120 } });
+  await ribbon.getByRole('tab', { name: 'Annotate' }).click();
+  await ribbonContent.getByRole('button', { name: 'Radius' }).click();
+  await cadCanvas.click({ position: { x: 190, y: 145 } });
+  await expect(page.getByText(/Radius dimension placed/).first()).toBeVisible();
+  await ribbonContent.getByRole('button', { name: 'Diameter' }).click();
+  await cadCanvas.click({ position: { x: 195, y: 160 } });
+  await expect(page.getByText(/Diameter dimension placed/).first()).toBeVisible();
+  await ribbon.getByRole('tab', { name: 'Home' }).click();
+
   const pan = page.getByRole('button', { name: 'Pan drawing' });
   await expect(pan).toBeVisible();
   await expect(pan).toHaveAttribute('aria-pressed', 'false');
