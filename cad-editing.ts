@@ -5,6 +5,8 @@ export type CadEditableEntity = {
   type: 'line' | 'polyline' | 'rect' | 'circle';
   points: Point2D[];
   radius?: number;
+  /** DXF LWPOLYLINE bulge per segment: tan(includedAngle / 4). */
+  bulges?: number[];
   layer: string;
 };
 export type CadWindow = { minX: number; minY: number; maxX: number; maxY: number };
@@ -45,11 +47,14 @@ export function mirrorEntities<T extends CadEditableEntity>(entities: T[], axisS
   assertPoint(axisStart); assertPoint(axisEnd);
   const dx = axisEnd.x - axisStart.x, dy = axisEnd.y - axisStart.y, d2 = dx * dx + dy * dy;
   if (d2 <= Number.EPSILON) throw new Error('Mirror axis must have non-zero length.');
-  return entities.map(e => transformedPoints(e, p => {
-    const t = ((p.x - axisStart.x) * dx + (p.y - axisStart.y) * dy) / d2;
-    const q = { x: axisStart.x + t * dx, y: axisStart.y + t * dy };
-    return { x: 2 * q.x - p.x, y: 2 * q.y - p.y };
-  }));
+  return entities.map(e => {
+    const mirrored=transformedPoints(e, p => {
+      const t = ((p.x - axisStart.x) * dx + (p.y - axisStart.y) * dy) / d2;
+      const q = { x: axisStart.x + t * dx, y: axisStart.y + t * dy };
+      return { x: 2 * q.x - p.x, y: 2 * q.y - p.y };
+    });
+    return {...mirrored,bulges:e.bulges?.map(value=>-value)};
+  });
 }
 export function stretchEntities<T extends CadEditableEntity>(entities: T[], window: CadWindow, delta: Point2D): T[] {
   assertPoint(delta);
@@ -180,6 +185,7 @@ export function offsetLine<T extends CadEditableEntity>(line: T, distance: numbe
 /** Offset an open polyline with exact parallel segments and bounded miter joins. */
 export function offsetPolyline<T extends CadEditableEntity>(entity:T,distance:number,side:1|-1=1,miterLimit=10):T {
   if(entity.type!=='polyline'||entity.points.length<2)throw new Error('OFFSET polyline requires an open polyline with at least two vertices.');
+  if(entity.bulges?.some(value=>Math.abs(value)>1e-12))throw new Error('OFFSET of curved polylines is not supported yet; the drawing geometry was left unchanged.');
   if(!finite(distance)||distance<0||!finite(miterLimit)||miterLimit<1)throw new Error('OFFSET distance and miter limit must be valid non-negative values.');
   const pts=entity.points;
   const shifted=pts.slice(1).map((p,i)=>{
@@ -209,31 +215,31 @@ export function chamferPolylineCorner<T extends CadEditableEntity>(entity: T, co
   const b = { x: corner.x + (next.x - corner.x) * distance / lenB, y: corner.y + (next.y - corner.y) * distance / lenB };
   return { ...entity, points: [...pts.slice(0, cornerIndex), a, b, ...pts.slice(cornerIndex + 1)].map(clonePoint) };
 }
-export function filletPolylineCorner<T extends CadEditableEntity>(entity: T, cornerIndex: number, radius: number, segments = 8): T {
-  if (entity.type !== 'polyline' || !Number.isInteger(cornerIndex) || cornerIndex <= 0 || cornerIndex >= entity.points.length - 1) throw new Error('FILLET requires an internal polyline corner.');
-  if (!finite(radius) || radius <= 0 || !Number.isInteger(segments) || segments < 2) throw new Error('Fillet radius and segment count must be positive.');
-  const pts = entity.points, p0 = pts[cornerIndex - 1], p1 = pts[cornerIndex], p2 = pts[cornerIndex + 1];
-  const v1 = { x: p0.x - p1.x, y: p0.y - p1.y }, v2 = { x: p2.x - p1.x, y: p2.y - p1.y };
-  const l1 = Math.hypot(v1.x, v1.y), l2 = Math.hypot(v2.x, v2.y);
-  if (!l1 || !l2) throw new Error('Cannot fillet a zero-length segment.');
-  const u1 = { x: v1.x / l1, y: v1.y / l1 }, u2 = { x: v2.x / l2, y: v2.y / l2 };
-  const angle = Math.acos(Math.max(-1, Math.min(1, u1.x * u2.x + u1.y * u2.y)));
-  if (angle < 1e-6 || Math.PI - angle < 1e-6) throw new Error('FILLET requires a non-collinear corner.');
-  const tangent = radius / Math.tan(angle / 2);
-  if (tangent >= l1 || tangent >= l2) throw new Error('Fillet radius is too large for the adjacent segments.');
-  const start = { x: p1.x + u1.x * tangent, y: p1.y + u1.y * tangent };
-  const end = { x: p1.x + u2.x * tangent, y: p1.y + u2.y * tangent };
-  const bisector = { x: u1.x + u2.x, y: u1.y + u2.y };
-  const bl = Math.hypot(bisector.x, bisector.y);
-  const centerDistance = radius / Math.sin(angle / 2);
-  const center = { x: p1.x + bisector.x / bl * centerDistance, y: p1.y + bisector.y / bl * centerDistance };
-  const startAngle = Math.atan2(start.y - center.y, start.x - center.x);
-  let sweep = Math.atan2(end.y - center.y, end.x - center.x) - startAngle;
-  while (sweep > Math.PI) sweep -= 2 * Math.PI;
-  while (sweep < -Math.PI) sweep += 2 * Math.PI;
-  const arc: Point2D[] = Array.from({ length: segments + 1 }, (_, i) => {
-    const a = startAngle + sweep * i / segments;
-    return { x: center.x + radius * Math.cos(a), y: center.y + radius * Math.sin(a) };
-  });
-  return { ...entity, points: [...pts.slice(0, cornerIndex), ...arc, ...pts.slice(cornerIndex + 1)].map(clonePoint) };
+export function filletPolylineCorner<T extends CadEditableEntity>(entity:T,cornerIndex:number,radius:number,segments=8):T {
+  if(entity.type!=='polyline'||!Number.isInteger(cornerIndex)||cornerIndex<=0||cornerIndex>=entity.points.length-1)throw new Error('FILLET requires an internal polyline corner.');
+  if(!finite(radius)||radius<=0||!Number.isInteger(segments)||segments<2)throw new Error('Fillet radius and segment count must be positive.');
+  if(entity.bulges?.some(value=>Math.abs(value)>1e-12))throw new Error('FILLET currently requires straight adjacent polyline segments.');
+  const pts=entity.points,p0=pts[cornerIndex-1],p1=pts[cornerIndex],p2=pts[cornerIndex+1];
+  const v1={x:p0.x-p1.x,y:p0.y-p1.y},v2={x:p2.x-p1.x,y:p2.y-p1.y};
+  const l1=Math.hypot(v1.x,v1.y),l2=Math.hypot(v2.x,v2.y);
+  if(!l1||!l2)throw new Error('Cannot fillet a zero-length segment.');
+  const u1={x:v1.x/l1,y:v1.y/l1},u2={x:v2.x/l2,y:v2.y/l2};
+  const angle=Math.acos(Math.max(-1,Math.min(1,u1.x*u2.x+u1.y*u2.y)));
+  if(angle<1e-6||Math.PI-angle<1e-6)throw new Error('FILLET requires a non-collinear corner.');
+  const tangent=radius/Math.tan(angle/2);
+  if(tangent>=l1||tangent>=l2)throw new Error('Fillet radius is too large for the adjacent segments.');
+  const start={x:p1.x+u1.x*tangent,y:p1.y+u1.y*tangent};
+  const end={x:p1.x+u2.x*tangent,y:p1.y+u2.y*tangent};
+  const bisector={x:u1.x+u2.x,y:u1.y+u2.y},bl=Math.hypot(bisector.x,bisector.y);
+  const centerDistance=radius/Math.sin(angle/2);
+  const center={x:p1.x+bisector.x/bl*centerDistance,y:p1.y+bisector.y/bl*centerDistance};
+  const startAngle=Math.atan2(start.y-center.y,start.x-center.x);
+  let sweep=Math.atan2(end.y-center.y,end.x-center.x)-startAngle;
+  while(sweep>Math.PI)sweep-=2*Math.PI;
+  while(sweep< -Math.PI)sweep+=2*Math.PI;
+  const points=[...pts.slice(0,cornerIndex),start,end,...pts.slice(cornerIndex+1)].map(clonePoint);
+  const bulges=Array(Math.max(0,points.length-1)).fill(0);
+  // One non-zero bulge encodes the exact circular arc between tangent points.
+  bulges[cornerIndex]=Math.tan(sweep/4);
+  return {...entity,points,bulges};
 }
