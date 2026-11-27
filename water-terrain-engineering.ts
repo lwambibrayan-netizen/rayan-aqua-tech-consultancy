@@ -49,15 +49,13 @@ export function sampleGroundProfile(grid: TerrainGrid, route: WaterPoint[], spac
     const a=route[i-1], b=route[i], length=segmentLength(a,b);
     if (!finite(a.x)||!finite(a.y)||!finite(b.x)||!finite(b.y)||length<=0) throw new Error('Route vertices must be finite and consecutive vertices must be distinct.');
     const count=Math.max(1,Math.ceil(length/spacingM));
-    for(let j=0;j<count;j++) {
+    for(let j=0;j<=count;j++) {
       if(i>1 && j===0) continue;
       const t=j/count, x=a.x+(b.x-a.x)*t, y=a.y+(b.y-a.y)*t;
       result.push({chainageM:chainage+length*t,x,y,groundLevelM:sampleTerrainElevation(grid,x,y)});
     }
     chainage+=length;
   }
-  const last=route[route.length-1];
-  result.push({chainageM:chainage,x:last.x,y:last.y,groundLevelM:sampleTerrainElevation(grid,last.x,last.y)});
   return result;
 }
 /** Applies sampled ground and a specified crown cover to every pipe vertex.
