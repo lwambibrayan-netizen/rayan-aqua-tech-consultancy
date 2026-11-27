@@ -72,4 +72,15 @@ describe('structured DXF exchange', () => {
     expect(imported.shapes[1].points.length).toBeGreaterThan(16);
     expect(imported.shapes[2].points[0]).toEqual(imported.shapes[2].points[3]);
   });
+
+  it('imports SOLID and 3DFACE boundaries as editable closed polylines', () => {
+    const source = ['0','SECTION','2','ENTITIES',
+      '0','SOLID','8','SYMBOL','10','0','20','0','11','4','21','0','12','4','22','3','13','0','23','3',
+      '0','3DFACE','8','SURFACE','10','10','20','10','11','14','21','10','12','14','22','14','13','10','23','14',
+      '0','ENDSEC','0','EOF'].join('\\n');
+    const imported = importDraftingDxf(source);
+    expect(imported.shapes).toHaveLength(2);
+    expect(imported.shapes[0].points[0]).toEqual(imported.shapes[0].points[4]);
+    expect(imported.shapes[1].points[0]).toEqual(imported.shapes[1].points[4]);
+  });
 });
