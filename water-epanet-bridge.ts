@@ -107,7 +107,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     const points=curveId?pumpCurves.get(safe(curveId)):undefined;
     addLink(r.values[0],'pump',r.values[1],r.values[2],0,{
       description:'Imported from EPANET pump link',
-      initialStatus:linkStatuses.get(safe(r.values[0])),
+      initialStatus:linkStatuses.get(safe(r.values[0]))??'OPEN',
       epanetPumpCurveId:curveId,
       pumpCurvePoints:points,
       pumpPowerKw:powerIndex>=0?num(r.values[powerIndex+1])*(usUnits?0.745699872:1):undefined,
