@@ -269,7 +269,7 @@ export function validateWaterNetworkTopology(document: NetworkDocument, toleranc
   return issues;
 }
 
-type HydraulicNode = { id: string; elevationM: number; x: number; y: number; sourceComponent?: WaterCadComponent };
+type HydraulicNode = { id: string; elevationM: number; x: number; y: number; cadComponentId: string };
 
 function resolveHydraulicNodes(document: NetworkDocument): { portNodeIds: Map<string, string>; syntheticNodes: HydraulicNode[] } {
   const ports = document.components.flatMap(getWaterPorts);
@@ -320,7 +320,8 @@ function resolveHydraulicNodes(document: NetworkDocument): { portNodeIds: Map<st
       const elevationM = levels.length ? levels.reduce((sum, value) => sum + value, 0) / levels.length : 0;
       const x=group.reduce((sum,port)=>sum+port.point.x,0)/group.length;
       const y=group.reduce((sum,port)=>sum+port.point.y,0)/group.length;
-      syntheticNodes.push({ id: nodeId, elevationM, x, y });
+      const cadComponentId=group.find(port=>!['pipe','pump','valve'].includes(document.components.find(component=>component.id===port.componentId)?.kind??''))?.componentId??group[0].componentId;
+      syntheticNodes.push({ id: nodeId, elevationM, x, y, cadComponentId });
     }
   }
   return { portNodeIds, syntheticNodes };
@@ -336,6 +337,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   if(nodeIds.size!==nodeIdList.length)warnings.push('EPANET node ID collision between CAD nodes and generated hydraulic junctions. Rename conflicting IDs before simulation/export.');
   const idMap:EpanetIdMap[]=[
     ...nodes.map(node=>({epanetId:safeId(node.id),cadId:node.id,kind:'node' as const})),
+    ...hydraulic.syntheticNodes.map(node=>({epanetId:node.id,cadId:node.cadComponentId,kind:'node' as const})),
     ...document.components.filter(component=>['pipe','pump','valve'].includes(component.kind)).map(link=>({epanetId:safeId(link.id),cadId:link.id,kind:'link' as const}))
   ];
   const hasSafeIdCollision=(['node','link'] as const).some(kind=>{const ids=idMap.filter(item=>item.kind===kind).map(item=>item.epanetId);return new Set(ids).size!==ids.length;});
