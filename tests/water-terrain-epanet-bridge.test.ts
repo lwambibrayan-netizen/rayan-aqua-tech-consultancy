@@ -16,6 +16,8 @@ describe('terrain-aware water engineering',()=>{
   const profile=sampleGroundProfile(terrain,[{x:0,y:0},{x:20,y:0}],5);
   expect(profile.map(p=>p.chainageM)).toEqual([0,5,10,15,20]);
   expect(profile[2].groundLevelM).toBe(101);
+  const corner=sampleGroundProfile(terrain,[{x:0,y:0},{x:10,y:0},{x:10,y:10}],5);
+  expect(corner.find(point=>point.chainageM===10)).toMatchObject({x:10,y:0});
  });
  it('routes a pipe below sampled terrain using crown cover and pipe OD',()=>{
   const pipe=createWaterComponent('pipe','P-1',0,0);
