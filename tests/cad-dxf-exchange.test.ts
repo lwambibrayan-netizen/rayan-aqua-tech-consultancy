@@ -6,7 +6,7 @@ describe('structured DXF exchange', () => {
   it('writes drawing units, layer table, linework and annotations', () => {
     const doc = createDraftingDocument();
     doc.annotations.push({ id: 'T1', kind: 'text', layer: 'TEXT', at: { x: 10, y: 20 }, text: 'PIPE DN110', heightMm: 2.5, rotationDeg: 0 });
-    const dxf = exportDraftingDxf([{ id: 'L1', type: 'line', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], layer: 'WATER_NETWORK' }], doc, 1);
+    const dxf = exportDraftingDxf([{ id: 'L1', type: 'line', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], layer: 'WATER_NETWORK' }, { id: 'PL1', type: 'polyline', points: [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: 10, y: 0 }], layer: 'WATER_PIPE' }], doc, 1);
     expect(dxf).toContain('$INSUNITS');
     expect(dxf).toContain('WATER_NETWORK');
     expect(dxf).toContain('PIPE DN110');
