@@ -78,8 +78,8 @@ describe('structured DXF exchange', () => {
   });
 
   it('recursively expands nested BLOCK INSERT transforms and inherited layer 0', () => {
-    const source = ['0','SECTION','2','BLOCKS',
-      '0','BLOCK','8','0','2','OUTER','10','0','20','0',
+    const source = ['0','SECTION','2','HEADER','9','$INSUNITS','70','6','0','ENDSEC',
+      '0','SECTION','2','BLOCKS','0','BLOCK','8','0','2','OUTER','10','0','20','0',
       '0','INSERT','8','0','2','INNER','10','10','20','0','41','2','42','2','50','90',
       '0','ENDBLK',
       '0','BLOCK','8','0','2','INNER','10','1','20','0',
@@ -101,9 +101,10 @@ describe('structured DXF exchange', () => {
     const source = ['0','SECTION','2','BLOCKS',
       '0','BLOCK','8','0','2','A','10','0','20','0','0','INSERT','8','0','2','B','10','0','20','0','0','ENDBLK',
       '0','BLOCK','8','0','2','B','10','0','20','0','0','INSERT','8','0','2','A','10','0','20','0','0','ENDBLK','0','ENDSEC',
-      '0','SECTION','2','ENTITIES','0','INSERT','8','0','2','A','10','0','20','0','0','ENDSEC','0','EOF'].join('\n');
+      '0','SECTION','2','ENTITIES','0','INSERT','8','0','2','A','10','0','20','0',
+      '0','LINE','8','SAFE','10','0','20','0','11','1','21','1','0','ENDSEC','0','EOF'].join('\n');
     const imported = importDraftingDxf(source);
-    expect(imported.shapes).toHaveLength(0);
+    expect(imported.shapes).toHaveLength(1);
     expect(imported.warnings.some(warning=>warning.includes('cyclic nested BLOCK reference'))).toBe(true);
   });
 
