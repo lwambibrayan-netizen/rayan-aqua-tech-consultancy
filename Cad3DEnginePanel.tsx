@@ -354,6 +354,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [history, setHistory] = useState(() => createHistory<Shape[]>(initialData?.shapes || []));
   const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad ? { ...initialData.waterCad, horizontalCrs: initialData.waterCad.horizontalCrs ?? 'LOCAL_METRIC', horizontalUnits: initialData.waterCad.horizontalUnits ?? 'm' } : { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', horizontalCrs: 'LOCAL_METRIC', horizontalUnits: 'm' as const, components: [] });
   const [terrainGrid, setTerrainGrid] = useState<TerrainGrid | null>(() => initialData?.terrainGrid || null);
+  const [terrainTransferBusy, setTerrainTransferBusy] = useState(false);
   const [hydraulicResults, setHydraulicResults] = useState<HydraulicResults | null>(() => initialData?.hydraulicResults || null);
   const [hydraulicResultSeries, setHydraulicResultSeries] = useState<HydraulicResults[]>(() => initialData?.hydraulicResultSeries || []);
   const [hydraulicReport, setHydraulicReport] = useState<string>(() => initialData?.hydraulicReport || '');
@@ -1014,6 +1015,48 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       setMessage('Terrain grid loaded: ' + grid.width + ' × ' + grid.height + ' cells · ' + grid.crs + ' · vertical datum ' + grid.verticalDatum + '. Save the drawing to persist it.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Terrain import failed.'); }
     if (terrainFileRef.current) terrainFileRef.current.value = '';
+  }
+
+  async function fetchTerrainSurfaceFromGis() {
+    if (!gisFeatures.length) { setMessage('Save GIS features first, then fetch their terrain surface here.'); return; }
+    const points: number[][] = [];
+    const collect = (value: any): void => {
+      if (!Array.isArray(value)) return;
+      if (value.length >= 2 && typeof value[0] === 'number' && typeof value[1] === 'number') {
+        if (Number.isFinite(value[0]) && Number.isFinite(value[1])) points.push(value);
+        return;
+      }
+      value.forEach(collect);
+    };
+    gisFeatures.forEach(feature => collect(feature.geometry?.coordinates ?? feature.coordinates));
+    const valid = points.filter(point => Math.abs(point[0]) <= 180 && Math.abs(point[1]) <= 90);
+    if (!valid.length) { setMessage('The saved GIS draft has no valid geographic coordinates for DEM clipping.'); return; }
+    const bbox = {
+      west: Math.min(...valid.map(point => point[0])) - 0.002,
+      south: Math.min(...valid.map(point => point[1])) - 0.002,
+      east: Math.max(...valid.map(point => point[0])) + 0.002,
+      north: Math.max(...valid.map(point => point[1])) + 0.002,
+    };
+    setTerrainTransferBusy(true);
+    setMessage('Requesting a project-clipped DEM grid from PyQGIS…');
+    try {
+      const response = await api.post('/api/projects/' + projectId + '/gis-terrain/grid', { bbox, maxDimension: 64 });
+      const grid = response.data?.grid as TerrainGrid;
+      if (!grid || !Number.isInteger(grid.width) || !Number.isInteger(grid.height) || !Array.isArray(grid.elevationsM) || !grid.crs || !grid.verticalDatum) throw new Error('PyQGIS returned an incomplete terrain grid.');
+      sampleTerrainElevation(grid, grid.originX, grid.originY);
+      setTerrainGrid(grid);
+      await onSave({
+        shapes, waterCad, terrainGrid: grid, hydraulicResults, hydraulicResultSeries, hydraulicReport, hydraulicOverlay,
+        drafting: { ...drafting, dimensionStyle }, paperLayouts, units, schemaVersion: 1,
+        coordinateSystem: calibratedMetresPerUnit ? 'calibrated-local-grid' : 'legacy-unscaled-drawing-units',
+        calibratedMetresPerUnit, viewport: viewBox, format: 'RayanAqua CAD v3', updatedAt: new Date().toISOString(),
+      });
+      setMessage('PyQGIS DEM surface saved into this CAD drawing: ' + grid.width + ' × ' + grid.height + ' samples · ' + grid.crs + ' · ' + grid.verticalDatum + '. Terrain alignment still requires matching network CRS, metre units and vertical datum.');
+    } catch (error) {
+      setMessage(error instanceof Error ? 'CAD terrain acquisition failed: ' + error.message : 'CAD terrain acquisition failed.');
+    } finally {
+      setTerrainTransferBusy(false);
+    }
   }
 
   async function importEpanetFile(file?: File, mode: 'replace'|'merge' = 'replace') {
@@ -1785,6 +1828,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               <button className={view==='2d'?'selected':''} onClick={()=>setView('2d')}><i>▱</i><span>2D Wireframe</span></button>
               <button className={view==='3d'?'selected':''} onClick={()=>setView('3d')}><i>⤢</i><span>Open 3D View</span></button>
             </div></div>}
+            {ribbonTab==='3D Modeling' && <div className="aquacad-ribbon-group"><strong>Terrain & Elevation</strong><div className="aquacad-tool-grid">
+              <button onClick={()=>void fetchTerrainSurfaceFromGis()} disabled={terrainTransferBusy || !gisFeatures.length}><i>▤</i><span>{terrainTransferBusy?'Fetching DEM…':'Fetch DEM from GIS'}</span></button>
+              <button onClick={()=>terrainFileRef.current?.click()}><i>⇩</i><span>Import Terrain Grid</span></button>
+            </div><small className="muted">{terrainGrid ? 'Terrain loaded · '+terrainGrid.width+' × '+terrainGrid.height+' · '+terrainGrid.crs : 'Fetch a DEM clipped to the saved GIS project features.'}</small></div>}
             {ribbonTab==='Analyze' && <>
               <div className="aquacad-ribbon-group"><strong>Hydraulic Analysis</strong><div className="aquacad-tool-grid">
                 <button className="primary" onClick={runProjectHydraulics} disabled={simulationBusy||!waterCad.components.length}><i>▶</i><span>{simulationBusy?'Running…':'Run EPANET'}</span></button>
@@ -2128,6 +2175,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         <button className="aquacad-document-add" type="button" title="New drawing" onClick={()=>{setShapes([]);setSelectedShapeIds([]);setDraft([]);setMessage('New drawing started.');}}>＋</button>
       </div>
 
+      {view === '2d' ? (
+        <div className="panel aquacad-canvas-layout" style={{ padding: 12 }}>
           <div className="aquacad-dock aquacad-left-dock">
             <div className="aquacad-dock-heading">Properties</div>
             <div className="aquacad-property-list">
