@@ -331,7 +331,7 @@ function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled:
 
 export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures = [], onSave }: Props) {
   const [history, setHistory] = useState(() => createHistory<Shape[]>(initialData?.shapes || []));
-  const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
+  const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad ? { ...initialData.waterCad, horizontalCrs: initialData.waterCad.horizontalCrs ?? 'LOCAL_METRIC', horizontalUnits: initialData.waterCad.horizontalUnits ?? 'm' } : { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', horizontalCrs: 'LOCAL_METRIC', horizontalUnits: 'm' as const, components: [] });
   const [terrainGrid, setTerrainGrid] = useState<TerrainGrid | null>(() => initialData?.terrainGrid || null);
   const [hydraulicResults, setHydraulicResults] = useState<HydraulicResults | null>(() => initialData?.hydraulicResults || null);
   const [hydraulicResultSeries, setHydraulicResultSeries] = useState<HydraulicResults[]>(() => initialData?.hydraulicResultSeries || []);
@@ -411,7 +411,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
 
   useEffect(() => {
     setHistory(createHistory<Shape[]>(initialData?.shapes || []));
-    setWaterCad(initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
+    setWaterCad(initialData?.waterCad ? { ...initialData.waterCad, horizontalCrs: initialData.waterCad.horizontalCrs ?? 'LOCAL_METRIC', horizontalUnits: initialData.waterCad.horizontalUnits ?? 'm' } : { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', horizontalCrs: 'LOCAL_METRIC', horizontalUnits: 'm' as const, components: [] });
     setTerrainGrid(initialData?.terrainGrid || null);
     setHydraulicResults(initialData?.hydraulicResults || null);
     setHydraulicResultSeries(initialData?.hydraulicResultSeries || []);
@@ -984,6 +984,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   function applyTerrainToSelectedPipe() {
     const selected = waterCad.components.find(component => component.id === selectedWaterId);
     if (!terrainGrid) { setMessage('Import a terrain elevation grid before routing a pipe.'); return; }
+    if (waterCad.horizontalUnits !== 'm' || waterCad.horizontalCrs !== terrainGrid.crs) { setMessage('Terrain routing blocked: project CRS ('+(waterCad.horizontalCrs||'unset')+', '+(waterCad.horizontalUnits||'unknown')+') must match terrain CRS ('+terrainGrid.crs+') in metres. Reproject the terrain or network first; do not relabel coordinates.'); return; }
     if (!selected || selected.kind !== 'pipe') { setMessage('Select a pipe in the component register first.'); return; }
     try {
       const updated = applyTerrainToPipe(selected, terrainGrid, terrainCoverM);
@@ -1251,16 +1252,17 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     });
     // Render the engineering network from project-metre XYZ geometry, not as a flat 2D extrusion.
     const networkPoints = waterCad.components.flatMap(component => component.geometry);
-    const terrainValues = terrainGrid?.elevationsM.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
+    const terrainAligned = !!terrainGrid && waterCad.horizontalUnits === 'm' && waterCad.horizontalCrs === terrainGrid.crs;
+    const terrainValues = (terrainAligned ? terrainGrid?.elevationsM : undefined)?.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
     const verticalBase = terrainValues.length ? Math.min(...terrainValues) : networkPoints.length ? Math.min(...networkPoints.map(point => point.z ?? point.invertLevelM ?? 0)) : 0;
-    const allX = [...networkPoints.map(point => point.x), ...(terrainGrid ? [terrainGrid.originX, terrainGrid.originX + (terrainGrid.width-1)*terrainGrid.cellSizeX] : [])];
-    const allY = [...networkPoints.map(point => point.y), ...(terrainGrid ? [terrainGrid.originY, terrainGrid.originY + (terrainGrid.height-1)*terrainGrid.cellSizeY] : [])];
+    const allX = [...networkPoints.map(point => point.x), ...(terrainAligned && terrainGrid ? [terrainGrid.originX, terrainGrid.originX + (terrainGrid.width-1)*terrainGrid.cellSizeX] : [])];
+    const allY = [...networkPoints.map(point => point.y), ...(terrainAligned && terrainGrid ? [terrainGrid.originY, terrainGrid.originY + (terrainGrid.height-1)*terrainGrid.cellSizeY] : [])];
     const centreX = allX.length ? (Math.min(...allX)+Math.max(...allX))/2 : 0;
     const centreY = allY.length ? (Math.min(...allY)+Math.max(...allY))/2 : 0;
     const span = Math.max(allX.length ? Math.max(...allX)-Math.min(...allX) : 0, allY.length ? Math.max(...allY)-Math.min(...allY) : 0, 10);
     camera.position.set(span*0.9, span*0.8, span*1.1);
     camera.lookAt(0,0,0);
-    if (terrainGrid) {
+    if (terrainAligned && terrainGrid) {
       const positions:number[]=[]; const indices:number[]=[];
       for(let row=0;row<terrainGrid.height;row++) for(let col=0;col<terrainGrid.width;col++) {
         const elevation=terrainGrid.elevationsM[row*terrainGrid.width+col];
@@ -1717,9 +1719,18 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <p className="muted" style={{ fontSize: 10 }}>Simulation is run locally by the bundled OWA-EPANET engine. Colours are applied to matching network components in the 2D and 3D drawings. Imported results JSON is also supported.</p>
           </div>}
         </div>
-        <label style={{ display: 'block', marginTop: 10, fontSize: 12 }}>Project vertical datum / level reference
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 8, marginTop: 10 }}>
+        <label style={{ display: 'block', fontSize: 12 }}>Project horizontal CRS
+          <input value={waterCad.horizontalCrs || ''} onChange={e => setWaterCad(current => ({ ...current, horizontalCrs: e.target.value.trim() }))} placeholder="e.g. EPSG:32737 or LOCAL_METRIC" style={{ display: 'block', width: '100%' }} />
+        </label>
+        <label style={{ display: 'block', fontSize: 12 }}>Horizontal coordinate units
+          <select value={waterCad.horizontalUnits || 'unknown'} onChange={e => setWaterCad(current => ({ ...current, horizontalUnits: e.target.value as WaterCadDocument['horizontalUnits'] }))} style={{ display: 'block', width: '100%' }}><option value="m">Metres</option><option value="ft">Feet</option><option value="unknown">Unknown / unreferenced</option></select>
+        </label>
+        <label style={{ display: 'block', fontSize: 12 }}>Project vertical datum / level reference
           <input value={waterCad.verticalDatum} onChange={e => setWaterCad(current => ({ ...current, verticalDatum: e.target.value }))} style={{ display: 'block', width: '100%' }} />
         </label>
+        </div>
+        {terrainGrid && <p className="muted" style={{fontSize:11}}>Terrain CRS: {terrainGrid.crs}. {waterCad.horizontalCrs===terrainGrid.crs && waterCad.horizontalUnits==='m' ? 'CRS and metre units match.' : 'CRS or units do not match; terrain routing and co-registered 3D terrain are disabled until coordinates are properly reprojected.'}</p>}
       </div>
 
       {view === '2d' ? (
