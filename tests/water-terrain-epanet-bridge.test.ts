@@ -67,6 +67,7 @@ J2 180 0
   expect(result.document.components.find(c=>c.id==='J1')?.properties.hydraulicElevationM).toBe(100);
   expect(result.document.components.find(c=>c.id==='R1')?.properties.hydraulicElevationM).toBeUndefined();
   expect(result.document.components.find(c=>c.id==='R1')?.properties.hydraulicHeadM).toBe(110);
+  expect(result.document.verticalDatum).toBe('EPANET imported elevations');
   expect(p.properties.hydraulicLengthM).toBe(125);
   expect(p.properties.internalDiameterMm).toBe(150);
   expect(p.properties.externalDiameterMm).toBeUndefined();
