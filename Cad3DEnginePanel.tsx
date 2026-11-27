@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
-import { connectPipeEndpoints, createWaterComponent, component3dLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
+import { connectPipeEndpoints, createWaterComponent, component3dLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';\nimport { buildPipeLongitudinalProfile, buildPreliminaryBoq, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
 type Shape = {
@@ -316,7 +316,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
   const [selectedWaterId, setSelectedWaterId] = useState('');
   const [activeWaterTool, setActiveWaterTool] = useState<WaterComponentKind | null>(null);
-  const [waterDraft, setWaterDraft] = useState<Point2D[]>([]);
+  const [waterDraft, setWaterDraft] = useState<Point2D[]>([]);\n  const [portA, setPortA] = useState('');\n  const [portB, setPortB] = useState('');
   const shapes = history.present;
   function setShapes(next: Shape[] | ((current: Shape[]) => Shape[])) {
     setHistory(current => pushHistory(current, typeof next === 'function' ? next(current.present) : next));
@@ -918,6 +918,42 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <label style={{ fontSize: 12 }}>Notes<input value={selectedWaterComponent.properties.notes || ''} onChange={e => updateWaterProperties({ notes: e.target.value })} style={{ display: 'block', width: '100%' }} /></label>
             <button className="secondary-button" onClick={() => { setWaterCad(current => ({ ...current, components: current.components.filter(item => item.id !== selectedWaterId) })); setSelectedWaterId(''); }}>Delete component</button>
           </div> : <p className="muted" style={{ fontSize: 12 }}>Select an object to edit its engineering schedule. Additional object-specific properties will be added in the next implementation pass.</p>}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+          <button className="primary-button" onClick={downloadEpanetInput} disabled={!waterCad.components.length}>Export EPANET INP</button>
+          <button className="secondary-button" onClick={downloadWaterBoq} disabled={!waterCad.components.length}>Export preliminary BOQ CSV</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8, marginTop: 12 }}>
+          <label style={{ fontSize: 12 }}>Connect port A
+            <select value={portA} onChange={e => setPortA(e.target.value)} style={{ display: 'block', width: '100%' }}>
+              <option value="">Select port</option>
+              {waterCad.components.flatMap(item => getWaterPorts(item)).map(port => <option key={port.id} value={port.id}>{port.id} · {port.role}</option>)}
+            </select>
+          </label>
+          <label style={{ fontSize: 12 }}>Connect port B
+            <select value={portB} onChange={e => setPortB(e.target.value)} style={{ display: 'block', width: '100%' }}>
+              <option value="">Select port</option>
+              {waterCad.components.flatMap(item => getWaterPorts(item)).map(port => <option key={port.id} value={port.id}>{port.id} · {port.role}</option>)}
+            </select>
+          </label>
+          <button className="secondary-button" style={{ alignSelf: 'end' }} disabled={!portA || !portB} onClick={() => { try { setWaterCad(current => connectWaterPorts(current, portA, portB, 0.05)); setPortA(''); setPortB(''); setMessage('Network ports connected within 0.05 m tolerance.'); } catch(error) { setMessage(error instanceof Error ? error.message : 'Port connection failed.'); } }}>Connect ports</button>
+        </div>
+        <p className="muted" style={{ fontSize: 11, margin: '5px 0' }}>Direct port connection tolerance: 50 mm. Port coordinates are not moved automatically. Existing connections remain in the project document.</p>
+        {selectedWaterComponent?.kind === 'pipe' && <div style={{ overflowX: 'auto', marginTop: 12 }}>
+          <strong style={{ fontSize: 13 }}>Longitudinal profile · {selectedWaterComponent.id}</strong>
+          <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse', marginTop: 6 }}>
+            <thead><tr>{['Chainage (m)','Ground RL (m)','Invert RL (m)','Crown RL (m)','Cover (m)'].map(label => <th key={label} style={{ textAlign: 'right', padding: 5 }}>{label}</th>)}</tr></thead>
+            <tbody>{buildPipeLongitudinalProfile(selectedWaterComponent).map((point, index) => <tr key={index}>{[point.chainageM, point.groundLevelM, point.invertLevelM, point.crownLevelM, point.coverDepthM].map((value, i) => <td key={i} style={{ textAlign: 'right', padding: 5 }}>{value === null ? '—' : value.toFixed(3)}</td>)}</tr>)}</tbody>
+          </table>
+          <p className="muted" style={{ fontSize: 11 }}>Profile values interpolate the entered start/end ground and invert levels. Add surveyed intermediate vertices and levels for a true surveyed profile; blank levels remain blank.</p>
+        </div>}
+        <div style={{ overflowX: 'auto', marginTop: 12 }}>
+          <strong style={{ fontSize: 13 }}>Preliminary material and fitting schedule</strong>
+          <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse', marginTop: 6 }}>
+            <thead><tr><th style={{ textAlign: 'left', padding: 5 }}>Description</th><th style={{ textAlign: 'right', padding: 5 }}>Unit</th><th style={{ textAlign: 'right', padding: 5 }}>Quantity</th></tr></thead>
+            <tbody>{buildPreliminaryBoq(waterCad).map((row, index) => <tr key={row.code + index}><td style={{ padding: 5 }}>{row.description}</td><td style={{ textAlign: 'right', padding: 5 }}>{row.unit}</td><td style={{ textAlign: 'right', padding: 5 }}>{row.quantity.toFixed(2)}</td></tr>)}</tbody>
+          </table>
+          <p className="muted" style={{ fontSize: 11 }}>Excavation is a preliminary rectangular trench estimate using 0.6 m width × 1.2 m depth. It excludes bedding, shoring, fittings allowances, dewatering, reinstatement and wastage.</p>
         </div>
         <label style={{ display: 'block', marginTop: 10, fontSize: 12 }}>Project vertical datum / level reference
           <input value={waterCad.verticalDatum} onChange={e => setWaterCad(current => ({ ...current, verticalDatum: e.target.value }))} style={{ display: 'block', width: '100%' }} />
