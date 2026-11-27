@@ -39,7 +39,7 @@ const add = (a: WaterPoint, b: WaterPoint): WaterPoint => ({ x: a.x + b.x, y: a.
 const scale = (a: WaterPoint, n: number): WaterPoint => ({ x: a.x * n, y: a.y * n, z: a.z });
 const dist = (a: WaterPoint, b: WaterPoint) => Math.hypot(a.x - b.x, a.y - b.y, finite(a.z) && finite(b.z) ? a.z - b.z : 0);
 const fmt = (n: number) => Number(n.toFixed(4)).toString();
-const fmtTime = (seconds:number) => { const total=Math.max(0,Math.round(seconds)); return Math.floor(total/3600)+':'+String(Math.floor((total%3600)/60)).padStart(2,'0'); };
+const fmtTime = (seconds:number) => { const total=Math.max(0,Math.round(seconds)); const hours=Math.floor(total/3600),minutes=Math.floor((total%3600)/60),remainder=total%60; return hours+':'+String(minutes).padStart(2,'0')+(remainder?':'+String(remainder).padStart(2,'0'):''); };
 const safeId = (s: string) => s.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 31) || 'N';
 
 function componentAxis(c: WaterCadComponent): WaterPoint {
