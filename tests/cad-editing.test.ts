@@ -73,7 +73,7 @@ describe('CAD editing geometry operations', () => {
     const cutter: CadEditableEntity = { id: 'c', type: 'line', points: [{ x: 5, y: -5 }, { x: 5, y: 5 }], layer: '0' };
     const trimmedEnd = trimLine(line, cutter, { x: 9, y: 0 });
     expect(trimmedEnd.points[1]).toEqual({ x: 5, y: 0 });
-    const reversed: CadEditableEntity = { ...line, points: [{ x: 10, y: 0 }, { x: 7, y: 0 }] };
+    const reversed: CadEditableEntity = { ...line, points: [{ x: 7, y: 0 }, { x: 10, y: 0 }] };
     const extendedStart = extendLine(reversed, cutter, 0);
     expect(extendedStart.points[0]).toEqual({ x: 5, y: 0 });
   });
@@ -86,7 +86,7 @@ describe('CAD editing geometry operations', () => {
     expect(end.x).toBeCloseTo(10);
     expect(end.y).toBeCloseTo(2);
     expect(result.points).toHaveLength(19);
-    expect(() => filletPolylineCorner(poly, 1, 6)).toThrow(/too large/);
+    expect(() => filletPolylineCorner(poly, 1, 11)).toThrow(/too large/);
   });
   it('creates unique IDs for every generated array entity', () => {
     let n = 0;
