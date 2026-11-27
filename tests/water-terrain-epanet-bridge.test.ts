@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createWaterComponent, type WaterCadDocument } from '../water-cad';
 import { sampleTerrainElevation, sampleGroundProfile, applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, type TerrainGrid } from '../water-terrain-engineering';
 import { importEpanetInp } from '../water-epanet-bridge';
+import { exportWaterNetworkToEpanet } from '../water-network-engineering';
 import { buildHydraulicOverlay } from '../water-hydraulic-overlays';
 
 const terrain:TerrainGrid={width:3,height:3,originX:0,originY:0,cellSizeX:10,cellSizeY:10,elevationsM:[100,101,102,99,100,101,98,99,100],crs:'LOCAL',verticalDatum:'Project datum'};
@@ -119,6 +120,52 @@ J1 10 0
   expect(result.document.epanetPatterns?.[0].multipliers).toEqual([1,2,3]);
   expect(result.document.components.find(c=>c.id==='J1')?.properties.demandPatternId).toBe('PAT1');
   expect(result.document.components.find(c=>c.id==='PU1')?.properties.pumpSpeedPattern).toBe('PAT1');
+ });
+ it('round-trips pipe vertices, additional demands, emitters, solver options and simulation times',()=>{
+  const model=`[JUNCTIONS]
+J1 100 2 PAT1
+[RESERVOIRS]
+R1 110
+[PIPES]
+P1 R1 J1 125 150 140 0.2 OPEN
+[DEMANDS]
+J1 1.5 PAT1
+[EMITTERS]
+J1 0.5
+[VERTICES]
+P1 50 10
+[OPTIONS]
+UNITS LPS
+HEADLOSS D-W
+SPECIFIC GRAVITY 1.02
+VISCOSITY 1.1
+TRIALS 60
+ACCURACY 0.0001
+[TIMES]
+DURATION 12:00
+HYDRAULIC TIMESTEP 0:30
+PATTERN TIMESTEP 1:00
+[COORDINATES]
+R1 0 0
+J1 100 0
+[PATTERNS]
+PAT1 1 1.2
+[END]`;
+  const imported=importEpanetInp(model);
+  const pipe=imported.document.components.find(c=>c.id==='P1')!;
+  const junction=imported.document.components.find(c=>c.id==='J1')!;
+  expect(pipe.geometry).toHaveLength(3);
+  expect(pipe.geometry[1]).toEqual({x:50,y:10});
+  expect(junction.properties.additionalDemands?.[0].flowM3h).toBeCloseTo(5.4);
+  expect(junction.properties.emitterCoefficient).toBeCloseTo(0.5);
+  expect(imported.document.epanetTimes?.durationSeconds).toBe(43200);
+  expect(imported.document.epanetTimes?.hydraulicStepSeconds).toBe(1800);
+  const exported=exportWaterNetworkToEpanet(imported.document).input;
+  expect(exported).toContain('HEADLOSS D-W');
+  expect(exported).toContain('DURATION 12:00');
+  expect(exported).toContain('J1 50 10');
+  expect(exported).toContain('J1 1.5 PAT1');
+  expect(exported).toContain('J1 0.5');
  });
  it('warns when EPANET coordinates are absent rather than pretending the layout is surveyed',()=>{
   const result=importEpanetInp('[JUNCTIONS]\nJ1 10 1\n[RESERVOIRS]\nR1 20\n[PIPES]\nP1 R1 J1 50 100 130 0 OPEN\n[END]');
