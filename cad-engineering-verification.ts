@@ -32,7 +32,7 @@ export function auditEngineeringDrawing(input:EngineeringDrawingAuditInput):Engi
  sheets.forEach((sheet,index)=>{
   const dimensions=sheetDimensionsMm(sheet);
   if(!Number.isFinite(dimensions.widthMm)||!Number.isFinite(dimensions.heightMm)||dimensions.widthMm<=0||dimensions.heightMm<=0)add('error','INVALID_SHEET_SIZE','Drawing sheet '+(index+1)+' has invalid dimensions.','drafting');
-  if(!/^1:\\d+(?:\\.\\d+)?$/.test(sheet.scale))add('error','INVALID_SHEET_SCALE','Drawing sheet '+(index+1)+' has an invalid scale notation.','drafting');
+  if(!/^1:\d+(?:\.\d+)?$/.test(sheet.scale))add('error','INVALID_SHEET_SCALE','Drawing sheet '+(index+1)+' has an invalid scale notation.','drafting');
  });
  let viewportCount=0;
  for(const layout of input.paperLayouts||[]){viewportCount+=layout.viewports.length;for(const message of validatePaperLayout(layout))add('error','PAPER_LAYOUT_INVALID',message,'paper-space');}
