@@ -275,6 +275,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [selectedShapeIds, setSelectedShapeIds] = useState<string[]>([]);
   const [selectionBox, setSelectionBox] = useState<{start:Point2D;end:Point2D}|null>(null);
   const selectionRef = useRef<{pointerId:number;start:Point2D;current:Point2D}|null>(null);
+  const suppressSelectionClick = useRef(false);
   const [commandDistance, setCommandDistance] = useState(5);
   const [commandAngle, setCommandAngle] = useState(90);
   const [arrayRows, setArrayRows] = useState(2);
@@ -351,6 +352,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   function handleCanvasClick(event: React.MouseEvent<SVGSVGElement>) {
+    if (suppressSelectionClick.current) { suppressSelectionClick.current=false; return; }
     if (panRef.current || panMode) return;
     if (mode === 'select') {
       const target = (event.target as SVGElement).closest('[data-shape-id]') as SVGElement | null;
@@ -768,6 +770,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               if (selectionRef.current?.pointerId === event.pointerId) {
                 const end = selectionRef.current.current;
                 const start = selectionRef.current.start;
+                if (Math.hypot(end.x-start.x,end.y-start.y)>2) suppressSelectionClick.current=true;
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
                 const left=Math.min(start.x,end.x), right=Math.max(start.x,end.x), top=Math.min(start.y,end.y), bottom=Math.max(start.y,end.y);
                 const crossing=end.x<start.x;
                 const hits=visibleShapes.filter(shape=>{
