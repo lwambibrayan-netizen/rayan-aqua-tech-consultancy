@@ -418,6 +418,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     structures: shapes.filter(shape => shape.type === 'rect').length,
     circles: shapes.filter(shape => shape.type === 'circle').length,
   }), [shapes]);
+  const activePaperLayout = paperLayouts.find(layout => layout.id === 'LAY-' + drafting.sheet.drawingNumber);
+  const activePaperViewport = activePaperLayout?.viewports[0];
 
   function resolveDraftPoint(svg: SVGSVGElement, raw: Point2D) {
     const objectSnap = findSnap(svg, raw, shapes, snapEnabled, waterCad, calibratedMetresPerUnit || 1);
@@ -865,6 +867,12 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       setMessage('Paper-space layout created for ' + drafting.sheet.drawingNumber + ' with a locked 1:' + scaleDenominator + ' model viewport. Save the drawing to persist it.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Paper-space layout could not be created.'); }
   }
+  function updatePaperViewport(patch: Partial<PaperLayout['viewports'][number]>) {
+    const layoutId = 'LAY-' + drafting.sheet.drawingNumber;
+    setPaperLayouts(current => current.map(layout => layout.id === layoutId
+      ? { ...layout, viewports: layout.viewports.map((viewport,index) => index === 0 ? { ...viewport, ...patch } : viewport) }
+      : layout));
+  }
   function runEngineeringAudit() {
     const result = auditEngineeringDrawing({ drafting: { ...drafting, dimensionStyle }, waterCad, shapes, metresPerDrawingUnit: calibratedMetresPerUnit, paperLayouts });
     setEngineeringAudit(result);
@@ -1292,6 +1300,19 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           {engineeringAudit && <strong style={{ fontSize: 12, color: engineeringAudit.status === 'FAIL' ? '#b42318' : engineeringAudit.status === 'PASS_WITH_WARNINGS' ? '#9a6700' : '#16794b' }}>{engineeringAudit.status} · {engineeringAudit.errors} errors · {engineeringAudit.warnings} warnings</strong>}
         </div>
         <div className="muted" style={{ fontSize: 11 }}>{paperLayouts.length} saved paper-space layouts · {paperLayouts.reduce((sum, layout) => sum + layout.viewports.length, 0)} viewports</div>
+        {activePaperViewport && <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:8,borderTop:'1px solid #d7dfdc',paddingTop:10}}>
+          <strong style={{gridColumn:'1/-1',fontSize:12}}>Paper-space viewport · {activePaperViewport.name}</strong>
+          <label><input type="checkbox" checked={activePaperViewport.locked} onChange={e=>updatePaperViewport({locked:e.target.checked})}/> Lock viewport</label>
+          <label>Paper X (mm)<input type="number" min="10" step="1" value={activePaperViewport.xMm} disabled={activePaperViewport.locked} onChange={e=>updatePaperViewport({xMm:Number(e.target.value)})}/></label>
+          <label>Paper Y (mm)<input type="number" min="10" step="1" value={activePaperViewport.yMm} disabled={activePaperViewport.locked} onChange={e=>updatePaperViewport({yMm:Number(e.target.value)})}/></label>
+          <label>Width (mm)<input type="number" min="10" step="1" value={activePaperViewport.widthMm} disabled={activePaperViewport.locked} onChange={e=>updatePaperViewport({widthMm:Number(e.target.value)})}/></label>
+          <label>Height (mm)<input type="number" min="10" step="1" value={activePaperViewport.heightMm} disabled={activePaperViewport.locked} onChange={e=>updatePaperViewport({heightMm:Number(e.target.value)})}/></label>
+          <label>Scale denominator<input type="number" min="1" step="1" value={activePaperViewport.scaleDenominator} disabled={activePaperViewport.locked} onChange={e=>updatePaperViewport({scaleDenominator:Number(e.target.value)})}/></label>
+          <label>Rotation (degrees)<input type="number" step="1" value={activePaperViewport.rotationDeg} disabled={activePaperViewport.locked} onChange={e=>updatePaperViewport({rotationDeg:Number(e.target.value)})}/></label>
+          <label>Model centre X (m)<input type="number" step="any" value={activePaperViewport.modelCenter.x} disabled={activePaperViewport.locked} onChange={e=>updatePaperViewport({modelCenter:{...activePaperViewport.modelCenter,x:Number(e.target.value)}})}/></label>
+          <label>Model centre Y (m)<input type="number" step="any" value={activePaperViewport.modelCenter.y} disabled={activePaperViewport.locked} onChange={e=>updatePaperViewport({modelCenter:{...activePaperViewport.modelCenter,y:Number(e.target.value)}})}/></label>
+          <span className="muted" style={{fontSize:11,gridColumn:'1/-1'}}>Unlock to edit. Changes are saved with the drawing; run the engineering audit to validate sheet bounds.</span>
+        </div>}
         {engineeringAudit && <div style={{ display: 'grid', gap: 4, fontSize: 12 }}>
           <span>{engineeringAudit.summary.shapeCount} CAD entities · {engineeringAudit.summary.annotationCount} annotations · {engineeringAudit.summary.waterComponentCount} water components · {engineeringAudit.summary.layerCount} layers · {engineeringAudit.summary.sheetCount} sheets</span>
           {engineeringAudit.issues.slice(0, 12).map((issue, index) => <div key={issue.code + '-' + index} style={{ color: issue.severity === 'error' ? '#b42318' : '#9a6700' }}>{issue.severity.toUpperCase()} · {issue.code}: {issue.message}</div>)}
