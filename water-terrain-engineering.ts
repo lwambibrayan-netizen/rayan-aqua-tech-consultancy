@@ -105,7 +105,7 @@ export function buildTerrainIssues(document: WaterCadDocument, minimumCoverM = 0
   if(!finite(minimumCoverM)||!finite(maximumCoverM)||minimumCoverM<0||maximumCoverM<=minimumCoverM) throw new Error('Terrain cover limits are invalid.');
   const issues:TerrainIssue[]=[];
   for(const pipe of document.components.filter(c=>c.kind==='pipe')) {
-    const od=(pipe.properties.externalDiameterMm??pipe.properties.nominalDiameterMm??0)/1000;
+    const od=(pipe.properties.externalDiameterMm??0)/1000;
     pipe.geometry.forEach((point,index)=>{
       if(!finite(point.groundLevelM)||!finite(point.invertLevelM)||!(od>0)) {
         issues.push({componentId:pipe.id,severity:'warning',code:'TERRAIN_LEVELS_MISSING',message:'Pipe vertex '+(index+1)+' needs surveyed ground, invert and a valid outside diameter.'});
