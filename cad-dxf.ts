@@ -218,6 +218,13 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
         if(points.length>=2){if(Number(v.find((p,i)=>i>pathIndex&&p[0]==='73')?.[1]||0)===1)points.push({...points[0]});shapes.push({id,type:'polyline',points,layer});warnings.push('Converted HATCH '+id+' to its boundary polyline only; hatch pattern and fill are not preserved.');}
         else warnings.push('Skipped HATCH without a readable closed polyline boundary.');
       } else warnings.push('Skipped HATCH without a supported polyline boundary path.');
+    } else if(current.type==='SOLID'||current.type==='TRACE'||current.type==='3DFACE') {
+      const coordinate=(xCode:string,yCode:string)=>{const x=Number(get(xCode)),y=Number(get(yCode));return Number.isFinite(x)&&Number.isFinite(y)?{x,y}:null;};
+      const codes=current.type==='SOLID'||current.type==='TRACE'?['10','11','13','12']:['10','11','12','13'];
+      const points=codes.map(code=>coordinate(code,String(Number(code)+10))).filter((point):point is {x:number;y:number}=>!!point);
+      const unique=points.filter((point,index)=>!points.slice(0,index).some(previous=>Math.hypot(previous.x-point.x,previous.y-point.y)<1e-9));
+      if(unique.length>=3){unique.push({...unique[0]});shapes.push({id,type:'polyline',points:unique,layer});if(v.some(([code,value])=>['30','31','32','33'].includes(code)&&Math.abs(Number(value))>1e-9))warnings.push('Converted '+current.type+' '+id+' to a 2D boundary; elevation/Z values were not retained.');}
+      else warnings.push('Skipped '+current.type+' without three distinct valid vertices.');
     } else if(current.type==='DIMENSION') {
       const a={x:num('13')*metresPerDrawingUnit,y:num('23')*metresPerDrawingUnit};
       const b={x:num('14')*metresPerDrawingUnit,y:num('24')*metresPerDrawingUnit};
