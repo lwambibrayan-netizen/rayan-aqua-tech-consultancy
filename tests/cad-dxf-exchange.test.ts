@@ -123,6 +123,34 @@ describe('structured DXF exchange', () => {
     expect(imported.layers).toContainEqual({ name:'WATER_PIPE', color:'#087e83', lineType:'DASHED', lineWeightMm:0.35, visible:false, locked:true, plot:false });
   });
 
+
+  it('round-trips metric model geometry through millimetre DXF units without scale drift', () => {
+    const doc = createDraftingDocument();
+    const shapes = [
+      { id:'MM-LINE', type:'line' as const, points:[{x:0,y:0},{x:2.5,y:1.25}], layer:'WATER_PIPE' },
+      { id:'MM-CIRCLE', type:'circle' as const, points:[{x:1,y:2}], radius:0.125, layer:'VALVES' },
+      { id:'MM-PLINE', type:'polyline' as const, points:[{x:0,y:0},{x:1, y:0},{x:1,y:1}], layer:'NETWORK' },
+    ];
+    const dxf = exportDraftingDxf(shapes, doc, 0.001);
+    expect(dxf).toContain('$INSUNITS\n70\n4');
+    expect(dxf).toContain('11\n2500');
+    expect(dxf).toContain('40\n125');
+    const imported = importDraftingDxf(dxf);
+    expect(imported.shapes.find(shape=>shape.id==='DXF-1')?.points[1].x).toBeCloseTo(2.5);
+    expect(imported.shapes.find(shape=>shape.type==='circle')?.radius).toBeCloseTo(0.125);
+    expect(imported.shapes.find(shape=>shape.type==='polyline')?.points[2].y).toBeCloseTo(1);
+  });
+
+  it('reads standard external DXF INSUNITS metadata when no project calibration override is supplied', () => {
+    const externalDrawing = ['0','SECTION','2','HEADER','9','$ACADVER','1','AC1018','9','$INSUNITS','70','4','0','ENDSEC',
+      '0','SECTION','2','ENTITIES','0','LINE','8','WATER_PIPE','10','0','20','0','11','1500','21','2500',
+      '0','CIRCLE','8','VALVES','10','1500','20','2500','40','100','0','ENDSEC','0','EOF'].join('\\n');
+    const imported = importDraftingDxf(externalDrawing);
+    expect(imported.shapes[0].points[1]).toEqual({x:1.5,y:2.5});
+    expect(imported.shapes[1].points[0]).toEqual({x:1.5,y:2.5});
+    expect(imported.shapes[1].radius).toBeCloseTo(0.1);
+  });
+
   it('exports paper-scaled dimension text and arrow linework from the selected dimension style', () => {
     const doc = createDraftingDocument();
     doc.dimensionStyle = { name:'TEST', textHeightMm:3, arrowSizeMm:2, extensionOffsetMm:1, extensionBeyondMm:1.5, textGapMm:1, precision:2, decimalSeparator:'.', zeroSuppress:'trailing', unit:'m', prefix:'', suffix:'', tolerance:{mode:'none',upper:0,lower:0} };
