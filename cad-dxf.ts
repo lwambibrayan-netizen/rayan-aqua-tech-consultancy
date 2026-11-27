@@ -12,13 +12,13 @@ function pairsOf(source:string): Pair[] {
 }
 export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, metresPerDrawingUnit=1):string {
   if(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0) throw new Error('A valid drawing calibration is required for DXF export.');
-  const insunits=drafting.sheet.units==='mm'?4:6;
+  const insunits=Math.abs(metresPerDrawingUnit-1)<1e-9?6:Math.abs(metresPerDrawingUnit-0.001)<1e-9?4:0;
   const layerMap = new Map(drafting.layers.map(layer => [layer.name.toUpperCase(), layer]));
   shapes.forEach(shape => { const name = shape.layer || '0'; if (!layerMap.has(name.toUpperCase())) layerMap.set(name.toUpperCase(), { name, color: '#666666', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }); });
   drafting.annotations.forEach(item => { if (!layerMap.has(item.layer.toUpperCase())) layerMap.set(item.layer.toUpperCase(), { name: item.layer, color: '#666666', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }); });
   const exportLayers = [...layerMap.values()];
   const out:string[]=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1015','9','$INSUNITS','70',String(insunits),'9','$MEASUREMENT','70','1','0','ENDSEC','0','SECTION','2','TABLES','0','TABLE','2','LAYER','70',String(exportLayers.length)];
-  for(const layer of exportLayers) out.push('0','LAYER','2',layer.name,'70',layer.locked?'4':'0','62',layer.visible? '7':'-7','6',layer.lineType,'370',String(Math.round(layer.lineWeightMm*100)));
+  for(const layer of exportLayers) out.push('0','LAYER','2',layer.name,'70',layer.locked?'4':'0','62',layer.visible? '7':'-7','420',String(parseInt(layer.color.slice(1),16)),'6',layer.lineType,'370',String(Math.round(layer.lineWeightMm*100)));
   out.push('0','ENDTAB','0','ENDSEC','0','SECTION','2','ENTITIES');
   for(const shape of shapes){
     const layer=shape.layer||'0';
@@ -77,6 +77,13 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1):DxfImpo
       let sweep=b-a;if(sweep<=0)sweep+=Math.PI*2;
       const p1={x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)},p2={x:cx+r*Math.cos(b),y:cy+r*Math.sin(b)};
       shapes.push({id,type:'polyline',points:[p1,p2],bulges:[Math.tan(sweep/4),0],layer});
+    } else if(current.type==='DIMENSION') {
+      const a={x:num('13')*metresPerDrawingUnit,y:num('23')*metresPerDrawingUnit};
+      const b={x:num('14')*metresPerDrawingUnit,y:num('24')*metresPerDrawingUnit};
+      if(Math.hypot(b.x-a.x,b.y-a.y)>1e-9) annotations.push({id,kind:(num('70')&1)?'aligned':'linear',layer,a,b,offsetM:0,precision:3,textOverride:get('1')&&get('1')!=='<>'?get('1'):undefined});
+      else warnings.push('Skipped DIMENSION with missing definition points.');
+    } else if(current.type==='POINT') {
+      shapes.push({id,type:'circle',points:[{x:num('10'),y:num('20')}],radius:0.03,layer});
     } else warnings.push('Skipped unsupported DXF entity '+current.type+'.');
     current=null;
   };
