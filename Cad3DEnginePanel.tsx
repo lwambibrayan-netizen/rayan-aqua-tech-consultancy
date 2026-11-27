@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
 import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
-import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts } from './water-network-engineering';
+import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
 type Shape = {
@@ -720,6 +720,13 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setMessage(result.warnings.length ? 'EPANET INP exported with ' + result.warnings.length + ' warning(s): ' + result.warnings.join(' ') : 'EPANET INP exported. Validate and run it in EPANET before design use.');
   }
 
+  function validateWaterTopology() {
+    const issues = validateWaterNetworkTopology(waterCad);
+    const errors = issues.filter(issue => issue.severity === 'error').length;
+    const warnings = issues.filter(issue => issue.severity === 'warning').length;
+    setMessage(issues.length ? 'Network check: ' + errors + ' error(s), ' + warnings + ' warning(s). ' + issues.slice(0, 5).map(issue => issue.message).join(' ') : 'Network topology check passed: all defined ports are connected within tolerance.');
+  }
+
   function downloadWaterBoq() {
     const rows = buildPreliminaryBoq(waterCad);
     const csv = ['Code,Description,Unit,Quantity,Material,Nominal diameter (mm)', ...rows.map(row => [row.code, '"' + row.description.replace(/"/g, '""') + '"', row.unit, row.quantity.toFixed(3), row.material || '', row.nominalDiameterMm || ''].join(','))].join('\n');
@@ -987,6 +994,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           </div> : <p className="muted" style={{ fontSize: 12 }}>Select an object to edit its engineering schedule. Additional object-specific properties will be added in the next implementation pass.</p>}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+          <button className="secondary-button" onClick={validateWaterTopology} disabled={!waterCad.components.length}>Validate network</button>
           <button className="primary-button" onClick={downloadEpanetInput} disabled={!waterCad.components.length}>Export EPANET INP</button>
           <button className="secondary-button" onClick={downloadWaterBoq} disabled={!waterCad.components.length}>Export preliminary BOQ CSV</button>
         </div>
@@ -994,7 +1002,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <label style={{ fontSize: 12 }}>Connect port A
             <select value={portA} onChange={e => setPortA(e.target.value)} style={{ display: 'block', width: '100%' }}>
               <option value="">Select port</option>
-              {waterCad.components.flatMap(item => getWaterPorts(item)).map(port => <option key={port.id} value={port.id}>{port.id} · {port.role}</option>)}
+              {waterCad.components.flatMap(item => getWaterPorts(item)).map(port => <option key={port.id} value={port.id}>{port.id} · {port.role} · DN{port.diameterMm ?? '—'}</option>)}
             </select>
           </label>
           <label style={{ fontSize: 12 }}>Connect port B
