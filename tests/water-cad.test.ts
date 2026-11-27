@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { componentPlanLength, createWaterComponent, hazenWilliamsHeadlossM, pipeSlopePercent, pipeVelocityMs, validateWaterCad, type WaterCadDocument } from '../water-cad';
+import { componentPlanLength, component3dLength, connectPipeEndpoints, createWaterComponent, hazenWilliamsHeadlossM, pipeSlopePercent, pipeVelocityMs, validateWaterCad, type WaterCadDocument } from '../water-cad';
 
 describe('water engineering CAD domain model', () => {
   it('creates editable engineering defaults for pipes and fittings', () => {
@@ -35,6 +35,19 @@ describe('water engineering CAD domain model', () => {
     const issues = validateWaterCad(doc);
     expect(issues.some(x => x.code === 'PIPE_BORE_REQUIRED' && x.severity === 'error')).toBe(true);
     expect(issues.some(x => x.code === 'TANK_CAPACITY')).toBe(true);
+  });
+  it('calculates 3D pipe length and connects only valid network nodes', () => {
+    const pipe = createWaterComponent('pipe', 'P-1', 0, 0);
+    pipe.geometry = [{ x: 0, y: 0, z: 0 }, { x: 3, y: 4, z: 12 }];
+    expect(component3dLength(pipe)).toBeCloseTo(13);
+    const source = createWaterComponent('source', 'S-1', 0, 0);
+    const junction = createWaterComponent('junction', 'J-1', 3, 4);
+    const valve = createWaterComponent('valve', 'V-1', 2, 2);
+    const document: WaterCadDocument = { schemaVersion: 1, units: 'm', verticalDatum: 'test datum', components: [pipe, source, junction, valve] };
+    const connected = connectPipeEndpoints(document, 'P-1', 'S-1', 'J-1');
+    expect(connected.components[0]).toMatchObject({ fromNodeId: 'S-1', toNodeId: 'J-1' });
+    expect(() => connectPipeEndpoints(document, 'P-1', 'V-1', 'J-1')).toThrow();
+    expect(() => connectPipeEndpoints(document, 'P-1', 'S-1', 'S-1')).toThrow();
   });
   it('rejects invalid calculation inputs instead of silently returning misleading results', () => {
     expect(() => pipeVelocityMs(-1, 100)).toThrow();
