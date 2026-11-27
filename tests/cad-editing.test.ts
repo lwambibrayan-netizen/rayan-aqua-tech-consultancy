@@ -82,7 +82,7 @@ describe('CAD editing geometry operations', () => {
     expect(inset.points).toEqual([{x:1,y:1},{x:9,y:1},{x:9,y:9},{x:1,y:9},{x:1,y:1}]);
     const expanded=offsetPolyline(closed,1,-1);
     expect(expanded.points).toEqual([{x:-1,y:-1},{x:11,y:-1},{x:11,y:11},{x:-1,y:11},{x:-1,y:-1}]);
-    expect(()=>offsetPolyline(closed,6)).toThrow(/collapses\/inverts/);
+    expect(()=>offsetPolyline(closed,6)).toThrow(/collapses\/inverts|inward offset exceeds/);
     expect(()=>offsetPolyline({...straight,points:[{x:0,y:0},{x:5,y:0},{x:0,y:0}]},2)).toThrow(/three distinct vertices/);
 
   });
