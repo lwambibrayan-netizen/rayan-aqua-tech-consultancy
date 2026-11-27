@@ -1719,3 +1719,11 @@ button:disabled {
  .aquacad-status-controls{gap:3px}
  .aquacad-fullscreen .aquacad-ribbon{top:34px}
 }
+
+/* Keep the drawing workspace directly below the ribbon; engineering setup panels remain below it */
+.aquacad-shell>.panel:has(.aquacad-drawing-stage){order:1}
+.aquacad-shell>.aquacad-commandbar{order:2}
+.aquacad-shell>.panel:not(:has(.aquacad-drawing-stage)){order:3}
+.aquacad-shell>.alert{order:2}
+.aquacad-shell>.panel:has(.aquacad-drawing-stage) .aquacad-drawing-stage{flex:1}
+.aquacad-shell>.panel:has(.aquacad-drawing-stage) .aquacad-dock{max-height:68vh}
