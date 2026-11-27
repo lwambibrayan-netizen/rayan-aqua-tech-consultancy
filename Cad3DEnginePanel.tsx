@@ -1272,11 +1272,16 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         if(typeof level==='number'&&Number.isFinite(level))portElevations.set(port.id,level);
       });
     });
-    (waterCad.connections??[]).forEach(connection=>{
-      const a=portElevations.get(connection.aPortId),b=portElevations.get(connection.bPortId);
-      if(a!==undefined&&b===undefined)portElevations.set(connection.bPortId,a);
-      else if(b!==undefined&&a===undefined)portElevations.set(connection.aPortId,b);
-    });
+    const elevationConnections=waterCad.connections??[];
+    for(let pass=0;pass<elevationConnections.length;pass++){
+      let changed=false;
+      elevationConnections.forEach(connection=>{
+        const a=portElevations.get(connection.aPortId),b=portElevations.get(connection.bPortId);
+        if(a!==undefined&&b===undefined){portElevations.set(connection.bPortId,a);changed=true;}
+        else if(b!==undefined&&a===undefined){portElevations.set(connection.aPortId,b);changed=true;}
+      });
+      if(!changed)break;
+    }
     const cadPoints = shapes.flatMap(shape => shape.points.map(point=>({x:point.x*(calibratedMetresPerUnit??1),y:point.y*(calibratedMetresPerUnit??1)})));
     const terrainAligned = !!terrainGrid && waterCad.horizontalUnits === 'm' && waterCad.horizontalCrs === terrainGrid.crs && waterCad.verticalDatum === terrainGrid.verticalDatum;
     const terrainValues = (terrainAligned ? terrainGrid?.elevationsM : undefined)?.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
