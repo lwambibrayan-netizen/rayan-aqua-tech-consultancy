@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createWaterComponent, type WaterCadDocument } from '../water-cad';
 import { sampleTerrainElevation, sampleGroundProfile, applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, type TerrainGrid } from '../water-terrain-engineering';
 import { importEpanetInp, mergeEpanetRoundTrip } from '../water-epanet-bridge';
-import { exportWaterNetworkToEpanet } from '../water-network-engineering';
+import { exportWaterNetworkToEpanet, type NetworkDocument } from '../water-network-engineering';
 import { buildHydraulicOverlay } from '../water-hydraulic-overlays';
 
 const terrain:TerrainGrid={width:3,height:3,originX:0,originY:0,cellSizeX:10,cellSizeY:10,elevationsM:[100,101,102,99,100,101,98,99,100],crs:'LOCAL',verticalDatum:'Project datum'};
@@ -213,6 +213,13 @@ J1 100 0
  it('warns when EPANET coordinates are absent rather than pretending the layout is surveyed',()=>{
   const result=importEpanetInp('[JUNCTIONS]\nJ1 10 1\n[RESERVOIRS]\nR1 20\n[PIPES]\nP1 R1 J1 50 100 130 0 OPEN\n[END]');
   expect(result.warnings.some(w=>w.includes('Synthetic layout positions'))).toBe(true);
+ });
+ it('maps generated EPANET junctions back to their CAD connection object',()=>{
+  const first=createWaterComponent('pipe','PIPE-A',0,0);first.geometry=[{x:0,y:0},{x:10,y:0}];first.properties.internalDiameterMm=100;
+  const second=createWaterComponent('pipe','PIPE-B',10,0);second.geometry=[{x:10,y:0},{x:20,y:0}];second.properties.internalDiameterMm=100;
+  const network:NetworkDocument={schemaVersion:1,units:'m',verticalDatum:'test',components:[first,second],connections:[{id:'JOIN-1',aPortId:'PIPE-A:P2',bPortId:'PIPE-B:P1'}]};
+  const exported=exportWaterNetworkToEpanet(network);
+  expect(exported.idMap.some(item=>item.kind==='node'&&item.cadId==='PIPE-A'&&item.epanetId.startsWith('N_'))).toBe(true);
  });
  it('maps simulation results to CAD IDs and highlights threshold violations',()=>{
   const document:WaterCadDocument={schemaVersion:1,units:'m',verticalDatum:'test',components:[createWaterComponent('junction','J1',0,0),createWaterComponent('pipe','P1',0,0)]};
