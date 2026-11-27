@@ -3,10 +3,10 @@ export type DxfShape = { id: string; type: 'line'|'polyline'|'rect'|'circle'; po
 export type DxfImportResult = { shapes: DxfShape[]; annotations: DraftAnnotation[]; layerNames: string[]; layers: DraftLayer[]; warnings: string[]; metresPerDrawingUnit: number | null };
 type Pair = [string,string];
 const fmt = (n:number) => Number.isFinite(n) ? String(Number(n.toPrecision(12))) : '0';
-const entity = (kind:string, values:(string|number)[]) => {
+const entity = (kind:string, values:(string|number)[], handle:string) => {
   const subclasses:Record<string,string>={LINE:'AcDbLine',CIRCLE:'AcDbCircle',LWPOLYLINE:'AcDbPolyline',TEXT:'AcDbText'};
   const layerIndex=values.findIndex(value=>String(value)==='8');
-  const output=['0',kind,'100','AcDbEntity'];
+  const output=['0',kind,'5',handle,'100','AcDbEntity'];
   if(layerIndex>=0){output.push(String(values[layerIndex]),String(values[layerIndex+1]));}
   output.push('100',subclasses[kind]||'AcDbEntity');
   const remaining=layerIndex>=0?[...values.slice(0,layerIndex),...values.slice(layerIndex+2)]:values;
@@ -145,28 +145,30 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
     {name:'HIDDEN',description:'Hidden __ __ __',pattern:[1.5,-1.5]},
     {name:'PHANTOM',description:'Phantom ____ _ _ ____',pattern:[6,-2,1,-2,1,-2]},
   ];
-  const out:string[]=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1015','9','$INSUNITS','70',String(insunits),'9','$MEASUREMENT','70','1','0','ENDSEC','0','SECTION','2','TABLES','0','TABLE','2','LTYPE','70',String(lineTypes.length)];
-  for(const item of lineTypes) out.push('0','LTYPE','2',item.name,'70','0','3',item.description,'72','65','73',String(item.pattern.length),'40',fmt(item.pattern.reduce((sum,value)=>sum+Math.abs(value),0)),...item.pattern.flatMap(value=>['49',fmt(value),'74','0']));
-  out.push('0','ENDTAB','0','TABLE','2','LAYER','70',String(exportLayers.length));
-  for(const layer of exportLayers) out.push('0','LAYER','2',layer.name,'70',layer.locked?'4':'0','62',layer.visible? '7':'-7','420',String(parseInt(layer.color.slice(1),16)),'6',layer.lineType,'370',String(Math.round(layer.lineWeightMm*100)),'290',layer.plot?'1':'0');
+  const out:string[]=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1015','9','$INSUNITS','70',String(insunits),'9','$MEASUREMENT','70','1','9','$HANDSEED','5','10000','0','ENDSEC','0','SECTION','2','TABLES','0','TABLE','2','LTYPE','5','10','100','AcDbSymbolTable','70',String(lineTypes.length)];
+  for(const [index,item] of lineTypes.entries()) out.push('0','LTYPE','5',(11+index).toString(16).toUpperCase(),'100','AcDbSymbolTableRecord','100','AcDbLinetypeTableRecord','2',item.name,'70','0','3',item.description,'72','65','73',String(item.pattern.length),'40',fmt(item.pattern.reduce((sum,value)=>sum+Math.abs(value),0)),...item.pattern.flatMap(value=>['49',fmt(value),'74','0']));
+  out.push('0','ENDTAB','0','TABLE','2','LAYER','5','20','100','AcDbSymbolTable','70',String(exportLayers.length));
+  for(const [index,layer] of exportLayers.entries()) out.push('0','LAYER','5',(21+index).toString(16).toUpperCase(),'100','AcDbSymbolTableRecord','100','AcDbLayerTableRecord','2',layer.name,'70',layer.locked?'4':'0','62',layer.visible? '7':'-7','420',String(parseInt(layer.color.slice(1),16)),'6',layer.lineType,'370',String(Math.round(layer.lineWeightMm*100)),'290',layer.plot?'1':'0');
   out.push('0','ENDTAB','0','ENDSEC','0','SECTION','2','ENTITIES');
+  let nextEntityHandle=4096;
+  const emitEntity=(kind:string,values:(string|number[])[])=>entity(kind,values as (string|number)[],(nextEntityHandle++).toString(16).toUpperCase());
   for(const shape of shapes){
     const layer=shape.layer||'0';
-    if(shape.type==='line') out.push(...entity('LINE',['8',layer,'10',fmt(shape.points[0].x),'20',fmt(shape.points[0].y),'11',fmt(shape.points[1].x),'21',fmt(shape.points[1].y)]));
-    else if(shape.type==='circle') out.push(...entity('CIRCLE',['8',layer,'10',fmt(shape.points[0].x),'20',fmt(shape.points[0].y),'40',fmt(shape.radius||1)]));
+    if(shape.type==='line') out.push(...emitEntity('LINE',['8',layer,'10',fmt(shape.points[0].x),'20',fmt(shape.points[0].y),'11',fmt(shape.points[1].x),'21',fmt(shape.points[1].y)]));
+    else if(shape.type==='circle') out.push(...emitEntity('CIRCLE',['8',layer,'10',fmt(shape.points[0].x),'20',fmt(shape.points[0].y),'40',fmt(shape.radius||1)]));
     else {
       const pts=shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y}]:shape.points;
       const isClosed=shape.type==='rect'||(pts.length>2&&Math.hypot(pts[0].x-pts[pts.length-1].x,pts[0].y-pts[pts.length-1].y)<=1e-9);
-      out.push(...entity('LWPOLYLINE',['8',layer,'90',pts.length,'70',isClosed?'1':'0']));
+      out.push(...emitEntity('LWPOLYLINE',['8',layer,'90',pts.length,'70',isClosed?'1':'0']));
       pts.forEach((p,i)=>out.push('10',fmt(p.x),'20',fmt(p.y),...(shape.bulges?.[i]?[ '42',fmt(shape.bulges[i]) ]:[])));
     }
   }
   const model = (p:{x:number;y:number})=>({x:p.x/metresPerDrawingUnit,y:p.y/metresPerDrawingUnit});
-  const textEntity=(at:{x:number;y:number},text:string,height:number,layer:string,rotation=0)=>out.push(...entity('TEXT',['8',layer,'10',fmt(at.x),'20',fmt(at.y),'40',fmt(height),'1',text.replace(/\n/g,' '),'50',fmt(rotation)]));
+  const textEntity=(at:{x:number;y:number},text:string,height:number,layer:string,rotation=0)=>out.push(...emitEntity('TEXT',['8',layer,'10',fmt(at.x),'20',fmt(at.y),'40',fmt(height),'1',text.replace(/\n/g,' '),'50',fmt(rotation)]));
   for(const item of drafting.annotations){
     if(item.kind==='text') textEntity(model(item.at),item.text,item.heightMm*(Number(drafting.sheet.scale.split(':')[1])||100)/1000/metresPerDrawingUnit,item.layer,item.rotationDeg);
     else if(item.kind==='leader'){
-      const pts=item.points.map(model); out.push(...entity('LWPOLYLINE',['8',item.layer,'90',pts.length,'70','0']));
+      const pts=item.points.map(model); out.push(...emitEntity('LWPOLYLINE',['8',item.layer,'90',pts.length,'70','0']));
       pts.forEach(p=>out.push('10',fmt(p.x),'20',fmt(p.y)));
       const last=pts[pts.length-1]; textEntity({x:last.x+0.5,y:last.y+0.5},item.text,item.textHeightMm*(Number(drafting.sheet.scale.split(':')[1])||100)/1000/metresPerDrawingUnit,item.layer);
     } else {
@@ -175,10 +177,10 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
       const denominator=Number(drafting.sheet.scale.split(':')[1])||100,style=drafting.dimensionStyle;
       const extOffset=(style?.extensionOffsetMm||1)*denominator/1000/metresPerDrawingUnit,extBeyond=(style?.extensionBeyondMm||1.5)*denominator/1000/metresPerDrawingUnit;
       const e1={x:a.x+nx*extOffset,y:a.y+ny*extOffset},e2={x:b.x+nx*extOffset,y:b.y+ny*extOffset},e1End={x:p1.x+nx*extBeyond,y:p1.y+ny*extBeyond},e2End={x:p2.x+nx*extBeyond,y:p2.y+ny*extBeyond};
-      for(const [s,e] of [[e1,e1End],[e2,e2End],[p1,p2]]) out.push(...entity('LINE',['8',item.layer,'10',fmt(s.x),'20',fmt(s.y),'11',fmt(e.x),'21',fmt(e.y)]));
+      for(const [s,e] of [[e1,e1End],[e2,e2End],[p1,p2]]) out.push(...emitEntity('LINE',['8',item.layer,'10',fmt(s.x),'20',fmt(s.y),'11',fmt(e.x),'21',fmt(e.y)]));
       const arrow=(style?.arrowSizeMm||2.5)*denominator/1000/metresPerDrawingUnit,ux=dx/len,uy=dy/len;
       for(const [p,sign] of [[p1,1],[p2,-1]] as Array<[{x:number;y:number},number]>){
-        for(const side of [-1,1]){const end={x:p.x+ux*arrow*sign+nx*arrow*0.5*side,y:p.y+uy*arrow*sign+ny*arrow*0.5*side};out.push(...entity('LINE',['8',item.layer,'10',fmt(p.x),'20',fmt(p.y),'11',fmt(end.x),'21',fmt(end.y)]));}
+        for(const side of [-1,1]){const end={x:p.x+ux*arrow*sign+nx*arrow*0.5*side,y:p.y+uy*arrow*sign+ny*arrow*0.5*side};out.push(...emitEntity('LINE',['8',item.layer,'10',fmt(p.x),'20',fmt(p.y),'11',fmt(end.x),'21',fmt(end.y)]));}
       }
       const label=item.textOverride||((item.kind==='aligned'?Math.hypot(item.b.x-item.a.x,item.b.y-item.a.y):Math.abs(item.b.x-item.a.x)).toFixed(item.precision));
       textEntity({x:(p1.x+p2.x)/2,y:(p1.y+p2.y)/2},label,(style?.textHeightMm||2.5)*denominator/1000/metresPerDrawingUnit,item.layer);
