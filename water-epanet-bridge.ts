@@ -20,6 +20,9 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const bySection=(name:string)=>rows.filter(row=>row.section===name);
   const coordinates=new Map<string,{x:number;y:number}>();
   bySection('COORDINATES').forEach(r=>{if(r.values.length>=3)coordinates.set(safe(r.values[0]),{x:num(r.values[1]),y:num(r.values[2])});});
+  const unitLine=bySection('OPTIONS').find(r=>r.values[0]?.toUpperCase()==='UNITS');
+  const flowUnit=(unitLine?.values[1]??'LPS').toUpperCase();
+  const flowToM3h=(value:number)=>flowUnit==='LPS'?value*3.6:flowUnit==='GPM'?value*0.2271247:flowUnit==='CFS'?value*101.940647:flowUnit==='CMS'?value*3600:flowUnit==='MGD'?value*157.72549:value*3.6;
   const nodes=new Map<string,WaterCadComponent>();
   const addNode=(idRaw:string,kind:WaterComponentKind,elevation:number,extra?:{flow?:number;level?:number;diameter?:number})=>{
     const id=safe(idRaw); if(nodes.has(id)){warnings.push('Duplicate node '+id+' at import line; duplicate skipped.');return;}
@@ -30,7 +33,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     if(extra?.diameter!==undefined)c.properties.tankDiameterM=extra.diameter;
     nodes.set(id,c);
   };
-  bySection('JUNCTIONS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed junction at line '+r.line+'.');return;}addNode(r.values[0],'junction',num(r.values[1]),{flow:num(r.values[2])*3.6});});
+  bySection('JUNCTIONS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed junction at line '+r.line+'.');return;}addNode(r.values[0],'junction',num(r.values[1]),{flow:flowToM3h(num(r.values[2]))});});
   bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',num(r.values[1]));});
   bySection('TANKS').forEach(r=>{if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}addNode(r.values[0],'tank',num(r.values[1]),{level:num(r.values[2]),diameter:num(r.values[5])});});
   const components=[...nodes.values()];
@@ -44,7 +47,12 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     if(kind==='pipe')c.properties.internalDiameterMm=diameterMm;
     components.push(c);
   };
-  bySection('PIPES').forEach(r=>{if(r.values.length<6){warnings.push('Malformed pipe at line '+r.line+'.');return;}addLink(r.values[0],'pipe',r.values[1],r.values[2],num(r.values[4]),{roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),description:'Imported from EPANET'});});
+  bySection('PIPES').forEach(r=>{
+    if(r.values.length<6){warnings.push('Malformed pipe at line '+r.line+'.');return;}
+    const length=num(r.values[3]);const diameter=num(r.values[4]);
+    if(!(length>0)||!(diameter>0)){warnings.push('Pipe '+r.values[0]+' has invalid length or diameter and was skipped.');return;}
+    addLink(r.values[0],'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),description:'Imported from EPANET'});
+  });
   bySection('PUMPS').forEach(r=>{if(r.values.length<3){warnings.push('Malformed pump at line '+r.line+'.');return;}addLink(r.values[0],'pump',r.values[1],r.values[2],0,{description:'Imported from EPANET pump link'});if(r.values.slice(3).join(' ').toUpperCase().includes('HEAD'))warnings.push('Pump '+r.values[0]+' curve reference imported as a link; curve data requires review before simulation.');});
   bySection('VALVES').forEach(r=>{
     if(r.values.length<5){warnings.push('Malformed valve at line '+r.line+'.');return;}
@@ -52,6 +60,9 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     addLink(r.values[0],'valve',r.values[1],r.values[2],num(r.values[3]),{valveType:map[type]??'control',valveSetting:num(r.values[5]),description:'Imported EPANET '+type+' valve'});
     if(!map[type])warnings.push('Valve '+r.values[0]+' type '+type+' requires manual review.');
   });
+  const referenced=new Set(rows.filter(r=>['PIPES','PUMPS','VALVES'].includes(r.section)).flatMap(r=>r.values.slice(1,3)).map(safe));
+  const missingCoordinates=[...referenced].filter(id=>!coordinates.has(id));
+  if(missingCoordinates.length)warnings.push('No [COORDINATES] entry for '+missingCoordinates.length+' network node(s). Synthetic layout positions were assigned; spatial geometry must be surveyed or imported before engineering 3D use.');
   if(!components.length)warnings.push('No supported hydraulic nodes were found.');
   return {document:{schemaVersion:1,units:'m',verticalDatum,components},warnings};
 }
