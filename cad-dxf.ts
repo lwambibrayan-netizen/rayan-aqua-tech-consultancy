@@ -1,6 +1,6 @@
 import type { DraftAnnotation, DraftingDocument, DraftLayer } from './cad-drafting';
 export type DxfShape = { id: string; type: 'line'|'polyline'|'rect'|'circle'; points: {x:number;y:number}[]; radius?: number; bulges?: number[]; layer: string };
-export type DxfImportResult = { shapes: DxfShape[]; annotations: DraftAnnotation[]; layerNames: string[]; layers: DraftLayer[]; warnings: string[] };
+export type DxfImportResult = { shapes: DxfShape[]; annotations: DraftAnnotation[]; layerNames: string[]; layers: DraftLayer[]; warnings: string[]; metresPerDrawingUnit: number | null };
 type Pair = [string,string];
 const fmt = (n:number) => Number.isFinite(n) ? String(Number(n.toPrecision(12))) : '0';
 const entity = (kind:string, values:(string|number)[]) => ['0',kind,...values.map(String)];
@@ -143,11 +143,10 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
   out.push('0','ENDTAB','0','ENDSEC','0','SECTION','2','ENTITIES');
   for(const shape of shapes){
     const layer=shape.layer||'0';
-    const drawingPoints=shape.points.map(point=>({x:point.x/metresPerDrawingUnit,y:point.y/metresPerDrawingUnit}));
-    if(shape.type==='line') out.push(...entity('LINE',['8',layer,'10',fmt(drawingPoints[0].x),'20',fmt(drawingPoints[0].y),'11',fmt(drawingPoints[1].x),'21',fmt(drawingPoints[1].y)]));
-    else if(shape.type==='circle') out.push(...entity('CIRCLE',['8',layer,'10',fmt(drawingPoints[0].x),'20',fmt(drawingPoints[0].y),'40',fmt((shape.radius||1)/metresPerDrawingUnit)]));
+    if(shape.type==='line') out.push(...entity('LINE',['8',layer,'10',fmt(shape.points[0].x),'20',fmt(shape.points[0].y),'11',fmt(shape.points[1].x),'21',fmt(shape.points[1].y)]));
+    else if(shape.type==='circle') out.push(...entity('CIRCLE',['8',layer,'10',fmt(shape.points[0].x),'20',fmt(shape.points[0].y),'40',fmt(shape.radius||1)]));
     else {
-      const pts=shape.type==='rect'?[drawingPoints[0],{x:drawingPoints[1].x,y:drawingPoints[0].y},drawingPoints[1],{x:drawingPoints[0].x,y:drawingPoints[1].y}]:drawingPoints;
+      const pts=shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y}]:shape.points;
       const isClosed=shape.type==='rect'||(pts.length>2&&Math.hypot(pts[0].x-pts[pts.length-1].x,pts[0].y-pts[pts.length-1].y)<=1e-9);
       out.push(...entity('LWPOLYLINE',['8',layer,'90',pts.length,'70',isClosed?'1':'0']));
       pts.forEach((p,i)=>out.push('10',fmt(p.x),'20',fmt(p.y),...(shape.bulges?.[i]?[ '42',fmt(shape.bulges[i]) ]:[])));
@@ -187,8 +186,9 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit?:number, s
   const unitHeader=rawPairs.findIndex(pair=>pair[0]==='9'&&pair[1]==='$INSUNITS');
   const declaredUnits=unitHeader>=0?Number(rawPairs.slice(unitHeader+1).find(pair=>pair[0]==='70')?.[1]):0;
   const metresByInsunits:Record<number,number>={1:0.0254,2:0.3048,3:1609.344,4:0.001,5:0.01,6:1,7:1000,8:1e-6,9:0.0000254,10:0.9144,11:1e-10,12:1e-9,13:1e-6,14:0.1,15:10,16:100,17:1e9};
-  const effectiveMetresPerDrawingUnit=metresPerDrawingUnit??metresByInsunits[declaredUnits]??1;
-  if(metresPerDrawingUnit===undefined&&(!declaredUnits||!metresByInsunits[declaredUnits]))warnings.push('DXF does not declare a recognized $INSUNITS value; coordinates are assumed to be metres. Set an explicit drawing calibration if this is incorrect.');
+  const detectedMetresPerDrawingUnit=metresPerDrawingUnit??metresByInsunits[declaredUnits]??null;
+  const effectiveMetresPerDrawingUnit=detectedMetresPerDrawingUnit??1;
+  if(detectedMetresPerDrawingUnit===null)warnings.push('DXF does not declare a recognized $INSUNITS value; annotations are interpreted using a temporary 1 metre per drawing unit assumption. Calibrate the drawing before engineering measurements.');
   const pairs=expandBlockInserts(normalizeLegacyPolylines(rawPairs, warnings), warnings);
   const importedLayers:DraftLayer[]=[];
   const indexedColors:Record<number,string>={1:'#ff0000',2:'#ffff00',3:'#00ff00',4:'#00ffff',5:'#0000ff',6:'#ff00ff',7:'#222222'};
@@ -283,6 +283,5 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit?:number, s
   if(!shapes.length&&!annotations.length)throw new Error('No supported LINE, CIRCLE, ARC, LWPOLYLINE, TEXT or MTEXT entities found.');
   const importedByName=new Set(importedLayers.map(layer=>layer.name.toUpperCase()));
   for(const name of layers)if(!importedByName.has(name.toUpperCase()))importedLayers.push({name,color:'#666666',lineType:'CONTINUOUS',lineWeightMm:0.18,visible:true,locked:false,plot:true});
-  for(const shape of shapes){shape.points=shape.points.map(point=>({x:point.x*effectiveMetresPerDrawingUnit,y:point.y*effectiveMetresPerDrawingUnit}));if(shape.radius!==undefined)shape.radius*=effectiveMetresPerDrawingUnit;}
-  return {shapes,annotations,layerNames:[...layers],layers:importedLayers,warnings};
+  return {shapes,annotations,layerNames:[...layers],layers:importedLayers,warnings,metresPerDrawingUnit:detectedMetresPerDrawingUnit};
 }
