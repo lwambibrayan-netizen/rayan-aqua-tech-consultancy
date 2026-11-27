@@ -1285,24 +1285,56 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const material=new THREE.MeshStandardMaterial({color:'#b8c6a5',side:THREE.DoubleSide,transparent:true,opacity:0.55,wireframe:false});
       scene.add(new THREE.Mesh(geometry,material));
     }
+    const addPipeTube=(route:THREE.Vector3[],radius:number,colour:string)=>{
+      if(route.length<2)return;
+      const curve=new THREE.CatmullRomCurve3(route);
+      const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,Math.max(8,route.length*4),radius,12,false),new THREE.MeshStandardMaterial({color:colour}));
+      scene.add(mesh);
+    };
     waterCad.components.forEach(component=>{
-      const points=component.geometry.map(point=>new THREE.Vector3(point.x-centreX,(point.z??point.invertLevelM??0)-verticalBase,point.y-centreY));
+      const baseLevel=component.properties.hydraulicElevationM??component.geometry[0]?.z??component.geometry[0]?.invertLevelM??0;
+      const to3d=(point:{x:number;y:number;z?:number;invertLevelM?:number})=>new THREE.Vector3(point.x-centreX,(point.z??point.invertLevelM??baseLevel)-verticalBase,point.y-centreY);
+      const points=component.geometry.map(to3d);
       const overlayItem=hydraulicOverlay?.items.find(item=>item.componentId===component.id);
       const colour=overlayItem?.colour??'#087e83';
-      if(component.kind==='pipe'&&points.length>1) {
-        const radius=Math.max((component.properties.externalDiameterMm??component.properties.nominalDiameterMm??100)/2000,0.025);
-        for(let index=1;index<points.length;index++) {
-          const curve=new THREE.LineCurve3(points[index-1],points[index]);
-          const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,1,radius,10,false),new THREE.MeshStandardMaterial({color:colour}));
-          scene.add(mesh);
+      const radius=Math.max((component.properties.externalDiameterMm??component.properties.nominalDiameterMm??100)/2000,0.025);
+      if(component.kind==='pipe') {
+        addPipeTube(points,radius,colour);
+      } else if(component.kind==='bend') {
+        const route=buildBendCentreline(component,24).map(point=>to3d({...point,z:point.z??baseLevel}));
+        addPipeTube(route,radius,colour);
+      } else if(component.kind==='tee') {
+        buildTeeCentreline(component).forEach(branch=>addPipeTube(branch.map(point=>to3d({...point,z:point.z??baseLevel})),radius,colour));
+      } else if(component.kind==='reducer') {
+        const ports=buildReducerCentreline(component).map(point=>to3d({...point,z:point.z??baseLevel}));
+        if(ports.length===2){
+          const direction=ports[1].clone().sub(ports[0]);const length=direction.length();
+          if(length>0){
+            const outletRadius=Math.max((component.properties.outletDiameterMm??component.properties.nominalDiameterMm??100)/2000,0.025);
+            const mesh=new THREE.Mesh(new THREE.CylinderGeometry(outletRadius,radius,length,16),new THREE.MeshStandardMaterial({color:colour}));
+            mesh.position.copy(ports[0]).add(ports[1]).multiplyScalar(0.5);
+            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.normalize());scene.add(mesh);
+          }
         }
+      } else if(component.kind==='pump'||component.kind==='valve'||component.kind==='meter') {
+        const ports=getWaterPorts(component).slice(0,2).map(port=>to3d(port.point));
+        if(ports.length===2){
+          const direction=ports[1].clone().sub(ports[0]);const length=Math.max(direction.length(),component.properties.fittingLengthM??0.5);
+          const mesh=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,length,16),new THREE.MeshStandardMaterial({color:colour}));
+          mesh.position.copy(ports[0]).add(ports[1]).multiplyScalar(0.5);
+          mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.length()>0?direction.normalize():new THREE.Vector3(1,0,0));scene.add(mesh);
+        }
+      } else if(component.kind==='tank'||component.kind==='reservoir') {
+        const height=Math.max(component.properties.tankMaxLevelM??component.properties.tankOperatingLevelM??3,1);
+        const tankRadius=Math.max((component.properties.tankDiameterM??7)/2,0.5);
+        const mesh=new THREE.Mesh(new THREE.CylinderGeometry(tankRadius,tankRadius,height,24),new THREE.MeshStandardMaterial({color:colour,transparent:true,opacity:0.8}));
+        mesh.position.copy(points[0]??new THREE.Vector3()).add(new THREE.Vector3(0,height/2,0));scene.add(mesh);
+      } else if(component.kind==='chamber') {
+        const mesh=new THREE.Mesh(new THREE.BoxGeometry(component.properties.chamberLengthM??1.2,component.properties.chamberDepthM??1.5,component.properties.chamberWidthM??1),new THREE.MeshStandardMaterial({color:colour,wireframe:true}));
+        mesh.position.copy(points[0]??new THREE.Vector3());scene.add(mesh);
       } else if(points.length) {
-        const radius=Math.max((component.properties.nominalDiameterMm??150)/2000,0.12);
-        const marker=new THREE.Mesh(
-          component.kind==='tank'||component.kind==='reservoir'?new THREE.CylinderGeometry(radius,radius,Math.max(component.properties.tankOperatingLevelM??2,1),16):new THREE.SphereGeometry(radius,16,12),
-          new THREE.MeshStandardMaterial({color:colour})
-        );
-        marker.position.copy(points[0]); scene.add(marker);
+        const marker=new THREE.Mesh(new THREE.SphereGeometry(Math.max(radius,0.12),16,12),new THREE.MeshStandardMaterial({color:colour}));
+        marker.position.copy(points[0]);scene.add(marker);
       }
     });
     const controls = new OrbitControls(camera, renderer.domElement);
