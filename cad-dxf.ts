@@ -199,8 +199,9 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
       else warnings.push('Skipped ELLIPSE with invalid major axis or ratio.');
     } else if(current.type==='HATCH') {
       const pathIndex=v.findIndex(p=>p[0]==='92');
-      if(pathIndex>=0&&Number(v[pathIndex][1])&2){warnings.push('Skipped HATCH with unsupported edge-based boundary; only polyline hatch boundaries are supported.');}
-      else if(pathIndex>=0){
+      if(pathIndex>=0){
+        const polylinePath = v.findIndex((p,i)=>i>pathIndex&&p[0]==='72') >= 0 && Number(v[v.findIndex((p,i)=>i>pathIndex&&p[0]==='72')][1]) === 0;
+        if(!polylinePath){warnings.push('Skipped HATCH edge-based boundary; only polyline hatch boundaries are supported.');current=null;return;}
         const vertexStart=v.findIndex((p,i)=>i>pathIndex&&p[0]==='93');
         const count=vertexStart>=0?Number(v[vertexStart][1]):0;
         const points:{x:number;y:number}[]=[];let x:number|null=null;
