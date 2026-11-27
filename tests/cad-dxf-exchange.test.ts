@@ -83,4 +83,14 @@ describe('structured DXF exchange', () => {
     expect(imported.shapes[0].points[0]).toEqual(imported.shapes[0].points[4]);
     expect(imported.shapes[1].points[0]).toEqual(imported.shapes[1].points[4]);
   });
+
+  it('exports paper-scaled dimension text and arrow linework from the selected dimension style', () => {
+    const doc = createDraftingDocument();
+    doc.dimensionStyle = { name:'TEST', textHeightMm:3, arrowSizeMm:2, extensionOffsetMm:1, extensionBeyondMm:1.5, textGapMm:1, precision:2, decimalSeparator:'.', zeroSuppress:'trailing', unit:'m', prefix:'', suffix:'', tolerance:{mode:'none',upper:0,lower:0} };
+    doc.annotations.push({ id:'D1', kind:'aligned', layer:'DIMENSIONS', a:{x:0,y:0}, b:{x:3,y:4}, offsetM:1, precision:2, textOverride:'5.00 m' });
+    const dxf = exportDraftingDxf([], doc, 1);
+    expect(dxf).toContain('5.00 m');
+    expect(dxf).toContain('40\\n0.3');
+    expect((dxf.match(/\\nLINE\\n/g) || []).length).toBeGreaterThanOrEqual(7);
+  });
 });
