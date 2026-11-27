@@ -3,6 +3,7 @@ import {
   boundsOfPoints,
   createHistory,
   objectSnapCandidates,
+  constrainPointToAngle,
   panViewport,
   pixelsPerMetreAtScale,
   pushHistory,
@@ -38,6 +39,16 @@ describe('CAD metric geometry foundation', () => {
   it('converts coordinate pairs consistently', () => {
     expect(pointToMetres({ x: 1250, y: -500 }, 'mm')).toEqual({ x: 1.25, y: -0.5 });
     expect(pointFromMetres({ x: 1.25, y: -0.5 }, 'mm')).toEqual({ x: 1250, y: -500 });
+  });
+
+  it('constrains drafting rays to the nearest polar angle while preserving length', () => {
+    expect(constrainPointToAngle({x:0,y:0},{x:10,y:1},15).x).toBeCloseTo(10.0498756,6);
+    expect(constrainPointToAngle({x:0,y:0},{x:10,y:1},15).y).toBeCloseTo(0,6);
+    const diagonal=constrainPointToAngle({x:2,y:3},{x:7,y:8},45);
+    expect(diagonal.x).toBeCloseTo(2+Math.hypot(5,5)/Math.sqrt(2),8);
+    expect(diagonal.y).toBeCloseTo(3+Math.hypot(5,5)/Math.sqrt(2),8);
+    expect(constrainPointToAngle({x:2,y:3},{x:2,y:3},15)).toEqual({x:2,y:3});
+    expect(()=>constrainPointToAngle({x:0,y:0},{x:1,y:1},0)).toThrow(/increment/);
   });
 
   it('maps engineering north-up coordinates to screen coordinates', () => {
