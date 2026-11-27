@@ -163,7 +163,7 @@ PAT1 1 1.2
   const exported=exportWaterNetworkToEpanet(imported.document).input;
   expect(exported).toContain('HEADLOSS D-W');
   expect(exported).toContain('DURATION 12:00');
-  expect(exported).toContain('J1 50 10');
+  expect(exported).toContain('P1 50 10');
   expect(exported).toContain('J1 1.5 PAT1');
   expect(exported).toContain('J1 0.5');
  });
