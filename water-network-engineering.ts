@@ -191,8 +191,19 @@ export function buildWaterQuantities(document: WaterCadDocument): QuantityLine[]
     if (c.kind === 'pipe') {
       const length = c.geometry.slice(1).reduce((sum, point, i) => sum + Math.hypot(point.x - c.geometry[i].x, point.y - c.geometry[i].y), 0);
       if (length > 0) addLine({ code: 'PIPE', description: 'Supply and install ' + (p.material ?? 'unspecified') + ' pipe DN' + (p.nominalDiameterMm ?? '—'), unit: 'm', quantity: length, material: p.material, nominalDiameterMm: p.nominalDiameterMm });
-    } else if (['bend', 'tee', 'reducer', 'valve', 'pump', 'tank', 'reservoir', 'chamber', 'hydrant', 'meter', 'air-valve', 'washout'].includes(c.kind)) {
-      addLine({ code: c.kind.toUpperCase().replace('-', '_'), description: c.kind + ' ' + (p.nominalDiameterMm ? 'DN' + p.nominalDiameterMm : '') + ' ' + p.tag, unit: 'nr', quantity: 1, material: p.material, nominalDiameterMm: p.nominalDiameterMm });
+    } else if (['bend', 'tee', 'reducer', 'valve', 'pump', 'tank', 'reservoir', 'chamber', 'hydrant', 'meter', 'air-valve', 'washout', 'junction', 'source'].includes(c.kind)) {
+      const dn = p.nominalDiameterMm ? 'DN' + p.nominalDiameterMm : '';
+      let code = c.kind.toUpperCase().replace('-', '_');
+      let description = c.kind + ' ' + dn;
+      if (c.kind === 'bend') { code += '_' + (p.bendAngleDeg ?? 90) + 'DEG_R' + (p.bendRadiusM ?? 0.5); description = 'Bend ' + dn + ' ' + (p.bendAngleDeg ?? 90) + '° radius ' + (p.bendRadiusM ?? 0.5) + ' m'; }
+      if (c.kind === 'tee') { code += '_BR' + (p.branchDiameterMm ?? p.nominalDiameterMm ?? ''); description = 'Tee ' + dn + ' × branch DN' + (p.branchDiameterMm ?? '—'); }
+      if (c.kind === 'reducer') { code += '_TO_DN' + (p.outletDiameterMm ?? ''); description = 'Reducer DN' + (p.nominalDiameterMm ?? '—') + ' × DN' + (p.outletDiameterMm ?? '—'); }
+      if (c.kind === 'valve') { code += '_' + (p.valveType ?? 'unspecified').toUpperCase(); description = (p.valveType ?? 'Valve') + ' valve ' + dn; }
+      if (c.kind === 'pump') { code += '_Q' + (p.pumpDutyFlowM3h ?? 'NA') + '_H' + (p.pumpDutyHeadM ?? 'NA'); description = 'Pump duty ' + (p.pumpDutyFlowM3h ?? '—') + ' m³/h @ ' + (p.pumpDutyHeadM ?? '—') + ' m'; }
+      if (c.kind === 'tank') { code += '_' + (p.tankType ?? 'unspecified').toUpperCase(); description = 'Tank ' + (p.tankType ?? 'unspecified') + ' ' + (p.tankCapacityM3 ?? '—') + ' m³'; }
+      if (c.kind === 'reservoir') description = 'Reservoir ' + (p.tankCapacityM3 ?? '—') + ' m³';
+      if (c.kind === 'chamber') { code += '_' + [p.chamberLengthM,p.chamberWidthM,p.chamberDepthM].map(v => v ?? 'NA').join('X'); description = 'Chamber ' + [p.chamberLengthM,p.chamberWidthM,p.chamberDepthM].map(v => v ?? '—').join(' × ') + ' m'; }
+      addLine({ code, description, unit: 'nr', quantity: 1, material: p.material, nominalDiameterMm: p.nominalDiameterMm });
     }
   }
   return [...buckets.values()].sort((a, b) => a.code.localeCompare(b.code) || (a.nominalDiameterMm ?? 0) - (b.nominalDiameterMm ?? 0));
