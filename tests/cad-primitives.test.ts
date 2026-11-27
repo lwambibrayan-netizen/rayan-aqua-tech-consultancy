@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { arcFromCenterStartAngle, arcFromThreePoints, circleFromCenterRadius, circleFromDiameter, circleFromThreePoints, ellipseFromBounds } from '../cad-primitives';
+import { arcFromCenterStartAngle, arcFromThreePoints, circleFromCenterDiameter, circleFromCenterRadius, circleFromDiameter, circleFromThreePoints, ellipseFromBounds } from '../cad-primitives';
 
 describe('CAD precision drawing primitives', () => {
   it('constructs circles by centre-radius and diameter endpoints', () => {
     expect(circleFromCenterRadius({x:2,y:3},{x:5,y:7},'r','0').radius).toBe(5);
+    expect(circleFromCenterDiameter({x:2,y:3},{x:6,y:3},'cd','0').radius).toBe(2);
     const circle=circleFromDiameter({x:0,y:0},{x:4,y:0},'d','0');
     expect(circle.points[0]).toEqual({x:2,y:0});
     expect(circle.radius).toBe(2);
