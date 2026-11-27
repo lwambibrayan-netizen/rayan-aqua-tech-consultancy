@@ -102,7 +102,7 @@ test('engineer opens a project, verifies precision drafting, saves and opens 3D'
   const currentLayer = ribbonContent.getByLabel('Current drawing layer');
   await expect(currentLayer).toHaveValue('0');
   const cadCanvas = page.getByRole('application', { name: /AquaCAD drawing canvas/ });
-  await ribbonContent.getByRole('button', { name: 'Line' }).click();
+  await ribbonContent.locator('button[title="Line"]').click();
   await cadCanvas.click({ position: { x: 70, y: 80 } });
   await cadCanvas.click({ position: { x: 110, y: 80 } });
   await expect(cadCanvas.locator('line[data-shape-id]').first()).toHaveAttribute('stroke', '#ffffff');
