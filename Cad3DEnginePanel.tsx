@@ -1652,8 +1652,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         <div className="aquacad-quick-access" aria-label="Quick access toolbar">
           <button title="Open / import drawing" onClick={()=>fileRef.current?.click()}>Open</button>
           <button title="Save drawing" onClick={saveDrawing} disabled={busy}>Save</button>
-          <button title="Undo" onClick={()=>setHistory(current=>undoHistory(current))} disabled={!history.past.length}>↶</button>
-          <button title="Redo" onClick={()=>setHistory(current=>redoHistory(current))} disabled={!history.future.length}>↷</button>
+          <button title="Undo (Ctrl+Z)" aria-label="Undo" onClick={()=>setHistory(current=>undoHistory(current))} disabled={!history.past.length}>↶</button>
+          <button title="Redo (Ctrl+Y)" aria-label="Redo" onClick={()=>setHistory(current=>redoHistory(current))} disabled={!history.future.length}>↷</button>
+          <button title={panMode ? "Exit Pan mode" : "Pan drawing (select, then drag)"} aria-label="Pan drawing" aria-pressed={panMode} className={panMode ? "selected" : ""} onClick={()=>setPanMode(value=>!value)}>✋ Pan</button>
+          <button title="Zoom Extents" aria-label="Zoom Extents" onClick={()=>setViewBox({x:0,y:0,width:WIDTH,height:HEIGHT})}>Zoom Extents</button>
           <button title="Plot / PDF" onClick={()=>exportSheetSvg(true)}>Plot</button>
         </div>
         <div className="aquacad-title-actions">
