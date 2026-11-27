@@ -54,9 +54,8 @@ const A_SIZES: Record<Exclude<SheetSize, 'CUSTOM'>, [number, number]> = {
   A0: [841, 1189], A1: [594, 841], A2: [420, 594], A3: [297, 420], A4: [210, 297],
 };
 export function sheetDimensionsMm(sheet: DrawingSheet): { widthMm: number; heightMm: number } {
-  const [short, long] = sheet.size === 'CUSTOM'
-    ? [sheet.widthMm ?? 297, sheet.heightMm ?? 420]
-    : A_SIZES[sheet.size];
+  if (sheet.size === 'CUSTOM') return { widthMm: sheet.widthMm ?? 297, heightMm: sheet.heightMm ?? 420 };
+  const [short, long] = A_SIZES[sheet.size];
   return sheet.orientation === 'landscape' ? { widthMm: long, heightMm: short } : { widthMm: short, heightMm: long };
 }
 export function createDraftingDocument(partial?: Partial<DraftingDocument>): DraftingDocument {
