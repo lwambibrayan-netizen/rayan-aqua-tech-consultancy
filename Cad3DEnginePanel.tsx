@@ -38,7 +38,7 @@ function nearestPointOnSegment(point: Point2D, a: Point2D, b: Point2D): Point2D 
 
 function exportDxf(shapes: Shape[]) {
   const output = [
-    '0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '6', '0', 'ENDSEC',
+    '0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '0', '0', 'ENDSEC',
     '0', 'SECTION', '2', 'ENTITIES',
   ];
   shapes.forEach(shape => {
@@ -655,6 +655,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <button className="secondary-button" disabled={!history.past.length} onClick={() => setHistory(current => undoHistory(current))}>Undo</button>
           <button className="secondary-button" disabled={!history.future.length} onClick={() => setHistory(current => redoHistory(current))}>Redo</button>
           <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>Grid step <input type="number" min="0.1" step="any" value={gridSize} onChange={event => setGridSize(Math.max(0.1, Number(event.target.value) || 10))} style={{ width: 66, padding: 6 }} /></label>
+          <span className="muted" style={{ fontSize: 11 }}>{calibratedMetresPerUnit ? `Calibrated: ${calibratedMetresPerUnit.toPrecision(5)} m per drawing unit` : 'Unscaled legacy drawing · calibrate a known line for real measurements'}</span>
         </div>
       </div>
 
