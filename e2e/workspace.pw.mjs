@@ -115,7 +115,7 @@ test('PyQGIS service exposes a healthy processor and passing self-test', async (
   expect(result.cad_grid_width).toBeGreaterThan(1);
   expect(result.cad_grid_height).toBeGreaterThan(1);
   expect(result.cad_grid_valid_samples).toBeGreaterThanOrEqual(4);
-  expect(result.cad_grid_crs).toMatch(/^EPSG:\\d+$/);
+  expect(result.cad_grid_crs).toMatch(/^EPSG:\d+$/);
   expect(result.cad_grid_vertical_datum).toContain('Copernicus DEM');
   expect(result.contour_features).toBeGreaterThan(0);
 });
