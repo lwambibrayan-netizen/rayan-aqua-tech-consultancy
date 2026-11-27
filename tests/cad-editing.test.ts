@@ -36,7 +36,11 @@ describe('CAD editing geometry operations', () => {
   it('trims and extends line endpoints to cutting/boundary edges', () => {
     const cutter: CadEditableEntity = { id: 'c', type: 'line', points: [{ x: 5, y: -5 }, { x: 5, y: 5 }], layer: '0' };
     expect(trimLine(line, cutter, { x: 1, y: 0 }).points[0]).toEqual({ x: 5, y: 0 });
-    expect(extendLine(line, cutter, 1).points[1]).toEqual({ x: 5, y: 0 });
+    const shortLine: CadEditableEntity = { ...line, points: [{ x: 0, y: 0 }, { x: 3, y: 0 }] };
+    expect(extendLine(shortLine, cutter, 1).points[1]).toEqual({ x: 5, y: 0 });
+    expect(() => extendLine(line, cutter, 1)).toThrow(/not beyond/);
+    const finiteCutter: CadEditableEntity = { ...cutter, points: [{ x: 5, y: 4 }, { x: 5, y: 5 }] };
+    expect(() => trimLine(line, finiteCutter, { x: 1, y: 0 })).toThrow(/finite cutting edge/);
   });
   it('offsets a line by a true perpendicular distance', () => {
     expect(offsetLine(line, 2).points).toEqual([{ x: 0, y: 2 }, { x: 10, y: 2 }]);
@@ -54,5 +58,6 @@ describe('CAD editing geometry operations', () => {
     expect(() => mirrorEntities([line], { x: 1, y: 1 }, { x: 1, y: 1 })).toThrow(/non-zero/);
     expect(() => rectangularArray([line], 0, 2, 1, 1)).toThrow(/positive integers/);
     expect(() => offsetLine({ ...line, points: [{ x: 0, y: 0 }, { x: 0, y: 0 }] }, 2)).toThrow(/zero-length/);
+    expect(() => stretchEntities([line], { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity }, { x: 1, y: 0 })).toThrow(/finite/);
   });
 });
