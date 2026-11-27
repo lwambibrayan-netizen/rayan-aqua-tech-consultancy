@@ -89,20 +89,22 @@ function expandBlockInserts(pairs: Pair[], warnings: string[]): Pair[] {
     if(![at.x,at.y,sx,sy,angle].every(Number.isFinite)||sx===0||sy===0){warnings.push('Skipped INSERT with invalid transform.');continue;}
     for(const child of block.entities){
       if(child.type==='INSERT'){warnings.push('Nested BLOCK INSERT was skipped; nested block references are not yet expanded.');continue;}
-      const values:Pair[]=[];let row=0;
+      const values:Pair[]=[];let pending:{code:string;yCode:string;x:number;index:number}|null=null;
       for(const [code,value] of child.values){
-        const numeric=Number(value);
-        if(['10','11','12','13','14','15','16','17','18','19'].includes(code)){row=Number(code);values.push([code,value]);continue;}
-        if(['20','21','22','23','24','25','26','27','28','29'].includes(code)){
-          const xPair=String(Number(code)-10),x=Number(child.values.find((p,j)=>p[0]===xPair&&j<child.values.findIndex(q=>q[0]===code))?.[1]||0);
-          const px=(x-block.base.x)*sx,py=(numeric-block.base.y)*sy;
-          values[values.length-1]=[xPair,fmt(at.x+px*cos-py*sin)];
-          values.push([code,fmt(at.y+px*sin+py*cos)]);row=0;continue;
+        if(['10','11','12','13','14','15','16','17','18','19'].includes(code)){
+          pending={code,yCode:String(Number(code)+10),x:Number(value),index:values.length};
+          values.push([code,value]);continue;
+        }
+        if(pending&&code===pending.yCode){
+          const px=(pending.x-block.base.x)*sx,py=(Number(value)-block.base.y)*sy;
+          values[pending.index]=[pending.code,fmt(at.x+px*cos-py*sin)];
+          values.push([code,fmt(at.y+px*sin+py*cos)]);pending=null;continue;
         }
         if(code==='8'&&value==='0')values.push(['8',insertLayer]);
-        else if(code==='40'&&Number.isFinite(numeric))values.push([code,fmt(numeric*Math.sqrt(Math.abs(sx*sy)))]);
+        else if(code==='40'&&Number.isFinite(Number(value)))values.push([code,fmt(Number(value)*Math.sqrt(Math.abs(sx*sy)))]);
         else values.push([code,value]);
       }
+      if(Math.abs(Math.abs(sx)-Math.abs(sy))>1e-9&&child.type==='CIRCLE')warnings.push('INSERT '+name+' applies non-uniform scaling to a CIRCLE; the circle radius was approximated using the geometric-mean scale.');
       expanded.push(['0',child.type],...values);
     }
   }
