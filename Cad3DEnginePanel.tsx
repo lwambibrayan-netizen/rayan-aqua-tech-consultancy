@@ -1931,6 +1931,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         </div>
         {drafting.revisionHistory?.length > 0 && <div style={{ overflowX: "auto", marginTop: 8 }}><strong>Revision history</strong><table style={{ width: "100%", fontSize: 11 }}><thead><tr>{["Rev","Date","Description","Drawn","Checked","Approved","Status"].map(x => <th key={x}>{x}</th>)}</tr></thead><tbody>{drafting.revisionHistory.map((r,i) => <tr key={r.revision+i}><td>{r.revision}</td><td>{r.date}</td><td>{r.description}</td><td>{r.drawnBy}</td><td>{r.checkedBy}</td><td>{r.approvedBy}</td><td>{r.status}</td></tr>)}</tbody></table></div>}
         {drafting.annotations.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>{drafting.annotations.map(item => <button key={item.id} className="secondary-button" onClick={() => removeAnnotation(item.id)}>Delete {item.kind} · {item.id.slice(0,6)}</button>)}</div>}
+        <div style={{display:'flex',flexWrap:'wrap',gap:7,alignItems:'center',borderTop:'1px solid #d8e1df',paddingTop:9,marginTop:9}}>
+          <strong style={{fontSize:12}}>Layer visibility</strong>
+          {layerNames.map(name=><button key={name} className={hiddenLayers.includes(name)?'secondary-button':'primary-button'} onClick={()=>setHiddenLayers(current=>current.includes(name)?current.filter(item=>item!==name):[...current,name])} style={{padding:'6px 9px',fontSize:11}}>{hiddenLayers.includes(name)?'Show':'Hide'} {name}</button>)}
+        </div>
       </div>
         </div>}
         {ribbonTab==='Water Network' && <div className="aquacad-ribbon-extra" data-cad-ribbon-panel="water-network">
@@ -2114,7 +2118,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       </div>
         </div>}
         </div>
-        <div className="aquacad-quickbar"><span>Model: {view.toUpperCase()}</span><span>{shapes.length} entities</span><span>{waterCad.components.length} water objects</span><span>{units}</span><span>{snapEnabled?'OSNAP ON':'OSNAP OFF'}</span></div>
+        <div className="aquacad-quickbar"><span>Model: {view.toUpperCase()}</span><span>{shapes.length} entities · {counts.routes} routes · {counts.structures} structures · {counts.circles} circular items</span><span>{waterCad.components.length} water objects</span><span>{units}</span><span>{snapEnabled?'OSNAP ON':'OSNAP OFF'}</span></div>
 
       </div>
 
@@ -2124,49 +2128,6 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         <button className="aquacad-document-add" type="button" title="New drawing" onClick={()=>{setShapes([]);setSelectedShapeIds([]);setDraft([]);setMessage('New drawing started.');}}>＋</button>
       </div>
 
-      {view === '2d' ? (
-        <div className="panel" style={{ padding: 12 }}>
-          <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>
-            <strong>Modify</strong><span className="muted" style={{fontSize:12}}>{selectedShapeIds.length} selected</span>
-            <label>Distance <input type="number" value={commandDistance} step="any" onChange={e=>setCommandDistance(Number(e.target.value))} style={{width:75}}/></label>
-            <label>Angle ° <input type="number" value={commandAngle} step="any" onChange={e=>setCommandAngle(Number(e.target.value))} style={{width:70}}/></label>
-            <label>Scale × <input type="number" min="0.001" step="any" value={scaleFactor} onChange={e=>setScaleFactor(Number(e.target.value))} style={{width:70}}/></label>
-            <label>Grip index (0-based) <input type="number" min="0" step="1" value={gripIndex} onChange={e=>setGripIndex(Math.max(0,Math.floor(Number(e.target.value)||0)))} style={{width:48}}/></label>
-            <button className="secondary-button" disabled={selectedShapes.length!==1||!cursorPoint||!Number.isFinite(cursorPoint.x)||!Number.isFinite(cursorPoint.y)} onClick={()=>{try{const target=selectedShapes[0];previewDrawing(shapes.map(x=>x.id===target.id?editEntityGrip(x,gripIndex,cursorPoint!):x),'GRIP EDIT');}catch(e){setMessage(e instanceof Error?e.message:'Grip edit failed.');}}}>Move grip to cursor</button>
-            <button className="secondary-button" disabled={!selectedShapes.length||!Number.isFinite(scaleFactor)||scaleFactor===0} onClick={()=>{try{const base=selectedShapes[0].points[0];const scaled=scaleEntities(selectedShapes,base,scaleFactor);const byId=new Map(scaled.map(item=>[item.id,item]));previewDrawing(shapes.map(x=>byId.get(x.id)||x),'SCALE');}catch(e){setMessage(e instanceof Error?e.message:'Scale failed.');}}}>Scale</button>
-            <label>Endpoint <select value={commandEndpoint} onChange={e=>setCommandEndpoint(Number(e.target.value) as 0|1)}><option value={0}>Start</option><option value={1}>End</option></select></label>
-            <label>Corner # <input type="number" min="1" value={cornerIndex} onChange={e=>setCornerIndex(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
-            <label>Segment # (0-based) <input type="number" min="0" value={segmentIndex} onChange={e=>setSegmentIndex(Math.max(0,Math.floor(Number(e.target.value)||0)))} style={{width:54}}/></label>
-            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?moveEntities([x],{x:commandDistance,y:commandDistance})[0]:x),'MOVE');}}>Preview move</button>
-            <button className="primary-button" disabled={!selectedShapes.length} onClick={()=>{previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?moveEntities([x],{x:commandDistance,y:commandDistance})[0]:x),'MOVE');}}>Move</button>
-            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{previewDrawing([...shapes,...copyEntities(selectedShapes,{x:commandDistance,y:commandDistance})],'COPY');}}>Copy</button>
-            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{const pivot=selectedShapes[0].points[0];previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?rotateEntities([x],pivot,commandAngle)[0]:x),'ROTATE');}}>Rotate</button>
-            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{const a=selectedShapes[0].points[0],b={x:a.x,y:a.y+1};previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?mirrorEntities([x],a,b)[0]:x),'MIRROR');}}>Mirror</button>
-            <button className="secondary-button" disabled={!selectedShapes.length} onClick={()=>{previewDrawing([...shapes,...rectangularArray(selectedShapes,arrayRows,arrayColumns,arraySpacing,arraySpacing)],'ARRAY');}}>Array</button>
-            <label>Rows <input type="number" min="1" value={arrayRows} onChange={e=>setArrayRows(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
-            <label>Cols <input type="number" min="1" value={arrayColumns} onChange={e=>setArrayColumns(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
-            <button className="secondary-button" disabled={!selectedShapes.length||!lastSelectionWindow} onClick={()=>{try{previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?stretchEntities([x],lastSelectionWindow!,{x:commandDistance,y:0})[0]:x),'STRETCH');}catch(e){setMessage(e instanceof Error?e.message:'STRETCH failed.');}}}>Stretch</button>
-            <button className="secondary-button" onClick={()=>setOffsetSide(value=>value===1?-1:1)}>Offset side: {offsetSide===1?'Left':'Right'}</button>
-            <button className="secondary-button" disabled={selectedShapes.length!==1||!['line','polyline'].includes(selectedShapes[0].type)} onClick={()=>{try{const entity=selectedShapes[0];previewDrawing([...shapes,entity.type==='line'?offsetLine(entity,commandDistance,offsetSide):offsetPolyline(entity,commandDistance,offsetSide)],'OFFSET');}catch(e){setMessage(e instanceof Error?e.message:'OFFSET failed.');}}}>Offset</button>
-            <button className="secondary-button" disabled={selectedShapes.length!==2||!selectedShapes.some(x=>x.id===selectedShapeId&&['line','polyline'].includes(x.type))||!selectedShapes.some(x=>x.id!==selectedShapeId&&x.type==='line')} onClick={()=>{try{const target=selectedShapes.find(item=>item.id===selectedShapeId)!;const cutter=selectedShapes.find(item=>item.id!==selectedShapeId)!;const segment=segmentIndex;const pick=target.type==='polyline'?target.points[Math.min(segment+(commandEndpoint===0?0:1),target.points.length-1)]:target.points[commandEndpoint];previewDrawing(shapes.map(x=>x.id===selectedShapeId?(x.type==='line'?trimLine(x,cutter,pick):trimPolylineSegment(x,cutter,pick,segment)):x),'TRIM');}catch(e){setMessage(e instanceof Error?e.message:'TRIM failed.');}}}>Trim</button>
-            <button className="secondary-button" disabled={selectedShapes.length!==2||!selectedShapes.some(x=>x.id===selectedShapeId&&['line','polyline'].includes(x.type))||!selectedShapes.some(x=>x.id!==selectedShapeId&&x.type==='line')} onClick={()=>{try{const target=selectedShapes.find(item=>item.id===selectedShapeId)!;const boundary=selectedShapes.find(item=>item.id!==selectedShapeId)!;const segment=segmentIndex;previewDrawing(shapes.map(x=>x.id===selectedShapeId?(x.type==='line'?extendLine(x,boundary,commandEndpoint):extendPolylineSegment(x,boundary,commandEndpoint,segment)):x),'EXTEND');}catch(e){setMessage(e instanceof Error?e.message:'EXTEND failed.');}}}>Extend</button>
-            <button className="secondary-button" disabled={selectedShapes.length!==1||selectedShapes[0].type!=='polyline'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapes[0].id?chamferPolylineCorner(x,cornerIndex,commandDistance):x),'CHAMFER');}catch(e){setMessage(e instanceof Error?e.message:'CHAMFER failed.');}}}>Chamfer</button>
-            <button className="secondary-button" disabled={selectedShapes.length!==1||selectedShapes[0].type!=='polyline'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapes[0].id?filletPolylineCorner(x,cornerIndex,commandDistance):x),'FILLET');}catch(e){setMessage(e instanceof Error?e.message:'FILLET failed.');}}}>Fillet</button>
-            <button className="primary-button" disabled={!previewShapes} onClick={commitPreview}>Apply preview</button>
-            <button className="secondary-button" onClick={()=>{setPreviewShapes(null);setMessage('Preview cancelled.');}}>Cancel preview</button>
-            <button className="secondary-button" onClick={()=>{setSelectedShapeIds([]);setSelectedShapeId('');}}>Clear selection</button>
-          </div>
-          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
-            {(['select', 'line', 'polyline', 'rect', 'circle'] as const).map(tool => (
-              <button key={tool} className={mode === tool ? 'primary-button' : 'secondary-button'} onClick={() => { setMode(tool); setDraft([]); }}>
-                {tool}
-              </button>
-            ))}
-            {mode === 'polyline' && draft.length > 1 && <button className="primary-button" onClick={finishPolyline}>Finish polyline</button>}
-            <button className="secondary-button" onClick={() => { setShapes([]); setDraft([]); }}>Clear drawing</button>
-            <select value={layer} onChange={event => setLayer(event.target.value)} aria-label="CAD layer" style={{ width: 175, padding: 7 }}>{drafting.layers.map(item => <option key={item.name} value={item.name} disabled={item.locked}>{item.name}{item.locked ? " (locked)" : ""}</option>)}</select>
-          </div>
-          
           <div className="aquacad-dock aquacad-left-dock">
             <div className="aquacad-dock-heading">Properties</div>
             <div className="aquacad-property-list">
@@ -2176,6 +2137,18 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               {selectedWaterComponent && <><div><span>Network ID</span><strong>{selectedWaterComponent.id}</strong></div><div><span>Type</span><strong>{selectedWaterComponent.kind}</strong></div></>}
               {!selectedShape && !selectedWaterComponent && <p>Select a drawing entity or water-network object to inspect its properties.</p>}
             </div>
+            {selectedShape && <div className="aquacad-property-editor" style={{display:'grid',gap:7,marginTop:10}}>
+              <div className="aquacad-dock-heading">Selected entity · {selectedShape.type.toUpperCase()}</div>
+              <button className="secondary-button" onClick={deleteSelectedShape}>Delete selected</button>
+              <label>Layer <input value={selectedShape.layer} onChange={e=>updateSelected({layer:e.target.value})}/></label>
+              {selectedShape.points.map((point,index)=><div key={index} style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                <label>Point {index+1} X <input type="number" step="any" value={point.x} onChange={e=>updateSelected({points:selectedShape.points.map((p,i)=>i===index?{...p,x:Number(e.target.value)}:p)})}/></label>
+                <label>Y <input type="number" step="any" value={point.y} onChange={e=>updateSelected({points:selectedShape.points.map((p,i)=>i===index?{...p,y:Number(e.target.value)}:p)})}/></label>
+              </div>)}
+              {selectedShape.type==='circle' && <label>Radius <input type="number" min="0.001" step="any" value={selectedShape.radius||1} onChange={e=>updateSelected({radius:Number(e.target.value)})}/></label>}
+              <small>{selectedMetrics}</small>
+              {selectedShape.type==='line' && <button className="secondary-button" onClick={calibrateSelectedLine}>Calibrate scale from this line</button>}
+            </div>}
             <div className="aquacad-dock-heading">Layers</div>
             <div className="aquacad-layer-list">
               {drafting.layers.map(item=><button key={item.name} className={layer===item.name?'active':''} onClick={()=>setLayer(item.name)}><span className="aquacad-layer-swatch" style={{background:item.color}}/>{item.name}<small>{item.locked?'LOCKED':item.visible?'ON':'OFF'}</small></button>)}
@@ -2303,14 +2276,6 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             </div>
           </div>
 
-          <p className="muted" style={{ fontSize: 12 }}>
-            Precision drafting: object snaps include endpoints, centres, circle quadrants, nearest points, midpoints and line intersections. Ortho constrains the next segment horizontally or vertically; grid snap uses the selected drawing-unit interval.
-          </p>
-          {layerNames.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center', marginTop: 8 }}>
-            <strong style={{ fontSize: 12 }}>Layers</strong>
-            {layerNames.map(name => <button key={name} className={hiddenLayers.includes(name) ? 'secondary-button' : 'primary-button'} onClick={() => setHiddenLayers(current => current.includes(name) ? current.filter(item => item !== name) : [...current, name])} style={{ padding: '6px 9px', fontSize: 11 }}>{hiddenLayers.includes(name) ? 'Show' : 'Hide'} {name}</button>)}
-          </div>}
-          {snapMarker && mode !== 'select' && <p style={{ fontSize: 12, color: '#b94d43', margin: 0 }}>Snap: {snapMarker.kind}</p>}
         </div>
       ) : (
         <div className="panel" style={{ padding: 12 }}>
@@ -2328,19 +2293,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         </div>
       )}
 
-      {selectedShape && view === '2d' && <div className="panel" style={{padding:14,display:'grid',gap:10}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><strong>Entity properties · {selectedShape.type.toUpperCase()}</strong><button className="secondary-button" onClick={deleteSelectedShape}>Delete selected</button></div>
-        <label>Layer <input value={selectedShape.layer} onChange={e=>updateSelected({layer:e.target.value})} /></label>
-        {selectedShape.points.map((point,index)=><div key={index} style={{display:'flex',gap:8,flexWrap:'wrap'}}><label>Point {index+1} X <input type="number" step="any" value={point.x} onChange={e=>updateSelected({points:selectedShape.points.map((p,i)=>i===index?{...p,x:Number(e.target.value)}:p)})}/></label><label>Y <input type="number" step="any" value={point.y} onChange={e=>updateSelected({points:selectedShape.points.map((p,i)=>i===index?{...p,y:Number(e.target.value)}:p)})}/></label></div>)}
-        {selectedShape.type==='circle' && <label>Radius <input type="number" min="0.001" step="any" value={selectedShape.radius||1} onChange={e=>updateSelected({radius:Number(e.target.value)})}/></label>}
-        <small>{selectedMetrics}</small>{selectedShape.type==='line' && <button className="secondary-button" onClick={calibrateSelectedLine}>Calibrate scale from this line</button>}
-      </div>}
       {message && <div className="alert">{message}</div>}
-      <div className="panel" style={{ padding: 14 }}>
-        <strong>Drawing inventory</strong>
-        <p className="muted">{shapes.length} entities · {counts.routes} routes · {counts.structures} structures · {counts.circles} circular items</p>
-      </div>
-
       <div className="aquacad-commandbar">
         <div className="aquacad-status-controls">
           <span className="aquacad-status-label">MODEL</span><strong>{view.toUpperCase()}</strong>
@@ -2354,7 +2307,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <label className="aquacad-status-setting">UNITS <select value={units} disabled={!calibratedMetresPerUnit} onChange={event => setUnits(event.target.value)}><option value="m">m</option><option value="mm">mm</option></select></label>
           <span className="aquacad-status-count">{shapes.length} ENTITIES</span>
         </div>
-        <div className="aquacad-command-history">{message || 'Command ready. Select a ribbon tool or enter a command.'}</div>
+        <div className="aquacad-command-history">{message || (snapMarker && mode !== 'select' ? 'Snap: ' + snapMarker.kind : 'Command ready. Select a ribbon tool or enter a command.')}</div>
         <form className="aquacad-command-input" onSubmit={event => {
           event.preventDefault();
           const cmd = commandLine.trim().toLowerCase();
