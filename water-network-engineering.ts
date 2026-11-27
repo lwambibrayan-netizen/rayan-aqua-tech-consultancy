@@ -388,7 +388,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
     if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode)) warnings.push('Pump ' + p.id + ' omitted: connect its inlet and outlet ports.');
     else if (p.properties.pumpPowerKw && p.properties.pumpPowerKw > 0) lines.push([safeId(p.id),fromNode,toNode,'POWER '+fmt(p.properties.pumpPowerKw)].join(' '));
     else if (!(p.properties.pumpCurvePoints?.length || (p.properties.pumpDutyFlowM3h && p.properties.pumpDutyFlowM3h > 0 && p.properties.pumpDutyHeadM && p.properties.pumpDutyHeadM > 0))) warnings.push('Pump ' + p.id + ' omitted: a valid pump curve, constant power, or positive duty flow and head is required.');
-    else lines.push([safeId(p.id), fromNode, toNode, 'HEAD ' + safeId('CURVE_' + p.id), ...(p.properties.pumpSpeedPattern?['PATTERN',safeId(p.properties.pumpSpeedPattern)]:['SPEED',fmt(p.properties.pumpSpeedMultiplier??1)])].join(' '));
+    else lines.push([safeId(p.id), fromNode, toNode, 'HEAD ' + safeId('CURVE_' + p.id), ...(p.properties.pumpSpeedMultiplier!==undefined?['SPEED',fmt(p.properties.pumpSpeedMultiplier)]:[]), ...(p.properties.pumpSpeedPattern?['PATTERN',safeId(p.properties.pumpSpeedPattern)]:[])].join(' '));
   });
   lines.push('', '[VALVES]', ';ID Node1 Node2 Diameter_mm Type Setting MinorLoss');
   valves.filter(v => v.properties.valveType !== 'check').forEach(v => {
