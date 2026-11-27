@@ -105,9 +105,9 @@ describe('structured DXF exchange', () => {
     const doc = createDraftingDocument();
     doc.layers = doc.layers.map((layer,index) => ({ ...layer, lineType: (['CONTINUOUS','DASHED','CENTER','HIDDEN','PHANTOM'] as const)[index % 5] }));
     const dxf = exportDraftingDxf([], doc, 1);
-    expect(dxf).toContain('2\\nLTYPE');
+    expect(dxf).toContain('2\nLTYPE');
     for (const name of ['CONTINUOUS','DASHED','CENTER','HIDDEN','PHANTOM']) {
-      expect(dxf).toContain('2\\n' + name);
+      expect(dxf).toContain('2\n' + name);
     }
     expect(dxf).toContain('2\\nLAYER');
     expect(dxf).toContain('6\\nDASHED');
