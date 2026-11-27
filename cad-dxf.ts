@@ -58,7 +58,7 @@ function splitEntities(pairs: Pair[]): Array<{type:string;values:Pair[]}> {
   return result;
 }
 function expandBlockInserts(pairs: Pair[], warnings: string[]): Pair[] {
-  const blocks=new Map<string,{base:{x:number;y:number};entities:Array<{type:string;values:Pair[]}>}>();
+  const blocks=new Map<string,{base:{x:number;y:number};xref:boolean;entities:Array<{type:string;values:Pair[]}>}>();
   const blockSection=pairs.findIndex((p,i)=>p[0]==='2'&&p[1]==='BLOCKS');
   if(blockSection>=0){
     let i=blockSection+1;
@@ -71,7 +71,7 @@ function expandBlockInserts(pairs: Pair[], warnings: string[]): Pair[] {
       const body:Pair[]=[];
       while(i<pairs.length&&!(pairs[i][0]==='0'&&pairs[i][1]==='ENDBLK'))body.push(pairs[i++]);
       if(i<pairs.length)i++;
-      if(name)blocks.set(name.toUpperCase(),{base,entities:splitEntities(body).filter(e=>e.type!=='ENDBLK'&&e.type!=='ENDSEC')});
+      if(name){const flags=Number(header.find(p=>p[0]==='70')?.[1]||0),path=header.find(p=>p[0]==='1')?.[1]||'';blocks.set(name.toUpperCase(),{base,xref:(flags&4)===4||!!path,entities:splitEntities(body).filter(e=>e.type!=='ENDBLK'&&e.type!=='ENDSEC')});}
     }
   }
   const section=pairs.findIndex(p=>p[0]==='2'&&p[1]==='ENTITIES');
@@ -85,6 +85,7 @@ function expandBlockInserts(pairs: Pair[], warnings: string[]): Pair[] {
     const get=(code:string)=>item.values.find(p=>p[0]===code)?.[1];
     const name=(get('2')||'').toUpperCase(), block=blocks.get(name);
     if(!block){warnings.push('Skipped INSERT referencing missing BLOCK '+(get('2')||'(unnamed)')+'.');continue;}
+    if(block.xref){warnings.push('Skipped external XREF '+name+'; external drawing files are not fetched or merged automatically.');continue;}
     const at={x:Number(get('10')||0),y:Number(get('20')||0)},sx=Number(get('41')||1),sy=Number(get('42')||1),angle=Number(get('50')||0)*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle),insertLayer=get('8')||'0';
     if(![at.x,at.y,sx,sy,angle].every(Number.isFinite)||sx===0||sy===0){warnings.push('Skipped INSERT with invalid transform.');continue;}
     for(const child of block.entities){
