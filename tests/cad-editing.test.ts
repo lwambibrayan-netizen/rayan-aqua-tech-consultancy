@@ -179,6 +179,8 @@ describe('CAD editing geometry operations', () => {
     expect(issues.some(issue => issue.includes('duplicate entity ID'))).toBe(true);
     expect(issues.some(issue => issue.includes('positive finite radius'))).toBe(true);
     expect(validateCadEntities([line])).toEqual([]);
+    const importedDxf: CadEditableEntity = { id:'dxf-poly', type:'polyline', points:[{x:0,y:0},{x:5,y:0},{x:10,y:0}], bulges:[0,0,0], layer:'WATER' };
+    expect(validateCadEntities([importedDxf])).toEqual([]);
   });
 
   it('rejects degenerate geometry and invalid array dimensions', () => {
