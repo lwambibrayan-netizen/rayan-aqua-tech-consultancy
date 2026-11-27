@@ -32,20 +32,21 @@ const add = (a: DimensionPoint,b: DimensionPoint): DimensionPoint => ({x:a.x+b.x
 const sub = (a: DimensionPoint,b: DimensionPoint): DimensionPoint => ({x:a.x-b.x,y:a.y-b.y});
 const scale = (a: DimensionPoint,s:number): DimensionPoint => ({x:a.x*s,y:a.y*s});
 const unit = (a: DimensionPoint): DimensionPoint => { const n=Math.hypot(a.x,a.y); if(n<=1e-12) throw new Error('Dimension direction cannot be zero.'); return scale(a,1/n); };
-const rotate = (p:DimensionPoint,angle:number):DimensionPoint => ({x:p.x*Math.cos(angle)-p.y*Math.sin(angle),y:p.x*Math.sin(angle)+p.y*Math.cos(angle)});
 function assertPoint(p:DimensionPoint,label:string){if(!finitePoint(p))throw new Error(label+' coordinates must be finite.');}
 export function calculateAngularDimension(vertex:DimensionPoint,first:DimensionPoint,second:DimensionPoint,radiusM:number):AngularDimensionGeometry {
   assertPoint(vertex,'Vertex');assertPoint(first,'First ray');assertPoint(second,'Second ray');
   if(!Number.isFinite(radiusM)||radiusM<=0)throw new Error('Angular dimension radius must be positive.');
   const u=unit(sub(first,vertex)),v=unit(sub(second,vertex));
-  let start=Math.atan2(u.y,u.x),end=Math.atan2(v.y,v.x);
+  const firstAngle=Math.atan2(u.y,u.x),secondAngle=Math.atan2(v.y,v.x);
+  let start=firstAngle,end=secondAngle;
   let sweep=(end-start+Math.PI*2)%(Math.PI*2);
-  if(sweep>Math.PI){const temp=start;start=end;end=temp;sweep=Math.PI*2-sweep;}
+  let firstAtStart=true;
+  if(sweep>Math.PI){start=secondAngle;end=firstAngle;sweep=Math.PI*2-sweep;firstAtStart=false;}
   const mid=start+sweep/2;
   const arcStart=add(vertex,scale({x:Math.cos(start),y:Math.sin(start)},radiusM));
   const arcEnd=add(vertex,scale({x:Math.cos(end),y:Math.sin(end)},radiusM));
   const labelPoint=add(vertex,scale({x:Math.cos(mid),y:Math.sin(mid)},radiusM*1.18));
-  return {firstExtension:{a:first,b:arcStart},secondExtension:{a:second,b:arcEnd},arc:{center:{...vertex},radius:radiusM,startAngleRad:start,endAngleRad:end},dimensionLine:{a:arcStart,b:arcEnd},angleRad:sweep,labelPoint};
+  return {firstExtension:{a:first,b:firstAtStart?arcStart:arcEnd},secondExtension:{a:second,b:firstAtStart?arcEnd:arcStart},arc:{center:{...vertex},radius:radiusM,startAngleRad:start,endAngleRad:end},dimensionLine:{a:arcStart,b:arcEnd},angleRad:sweep,labelPoint};
 }
 export function calculateRadiusDimension(center:DimensionPoint,edge:DimensionPoint,leaderPoint:DimensionPoint):RadialDimensionGeometry {
   assertPoint(center,'Circle center');assertPoint(edge,'Circle edge');assertPoint(leaderPoint,'Leader point');
