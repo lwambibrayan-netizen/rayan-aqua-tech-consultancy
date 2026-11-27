@@ -179,9 +179,9 @@ describe('CAD editing geometry operations', () => {
     const extendedEnd=extendPolylineSegment(quarterArc,extendEnd,1,0);
     expect(extendedEnd.points[1].x).toBeCloseTo(-0.5,8);
     expect(extendedEnd.points[1].y).toBeCloseTo(Math.sqrt(0.75),8);
-    expect(extendedEnd.bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/3),8);
+    expect(extendedEnd.bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/6),8);
 
-    const extendStart: CadEditableEntity = {id:'extend-start',type:'line',points:[{x:0.5,y:-1},{x:1,y:-0.5}],layer:'0'};
+    const extendStart: CadEditableEntity = {id:'extend-start',type:'line',points:[{x:0.5,y:-0.5},{x:1,y:-0.5}],layer:'0'};
     const extendedStart=extendPolylineSegment(quarterArc,extendStart,0,0);
     expect(extendedStart.points[0].x).toBeCloseTo(Math.sqrt(0.75),8);
     expect(extendedStart.points[0].y).toBeCloseTo(-0.5,8);
