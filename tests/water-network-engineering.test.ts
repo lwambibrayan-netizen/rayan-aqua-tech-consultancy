@@ -68,6 +68,20 @@ describe('water network engineering', () => {
     expect(profile[1].coverDepthM).toBeCloseTo(1.89);
   });
 
+  it('prefers surveyed intermediate ground and invert RL over endpoint interpolation', () => {
+    const pipe = createWaterComponent('pipe', 'P-SURVEY', 0, 0);
+    pipe.geometry = [
+      { x: 0, y: 0, groundLevelM: 100, invertLevelM: 98 },
+      { x: 5, y: 0, groundLevelM: 102, invertLevelM: 99 },
+      { x: 10, y: 0, groundLevelM: 99, invertLevelM: 97 },
+    ];
+    pipe.properties.externalDiameterMm = 110;
+    const profile = buildPipeLongitudinalProfile(pipe);
+    expect(profile[1].groundLevelM).toBe(102);
+    expect(profile[1].invertLevelM).toBe(99);
+    expect(profile[1].coverDepthM).toBeCloseTo(2.89);
+  });
+
   it('builds grouped material quantities and preliminary excavation volumes', () => {
     const doc = document();
     const pipe2 = createWaterComponent('pipe', 'P-2', 10, 0);
