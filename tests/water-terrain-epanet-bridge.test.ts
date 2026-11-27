@@ -11,6 +11,7 @@ describe('terrain-aware water engineering',()=>{
   expect(sampleTerrainElevation(terrain,5,5)).toBeCloseTo(100);
   expect(sampleTerrainElevation(terrain,-1,0)).toBeNull();
   expect(()=>sampleTerrainElevation({...terrain,elevationsM:[null,...terrain.elevationsM.slice(1)]},1,1)).not.toThrow();
+  expect(sampleTerrainElevation({...terrain,elevationsM:[100,null,...terrain.elevationsM.slice(2)]},0,0)).toBe(100);
  });
  it('samples a route ground profile at regular chainages',()=>{
   const profile=sampleGroundProfile(terrain,[{x:0,y:0},{x:20,y:0}],5);
