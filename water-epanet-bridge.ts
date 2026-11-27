@@ -1,5 +1,5 @@
 import { createWaterComponent, type WaterCadDocument, type WaterCadComponent, type WaterComponentKind } from './water-cad';
-import type { NetworkDocument } from './water-network-engineering';
+import { getWaterPorts, type NetworkDocument } from './water-network-engineering';
 
 export type EpanetImportResult = { document: NetworkDocument; warnings: string[] };
 const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
@@ -134,9 +134,55 @@ export type HydraulicLinkResult={id:string;flowLps?:number;velocityMs?:number;he
 export type HydraulicResults={timeSeconds:number;nodes:HydraulicNodeResult[];links:HydraulicLinkResult[]};
 export function mergeEpanetRoundTrip(base:WaterCadDocument,imported:WaterCadDocument):WaterCadDocument {
   const original=new Map(base.components.map(c=>[c.id,c]));
-  const merged=imported.components.map(c=>{
-    const prior=original.get(c.id);if(!prior)return c;
-    return {...c,properties:{...prior.properties,...c.properties},customPorts:prior.customPorts??c.customPorts};
+  const hydraulicKinds=new Set<WaterComponentKind>(['pipe','pump','valve','junction','source','tank','reservoir']);
+  const importedIds=new Set(imported.components.map(c=>c.id));
+  const propertyKeys:Partial<Record<WaterComponentKind,Array<keyof WaterCadComponent['properties']>>> = {
+    pipe:['nominalDiameterMm','internalDiameterMm','hydraulicLengthM','roughness','minorLossCoefficient','initialStatus'],
+    pump:['pumpCurvePoints','epanetPumpCurveId','pumpDutyFlowM3h','pumpDutyHeadM','pumpPowerKw','pumpSpeedMultiplier','pumpSpeedPattern'],
+    valve:['valveType','valveSetting','nominalDiameterMm','internalDiameterMm','hydraulicLengthM'],
+    junction:['hydraulicElevationM','flowM3h','demandPatternId','additionalDemands','emitterCoefficient'],
+    source:['hydraulicHeadM','hydraulicHeadPatternId','hydraulicElevationM'],
+    reservoir:['hydraulicHeadM','hydraulicHeadPatternId','hydraulicElevationM'],
+    tank:['hydraulicElevationM','tankOperatingLevelM','tankMinLevelM','tankMaxLevelM','tankDiameterM','tankMinVolumeM3'],
+  };
+  const mergedImported=imported.components.map(component=>{
+    const prior=original.get(component.id);if(!prior)return component;
+    const properties={...prior.properties};
+    for(const key of propertyKeys[component.kind]??[]) {
+      const value=component.properties[key];
+      if(value!==undefined)(properties as Record<string,unknown>)[key]=value;
+    }
+    const geometry=component.geometry.map(point=>{
+      const match=prior.geometry.find(old=>Math.abs(old.x-point.x)<1e-6&&Math.abs(old.y-point.y)<1e-6);
+      return match?{...match,...point}:point;
+    });
+    return {...prior,...component,geometry,properties,customPorts:component.customPorts??prior.customPorts,layer:component.layer??prior.layer};
   });
-  return {...base,components:merged};
+  const preservedCadOnly=base.components.filter(component=>!importedIds.has(component.id)&&!hydraulicKinds.has(component.kind));
+  const components=[...mergedImported,...preservedCadOnly];
+  const validPorts=new Set(components.flatMap(component=>getWaterPorts(component).map(port=>port.id)));
+  const connections=(base.connections??[]).filter(connection=>validPorts.has(connection.aPortId)&&validPorts.has(connection.bPortId));
+  const usedPorts=new Set(connections.flatMap(connection=>[connection.aPortId,connection.bPortId]));
+  const nodeById=new Map(components.filter(component=>['junction','source','tank','reservoir'].includes(component.kind)).map(component=>[component.id,component]));
+  let sequence=connections.length;
+  for(const link of mergedImported.filter(component=>['pipe','pump','valve'].includes(component.kind))){
+    const linkPorts=getWaterPorts(link);
+    const endpoints:[string|undefined,string|undefined]=[link.fromNodeId,link.toNodeId];
+    endpoints.forEach((nodeId,index)=>{
+      const node=nodeId?nodeById.get(nodeId):undefined;
+      const linkPort=linkPorts[index],nodePort=node?getWaterPorts(node)[0]:undefined;
+      if(!linkPort||!nodePort||usedPorts.has(linkPort.id)||usedPorts.has(nodePort.id))return;
+      const id='CON-EPANET-'+(++sequence).toString().padStart(4,'0');
+      connections.push({id,aPortId:linkPort.id,bPortId:nodePort.id});
+      usedPorts.add(linkPort.id);usedPorts.add(nodePort.id);
+    });
+  }
+  const matchedNetwork=imported.components.some(component=>original.has(component.id));
+  return {
+    ...base,...imported,components,connections,
+    horizontalCrs:matchedNetwork&&base.horizontalCrs?base.horizontalCrs:imported.horizontalCrs,
+    horizontalUnits:matchedNetwork&&base.horizontalUnits?base.horizontalUnits:imported.horizontalUnits,
+    verticalDatum:matchedNetwork?base.verticalDatum:imported.verticalDatum,
+  };
 }
+
