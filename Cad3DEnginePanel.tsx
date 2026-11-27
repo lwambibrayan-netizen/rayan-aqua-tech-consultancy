@@ -405,6 +405,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [view, setView] = useState<'2d' | '3d'>('2d');
   const [ribbonTab, setRibbonTab] = useState<'Home'|'Insert'|'Annotate'|'Layers'|'View'|'Output'>('Home');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [commandLine, setCommandLine] = useState('');
   const [layer, setLayer] = useState('WATER_NETWORK');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1630,22 +1631,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         </div>
         </div>
         <div className="aquacad-quickbar"><span>Model: {view.toUpperCase()}</span><span>{shapes.length} entities</span><span>{waterCad.components.length} water objects</span><span>{units}</span><span>{snapEnabled?'OSNAP ON':'OSNAP OFF'}</span></div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button className={view === '2d' ? 'primary-button' : 'secondary-button'} onClick={() => setView('2d')}>2D CAD</button>
-          <button className={view === '3d' ? 'primary-button' : 'secondary-button'} onClick={() => setView('3d')}>3D view</button>
-          <label>Measurement units <select value={units} disabled={!calibratedMetresPerUnit} onChange={event => setUnits(event.target.value)}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
-          <button className={snapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setSnapEnabled(value => !value)}><Crosshair size={15} /> Object snap: {snapEnabled ? 'ON' : 'OFF'}</button>
-          <button className={orthoEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setOrthoEnabled(value => !value)}>Ortho: {orthoEnabled ? 'ON' : 'OFF'}</button>
-          <button className={polarEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setPolarEnabled(value => !value)}>Polar: {polarEnabled ? 'ON' : 'OFF'}</button>
-          <label style={{fontSize:12}}>Polar step <select value={polarIncrement} onChange={e=>setPolarIncrement(Number(e.target.value))}><option value={5}>5°</option><option value={10}>10°</option><option value={15}>15°</option><option value={22.5}>22.5°</option><option value={30}>30°</option><option value={45}>45°</option><option value={90}>90°</option></select></label>
-          <button className={gridSnapEnabled ? 'primary-button' : 'secondary-button'} onClick={() => setGridSnapEnabled(value => !value)}>Grid snap: {gridSnapEnabled ? 'ON' : 'OFF'}</button>
-          <button className={panMode ? 'primary-button' : 'secondary-button'} onClick={() => setPanMode(value => !value)}>Pan: {panMode ? 'ON' : 'OFF'}</button>
-          <button className="secondary-button" onClick={() => setViewBox({ x: 0, y: 0, width: WIDTH, height: HEIGHT })}>Reset view</button>
-          <button className="secondary-button" disabled={!history.past.length} onClick={() => setHistory(current => undoHistory(current))}>Undo</button>
-          <button className="secondary-button" disabled={!history.future.length} onClick={() => setHistory(current => redoHistory(current))}>Redo</button>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>Grid step (drawing units) <input type="number" min="0.1" step="any" value={gridSize} onChange={event => setGridSize(Math.max(0.1, Number(event.target.value) || 10))} style={{ width: 66, padding: 6 }} /></label>
-          <span className="muted" style={{ fontSize: 11 }}>{calibratedMetresPerUnit ? `Calibrated: ${calibratedMetresPerUnit.toPrecision(5)} m per drawing unit` : 'Unscaled legacy drawing · calibrate a known line for real measurements'}</span>
-        </div>
+
       </div>
 
 
@@ -2126,6 +2112,42 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       <div className="panel" style={{ padding: 14 }}>
         <strong>Drawing inventory</strong>
         <p className="muted">{shapes.length} entities · {counts.routes} routes · {counts.structures} structures · {counts.circles} circular items</p>
+      </div>
+
+      <div className="aquacad-commandbar">
+        <div className="aquacad-status-controls">
+          <span className="aquacad-status-label">MODEL</span><strong>{view.toUpperCase()}</strong>
+          <span className="aquacad-status-separator" />
+          <button className={snapEnabled ? 'is-on' : ''} onClick={() => setSnapEnabled(v => !v)} title="Toggle object snaps">OSNAP {snapEnabled ? 'ON' : 'OFF'}</button>
+          <button className={gridSnapEnabled ? 'is-on' : ''} onClick={() => setGridSnapEnabled(v => !v)} title="Toggle grid snap">GRID {gridSnapEnabled ? 'ON' : 'OFF'}</button>
+          <button className={orthoEnabled ? 'is-on' : ''} onClick={() => setOrthoEnabled(v => !v)} title="Toggle orthographic drawing">ORTHO {orthoEnabled ? 'ON' : 'OFF'}</button>
+          <button className={polarEnabled ? 'is-on' : ''} onClick={() => setPolarEnabled(v => !v)} title="Toggle polar tracking">POLAR {polarEnabled ? 'ON' : 'OFF'}</button>
+          <label className="aquacad-status-setting">STEP <input type="number" min="0.1" step="any" value={gridSize} onChange={event => setGridSize(Math.max(0.1, Number(event.target.value) || 10))}/></label>
+          <label className="aquacad-status-setting">ANGLE <select value={polarIncrement} onChange={event => setPolarIncrement(Number(event.target.value))}><option value={5}>5°</option><option value={10}>10°</option><option value={15}>15°</option><option value={22.5}>22.5°</option><option value={30}>30°</option><option value={45}>45°</option><option value={90}>90°</option></select></label>
+          <label className="aquacad-status-setting">UNITS <select value={units} disabled={!calibratedMetresPerUnit} onChange={event => setUnits(event.target.value)}><option value="m">m</option><option value="mm">mm</option></select></label>
+          <span className="aquacad-status-count">{shapes.length} ENTITIES</span>
+        </div>
+        <form className="aquacad-command-input" onSubmit={event => {
+          event.preventDefault();
+          const cmd = commandLine.trim().toLowerCase();
+          if (['l','line'].includes(cmd)) { setMode('line'); setDraft([]); setMessage('LINE: specify first point in drawing.'); }
+          else if (['pl','pline','polyline'].includes(cmd)) { setMode('polyline'); setDraft([]); setMessage('PLINE: specify first point in drawing.'); }
+          else if (['c','circle'].includes(cmd)) { setMode('circle'); setDraft([]); setMessage('CIRCLE: specify centre point in drawing.'); }
+          else if (['rec','rect','rectangle'].includes(cmd)) { setMode('rect'); setDraft([]); setMessage('RECTANGLE: specify first corner.'); }
+          else if (['e','erase','delete'].includes(cmd)) { deleteSelectedShape(); }
+          else if (cmd === 'u' || cmd === 'undo') { setHistory(current => undoHistory(current)); }
+          else if (cmd === 'redo') { setHistory(current => redoHistory(current)); }
+          else if (['z','zoom'].includes(cmd)) { setViewBox({x:0,y:0,width:WIDTH,height:HEIGHT}); }
+          else if (['osnap','snap'].includes(cmd)) { setSnapEnabled(v => !v); }
+          else if (cmd === 'ortho') { setOrthoEnabled(v => !v); }
+          else if (cmd === 'grid') { setGridSnapEnabled(v => !v); }
+          else if (cmd === 'save') { saveDrawing(); }
+          else if (cmd === 'help' || cmd === '?') { setMessage('Commands: LINE (L), PLINE (PL), CIRCLE (C), RECTANGLE (REC), ERASE (E), UNDO (U), REDO, ZOOM (Z), OSNAP, ORTHO, GRID, SAVE.'); }
+          else if (cmd) { setMessage('Unknown command: ' + commandLine + '. Type HELP for available commands.'); }
+          setCommandLine('');
+        }}>
+          <span>⌕</span><input value={commandLine} onChange={event => setCommandLine(event.target.value)} placeholder="Search commands or type a command… (HELP)" aria-label="Search or enter CAD command"/><kbd>↵</kbd>
+        </form>
       </div>
     </div>
   );
