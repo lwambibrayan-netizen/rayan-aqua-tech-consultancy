@@ -97,6 +97,45 @@ function segmentIntersection(a: Point2D, b: Point2D, c: Point2D, d: Point2D): Po
   if (t < -eps || t > 1 + eps || u < -eps || u > 1 + eps) return null;
   return { x: a.x + t * r.x, y: a.y + t * r.y };
 }
+
+/** Exact geometric window/crossing selection for supported line, polyline, rectangle and circle entities. */
+export function selectEntitiesInWindow<T extends CadEditableEntity>(entities:T[], window:CadWindow, crossing:boolean):T[] {
+  const values=[window.minX,window.minY,window.maxX,window.maxY];
+  if(!values.every(finite)||window.minX>window.maxX||window.minY>window.maxY) throw new Error('Selection window bounds must be finite and ordered.');
+  const inside=(p:Point2D)=>p.x>=window.minX&&p.x<=window.maxX&&p.y>=window.minY&&p.y<=window.maxY;
+  const edges:Array<[Point2D,Point2D]>=[
+    [{x:window.minX,y:window.minY},{x:window.maxX,y:window.minY}],
+    [{x:window.maxX,y:window.minY},{x:window.maxX,y:window.maxY}],
+    [{x:window.maxX,y:window.maxY},{x:window.minX,y:window.maxY}],
+    [{x:window.minX,y:window.maxY},{x:window.minX,y:window.minY}],
+  ];
+  const hit=(a:Point2D,b:Point2D,c:Point2D,d:Point2D)=>{
+    const cross=(u:Point2D,v:Point2D)=>u.x*v.y-u.y*v.x;
+    const r={x:b.x-a.x,y:b.y-a.y},s={x:d.x-c.x,y:d.y-c.y},q={x:c.x-a.x,y:c.y-a.y};
+    const den=cross(r,s); if(Math.abs(den)<1e-12)return false;
+    const t=cross(q,s)/den,u=cross(q,r)/den;
+    return t>=-1e-9&&t<=1+1e-9&&u>=-1e-9&&u<=1+1e-9;
+  };
+  return entities.filter(entity=>{
+    if(entity.type==='circle'){
+      const c=entity.points[0],r=entity.radius||0;
+      if(!finite(r)||r<0)return false;
+      if(!crossing)return c.x-r>=window.minX&&c.x+r<=window.maxX&&c.y-r>=window.minY&&c.y+r<=window.maxY;
+      const q={x:Math.max(window.minX,Math.min(c.x,window.maxX)),y:Math.max(window.minY,Math.min(c.y,window.maxY))};
+      return dist(c,q)<=r+1e-9;
+    }
+    let points=entity.points;
+    let segments:Array<[Point2D,Point2D]>=[];
+    if(entity.type==='rect'){
+      const [a,b]=entity.points; points=[a,{x:b.x,y:a.y},b,{x:a.x,y:b.y}];
+      segments=points.map((v,i)=>[v,points[(i+1)%4]]);
+    }else if(entity.type==='line')segments=[[entity.points[0],entity.points[1]]];
+    else segments=entity.points.slice(1).map((v,i)=>[entity.points[i],v]);
+    if(!crossing)return points.length>0&&points.every(inside);
+    return points.some(inside)||segments.some(([a,b])=>edges.some(([c,d])=>hit(a,b,c,d)));
+  });
+}
+
 export function trimLine<T extends CadEditableEntity>(line: T, cutter: CadEditableEntity, pickPoint: Point2D): T {
   if (line.type !== 'line' || cutter.points.length < 2) throw new Error('TRIM currently requires a line and a linear cutting edge.');
   assertPoint(pickPoint);
