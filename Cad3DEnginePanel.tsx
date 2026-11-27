@@ -335,6 +335,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [terrainGrid, setTerrainGrid] = useState<TerrainGrid | null>(() => initialData?.terrainGrid || null);
   const [hydraulicResults, setHydraulicResults] = useState<HydraulicResults | null>(() => initialData?.hydraulicResults || null);
   const [hydraulicResultSeries, setHydraulicResultSeries] = useState<HydraulicResults[]>(() => initialData?.hydraulicResultSeries || []);
+  const [hydraulicReport, setHydraulicReport] = useState<string>(() => initialData?.hydraulicReport || '');
   const [hydraulicTimeIndex, setHydraulicTimeIndex] = useState(0);
   const [simulationBusy, setSimulationBusy] = useState(false);
   const [hydraulicMetric, setHydraulicMetric] = useState<HydraulicOverlayMetric>('velocityMs');
@@ -415,6 +416,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setTerrainGrid(initialData?.terrainGrid || null);
     setHydraulicResults(initialData?.hydraulicResults || null);
     setHydraulicResultSeries(initialData?.hydraulicResultSeries || []);
+    setHydraulicReport(initialData?.hydraulicReport || '');
     setHydraulicTimeIndex(0);
     setHydraulicOverlay(initialData?.hydraulicOverlay || null);
     setDrafting(createDraftingDocument(initialData?.drafting));
@@ -931,6 +933,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       setWaterCad(imported.document);
       setHydraulicResults(null);
       setHydraulicResultSeries([]);
+      setHydraulicReport('');
       setHydraulicTimeIndex(0);
       setHydraulicOverlay(null);
       setMessage('Imported ' + imported.document.components.length + ' EPANET network objects into CAD.' + (imported.warnings.length ? ' Review: ' + imported.warnings.join(' ') : ' Coordinates and hydraulic link lengths were retained.'));
@@ -953,6 +956,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const finalIndex=mappedResults.length-1;
       const finalResult=mappedResults[finalIndex];
       setHydraulicResultSeries(mappedResults);
+      setHydraulicReport(output.report);
       setHydraulicTimeIndex(finalIndex);
       setHydraulicResults(finalResult);
       setHydraulicOverlay(buildHydraulicOverlay(waterCad,finalResult,hydraulicMetric));
@@ -1014,6 +1018,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         terrainGrid,
         hydraulicResults,
         hydraulicResultSeries,
+        hydraulicReport,
         hydraulicOverlay,
         drafting: { ...drafting, dimensionStyle },
         paperLayouts,
@@ -1794,6 +1799,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <button className="primary-button" onClick={applyTerrainToSelectedPipe} disabled={!terrainGrid || selectedWaterComponent?.kind !== 'pipe'}>Route selected pipe to cover</button>
             <label style={{ fontSize: 12 }}>Drawing overlay<select value={hydraulicMetric} onChange={e => changeHydraulicMetric(e.target.value as HydraulicOverlayMetric)} style={{ display: 'block' }}><option value="pressureM">Node pressure (m)</option><option value="flowLps">Link flow (L/s)</option><option value="velocityMs">Velocity (m/s)</option><option value="headlossM">Headloss (m)</option></select></label>
           </div>
+          {hydraulicReport && <button className="secondary-button" onClick={() => downloadWaterFile('RayanAqua-EPANET-report.rpt',hydraulicReport,'text/plain')}>Download EPANET report</button>}
           {hydraulicResultSeries.length>1 && <label style={{ fontSize: 12, display: 'block', marginTop: 8 }}>Simulation timestep
             <select value={hydraulicTimeIndex} onChange={e=>selectHydraulicTime(Number(e.target.value))} style={{ display: 'block' }}>
               {hydraulicResultSeries.map((result,index)=><option key={result.timeSeconds+'-'+index} value={index}>{result.timeSeconds} seconds</option>)}
