@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vitest run && tsc --noEmit && vite build",
+    "build": "vitest run && tsc --noEmit && vite build && node scripts/check-bundle-budget.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "preview": "vite preview"
