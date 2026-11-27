@@ -503,7 +503,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             } else if (dimensionKind === 'radius' || dimensionKind === 'diameter') {
               const g = dimensionKind === 'radius' ? calculateRadiusDimension(next[0],next[1],next[2]) : calculateDiameterDimension(next[0],next[1],next[2]);
               g.centerMark.forEach(line=>pushLine(line.a,line.b)); pushLine(g.leader.a,g.leader.b);
-              labelPoint=g.labelPoint; label=(dimensionKind === 'radius'?'R ':'Ø ')+formatStyledDimension(dimensionKind === 'radius'?g.radius:g.diameter,dimensionStyle);
+              labelPoint=g.labelPoint; label=(dimensionKind === 'radius'?'R ':'Ø ')+formatStyledDimension(dimensionKind === 'radius'?g.radius:g.radius*2,dimensionStyle);
             } else if (dimensionKind === 'ordinate') {
               const offset = ordinateAxis === 'x' ? next[2].y-next[1].y : next[2].x-next[1].x;
               const g = calculateOrdinateDimension(next[0],next[1],ordinateAxis,offset);
