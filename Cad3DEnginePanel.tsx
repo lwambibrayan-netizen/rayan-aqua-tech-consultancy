@@ -186,6 +186,21 @@ function bulgeSegmentPoints(a:Point2D,b:Point2D,bulge:number,steps=16):Point2D[]
   const start=Math.atan2(a.y-center.y,a.x-center.x);
   return Array.from({length:steps+1},(_,i)=>{const angle=start+sweep*i/steps;return {x:center.x+radius*Math.cos(angle),y:center.y+radius*Math.sin(angle)};});
 }
+function nearestPointOnBulgeArc(cursor:Point2D,a:Point2D,b:Point2D,bulge:number):Point2D {
+  const dx=b.x-a.x,dy=b.y-a.y,chord=Math.hypot(dx,dy);
+  if(chord<=1e-12||Math.abs(bulge)<=1e-12)return nearestPointOnSegment(cursor,a,b);
+  const offset=chord*(1-bulge*bulge)/(4*bulge);
+  const center={x:(a.x+b.x)/2-dy/chord*offset,y:(a.y+b.y)/2+dx/chord*offset};
+  const radius=chord*(1+bulge*bulge)/(4*Math.abs(bulge));
+  const start=Math.atan2(a.y-center.y,a.x-center.x),sweep=4*Math.atan(bulge);
+  const dxCursor=cursor.x-center.x,dyCursor=cursor.y-center.y;
+  if(Math.hypot(dxCursor,dyCursor)<1e-12)return a;
+  const angle=Math.atan2(dyCursor,dxCursor);
+  const tau=Math.PI*2,mod=(v:number)=>(v%tau+tau)%tau;
+  const onArc=sweep>=0?mod(angle-start)<=sweep+1e-9:mod(start-angle)<=-sweep+1e-9;
+  if(!onArc)return Math.hypot(cursor.x-a.x,cursor.y-a.y)<=Math.hypot(cursor.x-b.x,cursor.y-b.y)?a:b;
+  return {x:center.x+radius*Math.cos(angle),y:center.y+radius*Math.sin(angle)};
+}
 function expandedPolylinePoints(shape:{points:Point2D[];bulges?:number[]}):Point2D[] {
   const result:Point2D[]=[];
   for(let i=0;i<shape.points.length-1;i++){
@@ -230,14 +245,18 @@ function getSnapCandidates(shapes: Shape[], cursor: Point2D): Array<{ point: Poi
       return;
     }
     shape.points.forEach(point => candidates.push({ point, kind: 'ENDPOINT' }));
-    getSegments([shape]).forEach(([a, b]) => candidates.push({ point: nearestPointOnSegment(cursor, a, b), kind: 'NEAREST' }));
-    if (shape.type === 'line' || shape.type === 'polyline') {
-      for (let i = 0; i < shape.points.length - 1; i++) {
-        const segment=shape.type==='polyline'
-          ? bulgeSegmentPoints(shape.points[i],shape.points[i+1],shape.bulges?.[i]||0,2)
-          : [shape.points[i],shape.points[i+1]];
-        candidates.push({ point: segment[Math.floor(segment.length/2)], kind: 'MIDPOINT' });
+    if(shape.type==='polyline'){
+      for(let i=0;i<shape.points.length-1;i++){
+        const a=shape.points[i],b=shape.points[i+1],bulge=shape.bulges?.[i]||0;
+        candidates.push({point:Math.abs(bulge)>1e-12?nearestPointOnBulgeArc(cursor,a,b,bulge):nearestPointOnSegment(cursor,a,b),kind:'NEAREST'});
+        const segment=bulgeSegmentPoints(a,b,bulge,2);
+        candidates.push({point:segment[Math.floor(segment.length/2)],kind:'MIDPOINT'});
       }
+    }else if(shape.type==='line'){
+      candidates.push({point:nearestPointOnSegment(cursor,shape.points[0],shape.points[1]),kind:'NEAREST'});
+      candidates.push({point:{x:(shape.points[0].x+shape.points[1].x)/2,y:(shape.points[0].y+shape.points[1].y)/2},kind:'MIDPOINT'});
+    }else if(shape.type==='rect'){
+      getSegments([shape]).forEach(([a,b])=>candidates.push({point:nearestPointOnSegment(cursor,a,b),kind:'NEAREST'}));
     }
   });
   return candidates;
