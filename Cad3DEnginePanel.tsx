@@ -2030,7 +2030,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               {shape.type === 'circle' ? <>
                 <circle cx={shape.points[0].x} cy={shape.points[0].y} r="4" fill="#ffffff" stroke="#176b9a" strokeWidth="1.5"/>
                 <circle cx={shape.points[0].x+(shape.radius||12)} cy={shape.points[0].y} r="4" fill="#ffffff" stroke="#176b9a" strokeWidth="1.5"/>
-              </> : shape.points.map((point,index)=><rect key={index} x={point.x-3.5} y={point.y-3.5} width="7" height="7" fill="#ffffff" stroke="#176b9a" strokeWidth="1.5"/>)}
+              </> : shape.type === 'rect' ? (() => { const [a,b]=shape.points; return [a,{x:b.x,y:a.y},b,{x:a.x,y:b.y}].map((point,index)=><rect key={index} x={point.x-3.5} y={point.y-3.5} width="7" height="7" fill="#ffffff" stroke="#176b9a" strokeWidth="1.5"/>); })() : shape.points.map((point,index)=><rect key={index} x={point.x-3.5} y={point.y-3.5} width="7" height="7" fill="#ffffff" stroke="#176b9a" strokeWidth="1.5"/>)}
             </g>)}
             {renderedWaterComponents}
             {renderedAnnotations}
