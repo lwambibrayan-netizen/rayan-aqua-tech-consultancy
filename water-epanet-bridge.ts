@@ -43,10 +43,10 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const patternMap=new Map<string,number[]>();
   bySection('PATTERNS').forEach(r=>{const id=safe(r.values[0]);const values=patternMap.get(id)??[];values.push(...r.values.slice(1).map(Number).filter(Number.isFinite));patternMap.set(id,values);});
   const nodes=new Map<string,WaterCadComponent>();
-  const addNode=(idRaw:string,kind:WaterComponentKind,elevation:number,extra?:{flow?:number;level?:number;diameter?:number;head?:number;demandPatternId?:string;headPatternId?:string})=>{
+  const addNode=(idRaw:string,kind:WaterComponentKind,elevation:number|null,extra?:{flow?:number;level?:number;diameter?:number;head?:number;demandPatternId?:string;headPatternId?:string})=>{
     const id=safe(idRaw); if(nodes.has(id)){warnings.push('Duplicate node '+id+' at import line; duplicate skipped.');return;}
     const xy=coordinates.get(id)??{x:nodes.size*10,y:0};
-    const c=createWaterComponent(kind,id,xy.x,xy.y); c.properties.hydraulicElevationM=elevation; if(extra?.head!==undefined)c.properties.hydraulicHeadM=extra.head; if(extra?.demandPatternId)c.properties.demandPatternId=safe(extra.demandPatternId); if(extra?.headPatternId)c.properties.hydraulicHeadPatternId=safe(extra.headPatternId);
+    const c=createWaterComponent(kind,id,xy.x,xy.y); if(elevation!==null)c.properties.hydraulicElevationM=elevation; if(extra?.head!==undefined)c.properties.hydraulicHeadM=extra.head; if(extra?.demandPatternId)c.properties.demandPatternId=safe(extra.demandPatternId); if(extra?.headPatternId)c.properties.hydraulicHeadPatternId=safe(extra.headPatternId);
     if(extra?.flow!==undefined)c.properties.flowM3h=extra.flow;
     if(extra?.level!==undefined)c.properties.tankOperatingLevelM=extra.level;
     if(extra?.diameter!==undefined)c.properties.tankDiameterM=extra.diameter;
@@ -55,7 +55,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   bySection('JUNCTIONS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed junction at line '+r.line+'.');return;}addNode(r.values[0],'junction',headToM(num(r.values[1])),{flow:flowToM3h(num(r.values[2])),demandPatternId:r.values[3]});});
   bySection('DEMANDS').forEach(r=>{const node=nodes.get(safe(r.values[0]));if(!node||r.values.length<2){warnings.push('Secondary demand at line '+r.line+' references a missing node or is malformed.');return;}const demand={flowM3h:flowToM3h(num(r.values[1])),patternId:r.values[2]?safe(r.values[2]):undefined};node.properties.additionalDemands=[...(node.properties.additionalDemands??[]),demand];});
   bySection('EMITTERS').forEach(r=>{const node=nodes.get(safe(r.values[0]));if(!node||r.values.length<2){warnings.push('Emitter at line '+r.line+' references a missing node or is malformed.');return;}node.properties.emitterCoefficient=emitterToLpsSqrtM(num(r.values[1]));});
-  bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',headToM(num(r.values[1])),{head:headToM(num(r.values[1])),headPatternId:r.values[2]});});
+  bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',null,{head:headToM(num(r.values[1])),headPatternId:r.values[2]});});
   bySection('TANKS').forEach(r=>{
     if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}
     addNode(r.values[0],'tank',headToM(num(r.values[1])),{level:headToM(num(r.values[2])),diameter:usUnits?num(r.values[5])*0.3048:num(r.values[5])});
