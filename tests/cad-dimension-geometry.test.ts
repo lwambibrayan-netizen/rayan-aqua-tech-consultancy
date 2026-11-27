@@ -54,3 +54,26 @@ describe('advanced dimension geometry', () => {
     expect(()=>calculateChainDimensions([{x:0,y:0},{x:0,y:0}],1)).toThrow();
   });
 });
+
+
+describe('associative dimension anchors', () => {
+  it('remeasures an aligned dimension when a referenced polyline vertex moves', async () => {
+    const { findAssociativeAnchor, makeAlignedDimension, resolveAssociativeDimension, measureDimension } = await import('../cad-drafting');
+    const entities = [{ id: 'pipe-1', type: 'polyline', points: [{x:0,y:0},{x:3,y:0}] }];
+    const a = findAssociativeAnchor({x:0,y:0}, entities, 0.002, 1);
+    const b = findAssociativeAnchor({x:3,y:0}, entities, 0.002, 1);
+    const dimension = makeAlignedDimension('dim-1', {x:0,y:0}, {x:3,y:0}, 1);
+    dimension.association = { a, b };
+    expect(measureDimension(dimension)).toBe(3);
+    const moved = [{ ...entities[0], points: [{x:0,y:0},{x:4,y:0}] }];
+    const resolved = resolveAssociativeDimension(dimension, moved, 1);
+    expect(resolved.b).toEqual({x:4,y:0});
+    expect(measureDimension(resolved)).toBe(4);
+  });
+  it('keeps an orphaned reference at its last saved measurement', async () => {
+    const { resolveAssociativeDimension, makeAlignedDimension } = await import('../cad-drafting');
+    const dimension = makeAlignedDimension('dim-2', {x:0,y:0}, {x:2,y:0}, 1);
+    dimension.association = { b: { entityId: 'missing', pointIndex: 1 } };
+    expect(resolveAssociativeDimension(dimension, [], 1).b).toEqual({x:2,y:0});
+  });
+});
