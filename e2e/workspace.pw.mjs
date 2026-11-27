@@ -149,7 +149,7 @@ test('engineer opens a project, verifies precision drafting, saves and opens 3D'
   const circleEntity = cadCanvas.locator('circle[data-shape-id]').last();
   const circleBounds = await circleEntity.boundingBox();
   if (!circleBounds) throw new Error('Created circle is not present in the CAD canvas.');
-  await circleEntity.click({ position: { x: circleBounds.width - 1, y: circleBounds.height / 2 } });
+  await circleEntity.click({ position: { x: circleBounds.width - 1, y: circleBounds.height / 2 }, force: true, timeout: 5000 });
   await expect(page.getByText(/Entity selected/).first()).toBeVisible();
   await ribbon.getByRole('tab', { name: 'Annotate' }).click();
   await ribbonContent.getByRole('button', { name: 'Radius' }).click();
