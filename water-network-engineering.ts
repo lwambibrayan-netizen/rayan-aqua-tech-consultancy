@@ -343,7 +343,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   lines.push('', '[EMITTERS]', ';JunctionID Coefficient');
   nodes.filter(n=>n.kind==='junction'&&n.properties.emitterCoefficient!==undefined).forEach(n=>lines.push([safeId(n.id),fmt(n.properties.emitterCoefficient??0)].join(' ')));
   lines.push('', '[RESERVOIRS]', ';ID Head_m Pattern');
-  nodes.filter(n => n.kind === 'source' || n.kind === 'reservoir').forEach(n => lines.push([safeId(n.id), fmt(n.properties.hydraulicHeadM ?? n.properties.tankOperatingLevelM ?? n.geometry[0]?.z ?? 0), ''].join(' ')));
+  nodes.filter(n => n.kind === 'source' || n.kind === 'reservoir').forEach(n => lines.push([safeId(n.id), fmt(n.properties.hydraulicHeadM ?? n.properties.tankOperatingLevelM ?? n.geometry[0]?.z ?? 0), n.properties.hydraulicHeadPatternId ? safeId(n.properties.hydraulicHeadPatternId) : ''].join(' ')));
   lines.push('', '[TANKS]', ';ID Elevation_m InitLevel_m MinLevel_m MaxLevel_m Diameter_m MinVolume_m3');
   nodes.filter(n => n.kind === 'tank').forEach(n => {
     const p = n.properties;
@@ -398,7 +398,9 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   document.components.forEach(component=>{
     const demandPattern=component.properties.demandPatternId;
     const speedPattern=component.properties.pumpSpeedPattern;
+    const headPattern=component.properties.hydraulicHeadPatternId;
     if(demandPattern&&!definedPatterns.has(safeId(demandPattern))) warnings.push('Node '+component.id+' references missing demand pattern '+demandPattern+'.');
+    if(headPattern&&!definedPatterns.has(safeId(headPattern))) warnings.push('Reservoir '+component.id+' references missing head pattern '+headPattern+'.');
     if(speedPattern&&!definedPatterns.has(safeId(speedPattern))) warnings.push('Pump '+component.id+' references missing speed pattern '+speedPattern+'.');
   });
   lines.push('', '[CURVES]', ';CurveID Flow_LPS Head_m');
