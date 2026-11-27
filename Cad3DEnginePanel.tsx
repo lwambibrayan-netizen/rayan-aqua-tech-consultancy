@@ -16,7 +16,7 @@ import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperL
 import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension, calculateBaselineDimensions, calculateChainDimensions } from './cad-dimension-geometry';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 import { applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, sampleGroundProfile, sampleTerrainElevation, type TerrainGrid } from './water-terrain-engineering';
-import { importEpanetInp, type HydraulicResults } from './water-epanet-bridge';
+import { importEpanetInp, mergeEpanetRoundTrip, type HydraulicResults } from './water-epanet-bridge';
 import { buildHydraulicOverlay, type HydraulicOverlay, type HydraulicOverlayMetric } from './water-hydraulic-overlays';
 import { runEpanetHydraulicSimulation } from './water-epanet-runner';
 
@@ -338,6 +338,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [hydraulicReport, setHydraulicReport] = useState<string>(() => initialData?.hydraulicReport || '');
   const [hydraulicTimeIndex, setHydraulicTimeIndex] = useState(0);
   const [simulationBusy, setSimulationBusy] = useState(false);
+  const [epanetImportMode, setEpanetImportMode] = useState<'replace'|'merge'>('replace');
   const [hydraulicMetric, setHydraulicMetric] = useState<HydraulicOverlayMetric>('velocityMs');
   const [hydraulicOverlay, setHydraulicOverlay] = useState<HydraulicOverlay | null>(() => initialData?.hydraulicOverlay || null);
   const [terrainCoverM, setTerrainCoverM] = useState(1.2);
@@ -925,18 +926,19 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (terrainFileRef.current) terrainFileRef.current.value = '';
   }
 
-  async function importEpanetFile(file?: File) {
+  async function importEpanetFile(file?: File, mode: 'replace'|'merge' = 'replace') {
     if (!file) return;
     try {
-      if (waterCad.components.length && !window.confirm('Importing this EPANET model replaces the current water CAD network in this project. Continue?')) return;
+      if (mode==='replace' && waterCad.components.length && !window.confirm('Replace the current water CAD network with this EPANET model? CAD-only fittings and annotations in the water network will not be retained.')) return;
       const imported = importEpanetInp(await file.text(), waterCad.verticalDatum);
-      setWaterCad(imported.document);
+      const nextDocument=mode==='merge'?mergeEpanetRoundTrip(waterCad,imported.document):imported.document;
+      setWaterCad(nextDocument);
       setHydraulicResults(null);
       setHydraulicResultSeries([]);
       setHydraulicReport('');
       setHydraulicTimeIndex(0);
       setHydraulicOverlay(null);
-      setMessage('Imported ' + imported.document.components.length + ' EPANET network objects into CAD.' + (imported.warnings.length ? ' Review: ' + imported.warnings.join(' ') : ' Coordinates and hydraulic link lengths were retained.'));
+      setMessage((mode==='merge'?'Merged ':'Imported ') + imported.document.components.length + ' EPANET network objects into CAD.' + (mode==='merge'?' Existing CAD-only fittings and matching surveyed vertex levels were preserved where IDs/coordinates matched.':'') + (imported.warnings.length ? ' Review: ' + imported.warnings.join(' ') : ' Hydraulic properties and supported network geometry were retained.'));
     } catch (error) { setMessage(error instanceof Error ? error.message : 'EPANET import failed.'); }
     if (epanetFileRef.current) epanetFileRef.current.value = '';
   }
@@ -1518,7 +1520,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         </div>
         <input ref={fileRef} type="file" accept=".dxf,.json" hidden onChange={event => importFile(event.target.files?.[0])} />
         <input ref={terrainFileRef} type="file" accept=".json,application/json" hidden onChange={event => importTerrainGridFile(event.target.files?.[0])} />
-        <input ref={epanetFileRef} type="file" accept=".inp,.txt,text/plain" hidden onChange={event => importEpanetFile(event.target.files?.[0])} />
+        <input ref={epanetFileRef} type="file" accept=".inp,.txt,text/plain" hidden onChange={event => importEpanetFile(event.target.files?.[0],epanetImportMode)} />
         <input ref={hydraulicResultsFileRef} type="file" accept=".json,application/json" hidden onChange={event => importHydraulicResultsFile(event.target.files?.[0])} />
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1781,7 +1783,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
             <button className="secondary-button" onClick={() => terrainFileRef.current?.click()}>Import terrain grid JSON</button>
             <button className="secondary-button" onClick={() => downloadWaterFile('rayanaqua-terrain-grid-template.json',JSON.stringify({width:3,height:3,originX:0,originY:0,cellSizeX:10,cellSizeY:10,elevationsM:[100,101,102,99,100,101,98,99,100],crs:'LOCAL_METRIC',verticalDatum:'Project datum'},null,2),'application/json')}>Download terrain JSON template</button>
-            <button className="secondary-button" onClick={() => epanetFileRef.current?.click()}>Import EPANET INP → CAD</button>
+            <button className="secondary-button" onClick={() => {setEpanetImportMode('replace');epanetFileRef.current?.click();}}>Import EPANET INP (replace)</button>
+            <button className="secondary-button" onClick={() => {setEpanetImportMode('merge');epanetFileRef.current?.click();}}>Merge EPANET back (preserve CAD)</button>
             <button className="secondary-button" onClick={downloadEpanetInput}>Export CAD → EPANET INP</button>
             <button className="primary-button" onClick={runProjectHydraulics} disabled={simulationBusy || !waterCad.components.length}>{simulationBusy ? 'Running EPANET…' : 'Run EPANET simulation'}</button>
             <button className="secondary-button" onClick={() => hydraulicResultsFileRef.current?.click()}>Import hydraulic results JSON</button>
