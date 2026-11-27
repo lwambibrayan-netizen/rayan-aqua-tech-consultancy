@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   chamferPolylineCorner, copyEntities, extendLine, filletPolylineCorner,
   mirrorEntities, moveEntities, offsetLine, rectangularArray, rotateEntities,
-  stretchEntities, trimLine, type CadEditableEntity,
+  stretchEntities, trimLine, selectEntitiesInWindow, type CadEditableEntity,
 } from '../cad-editing';
 
 const line: CadEditableEntity = { id: 'l1', type: 'line', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], layer: 'WATER' };
@@ -87,6 +87,16 @@ describe('CAD editing geometry operations', () => {
     expect(end.y).toBeCloseTo(2);
     expect(result.points).toHaveLength(19);
     expect(() => filletPolylineCorner(poly, 1, 11)).toThrow(/too large/);
+  });
+
+  it('selects crossing geometry by exact segment/window intersection, not bounding boxes', () => {
+    const cross:CadEditableEntity={id:'cross',type:'line',points:[{x:-5,y:5},{x:15,y:5}],layer:'0'};
+    const falseHit:CadEditableEntity={id:'false',type:'line',points:[{x:-5,y:-5},{x:-1,y:-1}],layer:'0'};
+    const inside:CadEditableEntity={id:'inside',type:'line',points:[{x:2,y:2},{x:8,y:8}],layer:'0'};
+    const circle:CadEditableEntity={id:'circle',type:'circle',points:[{x:11,y:5}],radius:2,layer:'0'};
+    const w={minX:0,minY:0,maxX:10,maxY:10};
+    expect(selectEntitiesInWindow([cross,falseHit,inside,circle],w,true).map(x=>x.id)).toEqual(['cross','inside','circle']);
+    expect(selectEntitiesInWindow([cross,falseHit,inside,circle],w,false).map(x=>x.id)).toEqual(['inside']);
   });
   it('creates unique IDs for every generated array entity', () => {
     let n = 0;
