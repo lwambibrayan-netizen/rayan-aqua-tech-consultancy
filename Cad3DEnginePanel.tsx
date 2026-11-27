@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createHistory, pushHistory, undoHistory, redoHistory } from './cad-geometry';
-import { moveEntities, copyEntities, rotateEntities, mirrorEntities, stretchEntities, rectangularArray, trimLine, extendLine, offsetLine, chamferPolylineCorner, filletPolylineCorner } from './cad-editing';
+import { moveEntities, copyEntities, rotateEntities, mirrorEntities, stretchEntities, rectangularArray, trimLine, extendLine, offsetLine, selectEntitiesInWindow, chamferPolylineCorner, filletPolylineCorner } from './cad-editing';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
@@ -788,17 +788,12 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               if (selectionRef.current?.pointerId === event.pointerId) {
                 const end = selectionRef.current.current;
                 const start = selectionRef.current.start;
-                setLastSelectionWindow({ minX: Math.min(start.x,end.x), minY: Math.min(start.y,end.y), maxX: Math.max(start.x,end.x), maxY: Math.max(start.y,end.y) });
                 setLastSelectionWindow({minX:Math.min(start.x,end.x),minY:Math.min(start.y,end.y),maxX:Math.max(start.x,end.x),maxY:Math.max(start.y,end.y)});
                 if (Math.hypot(end.x-start.x,end.y-start.y)>2) suppressSelectionClick.current=true;
                 if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
                 const left=Math.min(start.x,end.x), right=Math.max(start.x,end.x), top=Math.min(start.y,end.y), bottom=Math.max(start.y,end.y);
                 const crossing=end.x<start.x;
-                const hits=visibleShapes.filter(shape=>{
-                  const pts=shape.type==='circle'?[{x:shape.points[0].x-(shape.radius||0),y:shape.points[0].y-(shape.radius||0)},{x:shape.points[0].x+(shape.radius||0),y:shape.points[0].y+(shape.radius||0)}]:shape.type==='rect'?[shape.points[0],shape.points[1]]:shape.points;
-                  const minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x)),minY=Math.min(...pts.map(p=>p.y)),maxY=Math.max(...pts.map(p=>p.y));
-                  return crossing ? maxX>=left&&minX<=right&&maxY>=top&&minY<=bottom : minX>=left&&maxX<=right&&minY>=top&&maxY<=bottom;
-                }).map(shape=>shape.id);
+                const hits=selectEntitiesInWindow(visibleShapes,{minX:left,minY:top,maxX:right,maxY:bottom},crossing).map(shape=>shape.id);
                 setSelectedShapeIds(hits); setSelectedShapeId(hits[0]||''); setMessage(`${hits.length} entities ${crossing?'crossing':'inside'}-selected.`);
                 selectionRef.current=null; setSelectionBox(null);
               }
