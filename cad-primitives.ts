@@ -66,3 +66,9 @@ export function arcFromCenterStartAngle(center: CadPoint, start: CadPoint, sweep
   const end={x:center.x+dx*cos-dy*sin,y:center.y+dx*sin+dy*cos};
   return {id,type:'polyline',points:[{...start},end],bulges:[Math.tan(sweep/4),0],layer};
 }
+
+export function circleFromCenterDiameter(center: CadPoint, diameterPoint: CadPoint, id: string, layer: string): CadCircle {
+  const radius=distance(center,diameterPoint)/2;
+  if (!validPoint(center) || !validPoint(diameterPoint) || radius <= 1e-9) throw new Error('Circle diameter must be greater than zero.');
+  return {id,type:'circle',points:[{...center}],radius,layer};
+}
