@@ -49,8 +49,9 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
   out.push('0','ENDSEC','0','EOF');
   return out.join('\n');
 }
-export function importDraftingDxf(source:string, metresPerDrawingUnit=1):DxfImportResult {
+export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDenominator=100):DxfImportResult {
   if(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0) throw new Error('Drawing calibration must be positive.');
+  if(!Number.isFinite(scaleDenominator)||scaleDenominator<=0) throw new Error('Drawing scale denominator must be positive.');
   const pairs=pairsOf(source);
   const start=pairs.findIndex(p=>p[0]==='2'&&p[1]==='ENTITIES');
   if(start<0) throw new Error('DXF ENTITIES section not found.');
@@ -71,7 +72,7 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1):DxfImpo
       if(points.length>1){if((num('70')&1)===1)points.push({...points[0]});shapes.push({id,type:'polyline',points,bulges,layer});}
     } else if(current.type==='TEXT'||current.type==='MTEXT'){
       const raw=v.filter(p=>p[0]==='3'||p[0]==='1').map(p=>p[1]).join('');
-      annotations.push({id,kind:'text',layer,at:{x:num('10')*metresPerDrawingUnit,y:num('20')*metresPerDrawingUnit},text:raw.replace(/\\P/g,'\n'),heightMm:Math.max(0.5,num('40')*1000*metresPerDrawingUnit),rotationDeg:num('50')});
+      annotations.push({id,kind:'text',layer,at:{x:num('10')*metresPerDrawingUnit,y:num('20')*metresPerDrawingUnit},text:raw.replace(/\\P/g,'\n'),heightMm:Math.max(0.5,num('40')*1000*metresPerDrawingUnit/scaleDenominator),rotationDeg:num('50')});
     } else if(current.type==='ARC'){
       const cx=num('10'),cy=num('20'),r=num('40'),a=num('50')*Math.PI/180,b=num('51')*Math.PI/180;
       let sweep=b-a;if(sweep<=0)sweep+=Math.PI*2;
@@ -80,7 +81,7 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1):DxfImpo
     } else if(current.type==='DIMENSION') {
       const a={x:num('13')*metresPerDrawingUnit,y:num('23')*metresPerDrawingUnit};
       const b={x:num('14')*metresPerDrawingUnit,y:num('24')*metresPerDrawingUnit};
-      if(Math.hypot(b.x-a.x,b.y-a.y)>1e-9) annotations.push({id,kind:(num('70')&1)?'aligned':'linear',layer,a,b,offsetM:0,precision:3,textOverride:get('1')&&get('1')!=='<>'?get('1'):undefined});
+      if(Math.hypot(b.x-a.x,b.y-a.y)>1e-9) { const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),nx=-dy/len,ny=dx/len,locX=num('10')*metresPerDrawingUnit,locY=num('20')*metresPerDrawingUnit; const offsetM=(locX-a.x)*nx+(locY-a.y)*ny; annotations.push({id,kind:(num('70')&1)?'aligned':'linear',layer,a,b,offsetM,precision:3,textOverride:get('1')&&get('1')!=='<>'?get('1'):undefined}); }
       else warnings.push('Skipped DIMENSION with missing definition points.');
     } else if(current.type==='POINT') {
       shapes.push({id,type:'circle',points:[{x:num('10'),y:num('20')}],radius:0.03,layer});
