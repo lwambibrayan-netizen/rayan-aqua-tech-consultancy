@@ -35,9 +35,9 @@ export function sampleTerrainElevation(grid: TerrainGrid, x: number, y: number):
   const tx = gx - x0, ty = gy - y0;
   const at = (col: number, row: number) => grid.elevationsM[row * grid.width + col];
   const values = [at(x0,y0), at(x0+1,y0), at(x0,y0+1), at(x0+1,y0+1)];
-  if (values.some(value => value === null)) return null;
-  const [a,b,c,d] = values as number[];
-  return a * (1-tx) * (1-ty) + b * tx * (1-ty) + c * (1-tx) * ty + d * tx * ty;
+  const weights=[(1-tx)*(1-ty),tx*(1-ty),(1-tx)*ty,tx*ty];
+  if(values.some((value,index)=>value===null&&weights[index]>1e-12))return null;
+  return values.reduce((sum,value,index)=>sum+(value===null?0:value*weights[index]),0);
 }
 function segmentLength(a: WaterPoint, b: WaterPoint): number { return Math.hypot(b.x-a.x,b.y-a.y); }
 export function sampleGroundProfile(grid: TerrainGrid, route: WaterPoint[], spacingM = 5): GroundProfileSample[] {
