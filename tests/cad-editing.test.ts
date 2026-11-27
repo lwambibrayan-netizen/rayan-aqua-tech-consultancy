@@ -76,9 +76,10 @@ describe('CAD editing geometry operations', () => {
     const chamfered = chamferPolylineCorner(poly, 1, 2);
     expect(chamfered.points).toEqual([{ x: 0, y: 0 }, { x: 8, y: 0 }, { x: 10, y: 2 }, { x: 10, y: 10 }]);
     const filleted = filletPolylineCorner(poly, 1, 2, 8);
-    expect(filleted.points).toHaveLength(11);
-    expect(filleted.points[1].x).toBeCloseTo(8);
-    expect(filleted.points[filleted.points.length - 2].y).toBeCloseTo(2);
+    expect(filleted.points).toHaveLength(4);
+    expect(filleted.points[1]).toEqual({x:8,y:0});
+    expect(filleted.points[2]).toEqual({x:10,y:2});
+    expect(filleted.bulges?.[1]).toBeCloseTo(Math.tan(Math.PI/8));
   });
   it('supports both trim endpoints and extension directions', () => {
     const cutter: CadEditableEntity = { id: 'c', type: 'line', points: [{ x: 5, y: -5 }, { x: 5, y: 5 }], layer: '0' };
@@ -91,12 +92,11 @@ describe('CAD editing geometry operations', () => {
   it('keeps fillet tangent points at the requested radius and rejects oversized corners', () => {
     const poly: CadEditableEntity = { id: 'p', type: 'polyline', points: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], layer: 'WATER' };
     const result = filletPolylineCorner(poly, 1, 2, 16);
-    const start = result.points[1], end = result.points[result.points.length - 2];
-    expect(start.x).toBeCloseTo(8);
-    expect(start.y).toBeCloseTo(0);
-    expect(end.x).toBeCloseTo(10);
-    expect(end.y).toBeCloseTo(2);
-    expect(result.points).toHaveLength(19);
+    const start = result.points[1], end = result.points[2];
+    expect(start).toEqual({x:8,y:0});
+    expect(end).toEqual({x:10,y:2});
+    expect(result.points).toHaveLength(4);
+    expect(result.bulges?.[1]).toBeCloseTo(Math.tan(Math.PI/8));
     expect(() => filletPolylineCorner(poly, 1, 11)).toThrow(/too large/);
   });
 
@@ -108,6 +108,15 @@ describe('CAD editing geometry operations', () => {
     const w={minX:0,minY:0,maxX:10,maxY:10};
     expect(selectEntitiesInWindow([cross,falseHit,inside,circle],w,true).map(x=>x.id)).toEqual(['cross','inside','circle']);
     expect(selectEntitiesInWindow([cross,falseHit,inside,circle],w,false).map(x=>x.id)).toEqual(['inside']);
+  });
+
+  it('mirrors arc bulges and retains exact circular fillet geometry', () => {
+    const poly:CadEditableEntity={id:'p',type:'polyline',points:[{x:0,y:0},{x:10,y:0},{x:10,y:10}],layer:'WATER'};
+    const fillet=filletPolylineCorner(poly,1,2);
+    const bulge=fillet.bulges?.[1]||0;
+    expect(bulge).not.toBe(0);
+    expect(mirrorEntities([fillet],{x:0,y:0},{x:0,y:1})[0].bulges?.[1]).toBeCloseTo(-bulge);
+    expect(()=>offsetPolyline(fillet,2)).toThrow(/curved polylines/);
   });
   it('creates unique IDs for every generated array entity', () => {
     let n = 0;
