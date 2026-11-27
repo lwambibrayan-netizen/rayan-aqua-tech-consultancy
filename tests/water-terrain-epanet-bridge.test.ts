@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createWaterComponent, type WaterCadDocument } from '../water-cad';
-import { sampleTerrainElevation, sampleGroundProfile, applyTerrainToPipe, buildTerrainIssues, type TerrainGrid } from '../water-terrain-engineering';
+import { sampleTerrainElevation, sampleGroundProfile, applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, type TerrainGrid } from '../water-terrain-engineering';
 import { importEpanetInp } from '../water-epanet-bridge';
 import { buildHydraulicOverlay } from '../water-hydraulic-overlays';
 
@@ -57,6 +57,26 @@ J2 180 0
   expect(p.properties.internalDiameterMm).toBe(150);
   expect(p.geometry[1].x).toBe(100);
   expect(result.warnings.some(w=>w.includes('no guaranteed CRS'))).toBe(true);
+ });
+ it('retains EPANET multi-point pump curves and physical endpoint ports',()=>{
+  const model=`[JUNCTIONS]
+J1 100 0
+[RESERVOIRS]
+R1 110
+[PUMPS]
+PU1 R1 J1 HEAD PC1
+[CURVES]
+PC1 0 50
+PC1 5 40
+[COORDINATES]
+R1 0 0
+J1 10 0
+[END]`;
+  const result=importEpanetInp(model);
+  const pump=result.document.components.find(c=>c.id==='PU1')!;
+  expect(pump.properties.pumpCurvePoints).toHaveLength(2);
+  expect(pump.properties.pumpCurvePoints?.[1].flowM3h).toBeCloseTo(18);
+  expect(pump.customPorts?.map(p=>p.point.x)).toEqual([0,10]);
  });
  it('warns when EPANET coordinates are absent rather than pretending the layout is surveyed',()=>{
   const result=importEpanetInp('[JUNCTIONS]\nJ1 10 1\n[RESERVOIRS]\nR1 20\n[PIPES]\nP1 R1 J1 50 100 130 0 OPEN\n[END]');
