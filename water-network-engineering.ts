@@ -167,8 +167,10 @@ export function buildPipeLongitudinalProfile(pipe: WaterCadComponent): ProfilePo
   return pipe.geometry.map((point, i) => {
     if (i > 0) chainage += dist({ ...pipe.geometry[i - 1], z: 0 }, { ...point, z: 0 });
     const ratio = chainage / length;
-    const ground = finite(groundStart) && finite(groundEnd) ? groundStart + (groundEnd - groundStart) * ratio : null;
-    const invert = finite(invertStart) && finite(invertEnd) ? invertStart + (invertEnd - invertStart) * ratio : null;
+    const interpolatedGround = finite(groundStart) && finite(groundEnd) ? groundStart + (groundEnd - groundStart) * ratio : null;
+    const interpolatedInvert = finite(invertStart) && finite(invertEnd) ? invertStart + (invertEnd - invertStart) * ratio : null;
+    const ground = finite(point.groundLevelM) ? point.groundLevelM : interpolatedGround;
+    const invert = finite(point.invertLevelM) ? point.invertLevelM : interpolatedInvert;
     const crown = invert !== null && finite(od) ? invert + od / 1000 : null;
     return {
       chainageM: chainage, x: point.x, y: point.y, groundLevelM: ground,
