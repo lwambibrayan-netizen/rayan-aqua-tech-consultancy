@@ -197,7 +197,7 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
     } else if(current.type==='ELLIPSE') {
       const cx=num('10'),cy=num('20'),mx=num('11'),my=num('21'),ratio=num('40'),start=num('41'),end=num('42')||Math.PI*2;
       const major=Math.hypot(mx,my),minor=major*ratio;
-      if(major>0&&ratio>0){let sweep=end-start;if(sweep<=0)sweep+=Math.PI*2;const rotation=Math.atan2(my,mx),count=Math.max(16,Math.ceil(Math.abs(sweep)/(Math.PI*2)*64));const points=Array.from({length:count+1},(_,i)=>{const t=start+sweep*i/count;return {x:cx+major*Math.cos(t)*Math.cos(rotation)-minor*Math.sin(t)*Math.sin(rotation),y:cy+major*Math.cos(t)*Math.sin(rotation)+minor*Math.sin(t)*Math.cos(rotation)};});shapes.push({id,type:'polyline',points,layer});}
+      if(major>0&&ratio>0){let sweep=end-start;if(sweep<=0)sweep+=Math.PI*2;const rotation=Math.atan2(my,mx),count=Math.max(16,Math.ceil(Math.abs(sweep)/(Math.PI*2)*64));const points=Array.from({length:count+1},(_,i)=>{const t=start+sweep*i/count;return {x:cx+major*Math.cos(t)*Math.cos(rotation)-minor*Math.sin(t)*Math.sin(rotation),y:cy+major*Math.cos(t)*Math.sin(rotation)+minor*Math.sin(t)*Math.cos(rotation)};});shapes.push({id,type:'polyline',points,layer});warnings.push('Converted ELLIPSE '+id+' to a sampled polyline; exact analytic ellipse parameters are not preserved.');}
       else warnings.push('Skipped ELLIPSE with invalid major axis or ratio.');
     } else if(current.type==='HATCH') {
       const pathIndex=v.findIndex(p=>p[0]==='92');
