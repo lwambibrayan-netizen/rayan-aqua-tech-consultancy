@@ -9,7 +9,7 @@ import { connectPipeEndpoints, createWaterComponent, component3dLength, componen
 import { createDraftingDocument, makeAlignedDimension, makeLinearDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
 import { exportDraftingDxf, importDraftingDxf, type DxfShape } from './cad-dxf';
 import { DIMENSION_STYLES, formatStyledDimension, validateDimensionStyle, appendDrawingRevision, type DimensionStyle } from './cad-dimension-standards';
-import { mergeLayerTemplate, validatePlotConfiguration, type LayerStandard } from './cad-layer-standards';
+import { synchronizeLayerTemplate, validateLayerStandard, validatePlotConfiguration, type LayerStandard } from './cad-layer-standards';
 import { auditEngineeringDrawing, type EngineeringDrawingAudit } from './cad-engineering-verification';
 import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringBlock, type BlockInsert } from './cad-object-library';
 import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
@@ -909,9 +909,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setNewLayerName('');
   }
   function applyLayerTemplate() {
-    const result = mergeLayerTemplate(drafting.layers, layerTemplate);
+    const result = synchronizeLayerTemplate(drafting.layers, layerTemplate);
     setDrafting(current => ({ ...current, layers: result.layers }));
-    setMessage(result.added.length ? 'Added ' + result.added.length + ' standard layers: ' + result.added.join(', ') : 'All layers in this template already exist.');
+    const changes = [...result.added.map(name => 'added ' + name), ...result.updated.map(name => 'updated ' + name)];
+    setMessage(changes.length ? 'Applied ' + layerTemplate + ' layer profile: ' + changes.join(', ') + '. Visibility, lock and plot settings were preserved.' : 'All layers already match the ' + layerTemplate + ' profile.');
   }
   function addRevisionEntry() {
     try {
@@ -923,7 +924,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Revision could not be added.'); }
   }
   function validateDrafting() {
-    const issues = [...validateDraftingDocument(drafting), ...validateDimensionStyle(dimensionStyle), ...validatePlotConfiguration(drafting.layers)];
+    const issues = [...validateDraftingDocument(drafting), ...validateDimensionStyle(dimensionStyle), ...validatePlotConfiguration(drafting.layers), ...validateLayerStandard(drafting.layers, layerTemplate)];
     setMessage(issues.length ? 'Drafting check: ' + issues.join(' ') : 'Drafting standards check passed. Check the drawing visually before issue.');
   }
   function removeAnnotation(id: string) {
@@ -1300,7 +1301,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <span className="muted" style={{ fontSize: 12 }}>{sheetDimensionsMm(drafting.sheet).widthMm} × {sheetDimensionsMm(drafting.sheet).heightMm} mm · {drafting.annotations.length} annotations</span>
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
-          <label>Layer template <select value={layerTemplate} onChange={e => setLayerTemplate(e.target.value as LayerStandard)}><option value="WATER_UTILITY">Water utility</option><option value="CIVIL_SITE">Civil / site</option><option value="MECHANICAL">Mechanical</option></select></label><button className="secondary-button" onClick={applyLayerTemplate}>Apply template</button>
+          <label>Layer template <select value={layerTemplate} onChange={e => setLayerTemplate(e.target.value as LayerStandard)}><option value="WATER_UTILITY">Water utility</option><option value="CIVIL_SITE">Civil / site</option><option value="MECHANICAL">Mechanical</option></select></label><button className="secondary-button" onClick={applyLayerTemplate}>Apply / synchronize standards</button>
           <input placeholder="New layer name" value={newLayerName} onChange={e => setNewLayerName(e.target.value)} style={{ width: 150 }}/><button className="secondary-button" onClick={addDraftLayer}>Add layer</button>
           {drafting.layers.map(item => <span key={item.name} style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid #ccd5d2", padding: 4, borderRadius: 5, fontSize: 11, flexWrap: "wrap" }}><input type="color" value={item.color} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, color: e.target.value } : l) }))} style={{ width: 22, height: 20, padding: 0 }}/><button onClick={() => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, visible: !l.visible } : l) }))}>{item.visible ? "●" : "○"} {item.name}</button><label><input type="checkbox" checked={item.locked} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, locked: e.target.checked } : l) }))}/>Lock</label><label><input type="checkbox" checked={item.plot} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, plot: e.target.checked } : l) }))}/>Plot</label><select value={item.lineType} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, lineType: e.target.value as typeof item.lineType } : l) }))}><option>CONTINUOUS</option><option>DASHED</option><option>CENTER</option><option>HIDDEN</option><option>PHANTOM</option></select><input aria-label="Lineweight mm" type="number" min="0" max="2.11" step="0.05" value={item.lineWeightMm} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, lineWeightMm: Number(e.target.value) } : l) }))} style={{ width: 48 }}/></span>)}
         </div>
