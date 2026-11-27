@@ -49,6 +49,7 @@ export type WaterEngineeringProperties = {
   pumpEfficiencyPct?: number;
   pumpSpeedMultiplier?: number;
   pumpSpeedPattern?: string;
+  demandPatternId?: string;
   pumpPowerKw?: number;
   initialStatus?: 'OPEN' | 'CLOSED';
   tankType?: 'ground' | 'elevated' | 'underground';
@@ -85,6 +86,7 @@ export type WaterCadDocument = {
   horizontalCrs?: string;
   horizontalUnits?: 'm' | 'ft' | 'unknown';
   components: WaterCadComponent[];
+  epanetPatterns?: Array<{ id: string; multipliers: number[] }>;
   connections?: { id: string; aPortId: string; bPortId: string }[];
 };
 export type WaterCadIssue = { componentId: string; severity: 'error' | 'warning'; code: string; message: string };
