@@ -38,7 +38,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const optionValue=(key:string,fallback:string)=>bySection('OPTIONS').find(r=>r.values[0]?.toUpperCase()===key)?.values[1]??fallback;
   const headlossRaw=optionValue('HEADLOSS','H-W').toUpperCase();
   const headlossFormula=headlossRaw==='D-W'?'D-W':headlossRaw==='C-M'?'C-M':'H-W';
-  const times=(key:string,fallback:number)=>parseTime(bySection('TIMES').find(r=>r.values[0]?.toUpperCase()===key)?.values[1],fallback);
+  const times=(key:string,fallback:number)=>{const parts=key.split(' ');const row=bySection('TIMES').find(r=>r.values.slice(0,parts.length).join(' ').toUpperCase()===key);return parseTime(row?.values[parts.length],fallback);};
   const epanetTimes={durationSeconds:times('DURATION',0),hydraulicStepSeconds:times('HYDRAULIC TIMESTEP',3600),patternStepSeconds:times('PATTERN TIMESTEP',3600),patternStartSeconds:times('PATTERN START',0),reportStepSeconds:times('REPORT TIMESTEP',3600),reportStartSeconds:times('REPORT START',0)};
   const patternMap=new Map<string,number[]>();
   bySection('PATTERNS').forEach(r=>{const id=safe(r.values[0]);const values=patternMap.get(id)??[];values.push(...r.values.slice(1).map(Number).filter(Number.isFinite));patternMap.set(id,values);});
