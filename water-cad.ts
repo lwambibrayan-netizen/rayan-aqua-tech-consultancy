@@ -100,7 +100,7 @@ export function component3dLength(component: WaterCadComponent): number {
   let length = 0;
   for (let i = 1; i < component.geometry.length; i++) {
     const a = component.geometry[i - 1], b = component.geometry[i];
-    const dz = (b.z ?? 0) - (a.z ?? 0);
+    const dz = finite(a.z) && finite(b.z) ? b.z - a.z : 0;
     length += Math.hypot(b.x - a.x, b.y - a.y, dz);
   }
   return length;
@@ -160,6 +160,9 @@ export function validateWaterCad(document: WaterCadDocument): WaterCadIssue[] {
         if (finite(p.velocityMinMs) && velocity < p.velocityMinMs) add('warning', 'LOW_VELOCITY', 'Calculated velocity is below the specified design minimum.');
         if (finite(p.velocityMaxMs) && velocity > p.velocityMaxMs) add('warning', 'HIGH_VELOCITY', 'Calculated velocity exceeds the specified design maximum.');
       }
+      const outsideDiameter = p.externalDiameterMm ?? p.nominalDiameterMm;
+      if (finite(p.groundStartM) && finite(p.invertInletM) && positive(outsideDiameter) && p.groundStartM - p.invertInletM - outsideDiameter / 1000 < 0) add('warning', 'NEGATIVE_COVER', 'Pipe crown is above ground at the inlet; verify survey levels and vertical datum.');
+      if (finite(p.groundEndM) && finite(p.invertOutletM) && positive(outsideDiameter) && p.groundEndM - p.invertOutletM - outsideDiameter / 1000 < 0) add('warning', 'NEGATIVE_COVER', 'Pipe crown is above ground at the outlet; verify survey levels and vertical datum.');
       if (p.material === 'HDPE' && p.pressureClass && !/^PN\\d+(?:\\.\\d+)?$/i.test(p.pressureClass)) add('warning', 'PRESSURE_CLASS_FORMAT', 'HDPE pressure class should use a PN designation such as PN16.');
     }
     if (c.kind === 'bend' && (!positive(p.nominalDiameterMm) || !finite(p.bendAngleDeg) || p.bendAngleDeg <= 0 || p.bendAngleDeg >= 180)) add('error', 'BEND_PROPERTIES', 'Bend needs a positive diameter and an angle between 0° and 180°.');
