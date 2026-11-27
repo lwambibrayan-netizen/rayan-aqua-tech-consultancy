@@ -395,7 +395,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   valves.filter(v => v.properties.valveType !== 'check').forEach(v => {
     const [fromNode, toNode] = linkEnds(v);
     if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode)) warnings.push('Valve ' + v.id + ' omitted: connect its inlet and outlet ports.');
-    else if (['PRV','PSV','PBV','FCV','TCV'].includes(v.properties.valveType ?? '')) lines.push([safeId(v.id), fromNode, toNode, fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), v.properties.valveType!, fmt(v.properties.valveSetting ?? 0), '0'].join(' '));
+    else if (['PRV','PSV','PBV','FCV','TCV'].includes(v.properties.valveType ?? '')) lines.push([safeId(v.id), fromNode, toNode, fmt(v.properties.internalDiameterMm ?? v.properties.nominalDiameterMm ?? 0), v.properties.valveType!, fmt(v.properties.valveSetting ?? 0), fmt(v.properties.minorLossCoefficient ?? 0)].join(' '));
     else warnings.push('Valve ' + v.id + ' (' + (v.properties.valveType ?? 'unspecified') + ') omitted from EPANET valve links; its loss/control model needs an explicit supported setting or curve.');
   });
   const unsupported = document.components.filter(c => ['bend', 'tee', 'reducer', 'chamber', 'hydrant', 'meter', 'air-valve', 'washout'].includes(c.kind));
