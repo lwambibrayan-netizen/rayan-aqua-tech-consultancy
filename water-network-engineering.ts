@@ -201,7 +201,7 @@ export function buildWaterQuantities(document: WaterCadDocument): QuantityLine[]
   for (const c of document.components) {
     const p = c.properties;
     if (c.kind === 'pipe') {
-      const length = c.geometry.slice(1).reduce((sum, point, i) => sum + Math.hypot(point.x - c.geometry[i].x, point.y - c.geometry[i].y), 0);
+      const length = component3dLength(c);
       if (length > 0) addLine({ code: 'PIPE', description: 'Supply and install ' + (p.material ?? 'unspecified') + ' pipe DN' + (p.nominalDiameterMm ?? '—'), unit: 'm', quantity: length, material: p.material, nominalDiameterMm: p.nominalDiameterMm });
     } else if (['bend', 'tee', 'reducer', 'valve', 'pump', 'tank', 'reservoir', 'chamber', 'hydrant', 'meter', 'air-valve', 'washout', 'junction', 'source'].includes(c.kind)) {
       const dn = p.nominalDiameterMm ? 'DN' + p.nominalDiameterMm : '';
