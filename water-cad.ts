@@ -46,6 +46,7 @@ export type WaterEngineeringProperties = {
   hydraulicElevationM?: number;
   /** EPANET reservoir fixed hydraulic head in metres. */
   hydraulicHeadM?: number;
+  hydraulicHeadPatternId?: string;
   pumpEfficiencyPct?: number;
   pumpSpeedMultiplier?: number;
   pumpSpeedPattern?: string;
