@@ -103,10 +103,51 @@ function segmentIntersection(a: Point2D, b: Point2D, c: Point2D, d: Point2D): Po
   return { x: a.x + t * r.x, y: a.y + t * r.y };
 }
 
-/** Exact geometric window/crossing selection for supported line, polyline, rectangle and circle entities. */
-export function selectEntitiesInWindow<T extends CadEditableEntity>(entities:T[], window:CadWindow, crossing:boolean):T[] {
+function bulgeArcData(a:Point2D,b:Point2D,bulge:number) {
+  const dx=b.x-a.x,dy=b.y-a.y,chord=Math.hypot(dx,dy);
+  if(chord<=1e-12||Math.abs(bulge)<=1e-12)return null;
+  const offset=chord*(1-bulge*bulge)/(4*bulge);
+  const center={x:(a.x+b.x)/2-dy/chord*offset,y:(a.y+b.y)/2+dx/chord*offset};
+  return {center,radius:chord*(1+bulge*bulge)/(4*Math.abs(bulge)),start:Math.atan2(a.y-center.y,a.x-center.x),sweep:4*Math.atan(bulge)};
+}
+function angleOnArc(angle:number,start:number,sweep:number) {
+  const tau=Math.PI*2,mod=(v:number)=>(v%tau+tau)%tau;
+  return sweep>=0?mod(angle-start)<=sweep+1e-9:mod(start-angle)<=-sweep+1e-9;
+}
+function arcWithinWindow(a:Point2D,b:Point2D,bulge:number,inside:(p:Point2D)=>boolean) {
+  const arc=bulgeArcData(a,b,bulge); if(!arc)return inside(a)&&inside(b);
+  if(!inside(a)||!inside(b))return false;
+  for(const angle of [0,Math.PI/2,Math.PI,Math.PI*1.5]) if(angleOnArc(angle,arc.start,arc.sweep)) {
+    if(!inside({x:arc.center.x+arc.radius*Math.cos(angle),y:arc.center.y+arc.radius*Math.sin(angle)}))return false;
+  }
+  return true;
+}
+function arcIntersectsWindow(a:Point2D,b:Point2D,bulge:number,window:CadWindow,inside:(p:Point2D)=>boolean) {
+  if(inside(a)||inside(b))return true;
+  const arc=bulgeArcData(a,b,bulge); if(!arc)return false;
+  const edges:Array<[Point2D,Point2D]>=[
+    [{x:window.minX,y:window.minY},{x:window.maxX,y:window.minY}],
+    [{x:window.maxX,y:window.minY},{x:window.maxX,y:window.maxY}],
+    [{x:window.maxX,y:window.maxY},{x:window.minX,y:window.maxY}],
+    [{x:window.minX,y:window.maxY},{x:window.minX,y:window.minY}],
+  ];
+  for(const [p,q] of edges) {
+    const dx=q.x-p.x,dy=q.y-p.y,fx=p.x-arc.center.x,fy=p.y-arc.center.y;
+    const A=dx*dx+dy*dy,B=2*(fx*dx+fy*dy),C=fx*fx+fy*fy-arc.radius*arc.radius;
+    const discriminant=B*B-4*A*C;
+    if(A<=1e-18||discriminant< -1e-9)continue;
+    const root=Math.sqrt(Math.max(0,discriminant));
+    for(const t of [(-B-root)/(2*A),(-B+root)/(2*A)]) if(t>=-1e-9&&t<=1+1e-9) {
+      const hit={x:p.x+t*dx,y:p.y+t*dy};
+      if(angleOnArc(Math.atan2(hit.y-arc.center.y,hit.x-arc.center.x),arc.start,arc.sweep))return true;
+    }
+  }
+  return false;
+}
+/** Exact window/crossing selection for linework, rectangles, circles and bulged circular arcs. */
+export function selectEntitiesInWindow<T extends CadEditableEntity>(entities:T[],window:CadWindow,crossing:boolean):T[] {
   const values=[window.minX,window.minY,window.maxX,window.maxY];
-  if(!values.every(finite)||window.minX>window.maxX||window.minY>window.maxY) throw new Error('Selection window bounds must be finite and ordered.');
+  if(!values.every(finite)||window.minX>window.maxX||window.minY>window.maxY)throw new Error('Selection window bounds must be finite and ordered.');
   const inside=(p:Point2D)=>p.x>=window.minX&&p.x<=window.maxX&&p.y>=window.minY&&p.y<=window.maxY;
   const edges:Array<[Point2D,Point2D]>=[
     [{x:window.minX,y:window.minY},{x:window.maxX,y:window.minY}],
@@ -117,40 +158,29 @@ export function selectEntitiesInWindow<T extends CadEditableEntity>(entities:T[]
   const hit=(a:Point2D,b:Point2D,c:Point2D,d:Point2D)=>{
     const cross=(u:Point2D,v:Point2D)=>u.x*v.y-u.y*v.x;
     const r={x:b.x-a.x,y:b.y-a.y},s={x:d.x-c.x,y:d.y-c.y},q={x:c.x-a.x,y:c.y-a.y};
-    const den=cross(r,s); if(Math.abs(den)<1e-12)return false;
+    const den=cross(r,s);if(Math.abs(den)<1e-12)return false;
     const t=cross(q,s)/den,u=cross(q,r)/den;
     return t>=-1e-9&&t<=1+1e-9&&u>=-1e-9&&u<=1+1e-9;
   };
   return entities.filter(entity=>{
     if(entity.type==='circle'){
-      const c=entity.points[0],r=entity.radius||0;
-      if(!finite(r)||r<0)return false;
+      const c=entity.points[0],r=entity.radius||0;if(!finite(r)||r<0)return false;
       if(!crossing)return c.x-r>=window.minX&&c.x+r<=window.maxX&&c.y-r>=window.minY&&c.y+r<=window.maxY;
       const q={x:Math.max(window.minX,Math.min(c.x,window.maxX)),y:Math.max(window.minY,Math.min(c.y,window.maxY))};
       return dist(c,q)<=r+1e-9;
     }
-    let points=entity.points;
-    let segments:Array<[Point2D,Point2D]>=[];
-    if(entity.type==='polyline'&&entity.bulges?.some(value=>Math.abs(value)>1e-12)){
-      const expanded:Point2D[]=[];
+    let points=entity.points,segments:Array<[Point2D,Point2D]>=[],arcs:Array<{a:Point2D;b:Point2D;bulge:number}>=[];
+    if(entity.type==='rect'){
+      const [a,b]=entity.points;points=[a,{x:b.x,y:a.y},b,{x:a.x,y:b.y}];segments=points.map((v,i)=>[v,points[(i+1)%4]]);
+    }else if(entity.type==='line')segments=[[entity.points[0],entity.points[1]]];
+    else {
       for(let i=0;i<entity.points.length-1;i++){
         const a=entity.points[i],b=entity.points[i+1],bulge=entity.bulges?.[i]||0;
-        if(Math.abs(bulge)<1e-12){expanded.push(...(i?[b]:[a,b]));continue;}
-        const dx=b.x-a.x,dy=b.y-a.y,chord=Math.hypot(dx,dy),radius=chord*(1+bulge*bulge)/(4*Math.abs(bulge));
-        const mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2},off=chord*(1-bulge*bulge)/(4*bulge);
-        const center={x:mid.x-dy/chord*off,y:mid.y+dx/chord*off},start=Math.atan2(a.y-center.y,a.x-center.x),sweep=4*Math.atan(bulge);
-        const arc=Array.from({length:65},(_,k)=>{const angle=start+sweep*k/64;return {x:center.x+radius*Math.cos(angle),y:center.y+radius*Math.sin(angle)};});
-        expanded.push(...(i?arc.slice(1):arc));
+        if(Math.abs(bulge)>1e-12)arcs.push({a,b,bulge});else segments.push([a,b]);
       }
-      points=expanded;
-      segments=points.slice(1).map((v,i)=>[points[i],v]);
-    } else if(entity.type==='rect'){
-      const [a,b]=entity.points; points=[a,{x:b.x,y:a.y},b,{x:a.x,y:b.y}];
-      segments=points.map((v,i)=>[v,points[(i+1)%4]]);
-    }else if(entity.type==='line')segments=[[entity.points[0],entity.points[1]]];
-    else segments=entity.points.slice(1).map((v,i)=>[entity.points[i],v]);
-    if(!crossing)return points.length>0&&points.every(inside);
-    return points.some(inside)||segments.some(([a,b])=>edges.some(([c,d])=>hit(a,b,c,d)));
+    }
+    if(!crossing)return points.length>0&&points.every(inside)&&arcs.every(arc=>arcWithinWindow(arc.a,arc.b,arc.bulge,inside));
+    return points.some(inside)||segments.some(([a,b])=>edges.some(([c,d])=>hit(a,b,c,d)))||arcs.some(arc=>arcIntersectsWindow(arc.a,arc.b,arc.bulge,window,inside));
   });
 }
 
@@ -209,9 +239,11 @@ export function offsetPolyline<T extends CadEditableEntity>(entity:T,distance:nu
   });
   const result:Point2D[]=[shifted[0][0]];
   for(let i=1;i<pts.length-1;i++){
-    const hit=infiniteLineIntersection(shifted[i-1][0],shifted[i-1][1],shifted[i][0],shifted[i][1]);
-    if(!hit)throw new Error('OFFSET failed: adjacent segments are parallel or collinear.');
-    if(dist(hit,pts[i])>Math.max(distance,1e-9)*miterLimit+dist(pts[i],pts[i-1]))throw new Error('OFFSET failed: corner miter exceeds the safety limit.');
+    const previousEnd=shifted[i-1][1],nextStart=shifted[i][0];
+    let hit=infiniteLineIntersection(shifted[i-1][0],previousEnd,nextStart,shifted[i][1]);
+    if(!hit&&dist(previousEnd,nextStart)<=1e-8)hit={x:(previousEnd.x+nextStart.x)/2,y:(previousEnd.y+nextStart.y)/2};
+    if(!hit)throw new Error('OFFSET failed: adjacent segments are parallel but not collinear.');
+    if(dist(hit,pts[i])>Math.max(distance,1e-9)*miterLimit+1e-8)throw new Error('OFFSET failed: corner miter exceeds the safety limit.');
     result.push(hit);
   }
   result.push(shifted[shifted.length-1][1]);
