@@ -1798,20 +1798,10 @@ button:disabled {
  .aquacad-ribbon-tabs button{padding:5px 9px!important}
 }
 
-/* AquaCAD integration: keep every existing engineering/CAD panel reachable.
-   Only the canvas workspace is compact; tool libraries and drawing controls
-   remain available beneath the command/status area instead of being hidden. */
-.aquacad-shell{height:auto!important;min-height:620px!important;overflow:visible!important}
-.aquacad-shell>.panel:not(:has(.aquacad-drawing-stage)){
- display:block!important;flex:0 0 auto!important;order:3!important;
- margin:8px 0 0!important;padding:12px!important;
- border:1px solid #cfd6df!important;border-radius:5px!important;
- background:#fff!important;color:#1c2530!important;overflow:visible!important
-}
-.aquacad-shell>.panel:not(:has(.aquacad-drawing-stage)) h3{margin-top:4px!important;color:#1c2530!important}
-.aquacad-shell>.panel:has(.aquacad-drawing-stage){
- flex:0 0 min(62vh,680px)!important;height:min(62vh,680px)!important;min-height:460px!important
-}
-@media(max-width:760px){
- .aquacad-shell>.panel:has(.aquacad-drawing-stage){flex-basis:58vh!important;height:58vh!important;min-height:390px!important}
-}
+/* AquaCAD ribbon-owned tool panels: specialist CAD controls stay inside the active ribbon tab. */
+.aquacad-ribbon-extra{display:grid;gap:8px;max-height:min(42vh,420px);overflow:auto;padding:7px 3px;border-top:1px solid #e1e6eb}
+.aquacad-ribbon-extra>.panel{display:grid;gap:9px;margin:0!important;padding:12px!important;border:1px solid #cfd6df!important;border-radius:4px!important;background:#fff!important;color:#1c2530!important;box-shadow:none!important}
+.aquacad-ribbon-extra>.panel h3{margin:4px 0!important;color:#1c2530!important}
+.aquacad-ribbon-extra label{min-width:0}
+.aquacad-ribbon-extra input,.aquacad-ribbon-extra select,.aquacad-ribbon-extra textarea{max-width:100%;box-sizing:border-box}
+@media(max-width:760px){.aquacad-ribbon-extra{max-height:36vh;padding:5px 2px}.aquacad-ribbon-extra>.panel{padding:9px!important}.aquacad-ribbon-extra>.panel>div{min-width:0}}
