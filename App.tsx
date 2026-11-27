@@ -1172,7 +1172,7 @@ function App() {
                     <span className="status-pill">{gisDoc ? 'Saved version ' + gisDoc.version : 'GIS draft'}</span>
                   </div>
                   <Suspense fallback={<EngineeringModuleLoading label="GIS workspace" />}>
-                   <GisEnginePanel projectId={activeProject.id} projectTitle={activeProject.title} initialData={gisDoc?.data} hydraulicNetwork={hydraulicDoc?.data?.network} hydraulicSimulation={hydraulicDoc?.data?.simulation} onSave={data => saveDocument('gis', data)} onSendToEpanet={openLinkedEpanet} onSendTerrainGrid={async grid => { const drawing = drawingDoc?.data ?? {}; await saveDocument('drawing', { ...drawing, terrainGrid: grid, terrainGridSource: 'Copernicus DEM via PyQGIS', terrainGridUpdatedAt: new Date().toISOString() }); }} />
+                   <GisEnginePanel projectId={activeProject.id} projectTitle={activeProject.title} initialData={gisDoc?.data} hydraulicNetwork={hydraulicDoc?.data?.network} hydraulicSimulation={hydraulicDoc?.data?.simulation} onSave={data => saveDocument('gis', data)} onSendToEpanet={openLinkedEpanet} />
                  </Suspense>
                 </>
               )}
