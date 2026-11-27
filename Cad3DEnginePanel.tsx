@@ -1261,13 +1261,13 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     // Render the engineering network from project-metre XYZ geometry, not as a flat 2D extrusion.
     const horizontalScale = waterCad.horizontalUnits === 'ft' ? 0.3048 : 1;
     const networkPoints = waterCad.components.flatMap(component => component.geometry);
-    const nodeElevations = new Map(waterCad.components.filter(component=>['junction','source','tank','reservoir'].includes(component.kind)).map(component=>[component.id,component.properties.hydraulicElevationM??component.properties.hydraulicHeadM??component.geometry[0]?.z]));
+    const nodeElevations = new Map(waterCad.components.filter(component=>['junction','source','tank','reservoir'].includes(component.kind)).map(component=>[component.id,component.properties.hydraulicElevationM??component.geometry[0]?.z]));
     const cadPoints = shapes.flatMap(shape => shape.points.map(point=>({x:point.x*(calibratedMetresPerUnit??1),y:point.y*(calibratedMetresPerUnit??1)})));
     const terrainAligned = !!terrainGrid && waterCad.horizontalUnits === 'm' && waterCad.horizontalCrs === terrainGrid.crs && waterCad.verticalDatum === terrainGrid.verticalDatum;
     const terrainValues = (terrainAligned ? terrainGrid?.elevationsM : undefined)?.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
     const networkElevations = [
       ...networkPoints.flatMap(point=>[point.z,point.invertLevelM]),
-      ...waterCad.components.map(component=>component.properties.hydraulicElevationM??component.properties.hydraulicHeadM),
+      ...waterCad.components.map(component=>component.properties.hydraulicElevationM),
       ...[...nodeElevations.values()],
     ].filter((value):value is number=>typeof value==='number'&&Number.isFinite(value));
     const verticalBase = terrainValues.length ? terrainValues.reduce((minimum,value)=>Math.min(minimum,value),Infinity) : networkElevations.length ? Math.min(...networkElevations) : 0;
