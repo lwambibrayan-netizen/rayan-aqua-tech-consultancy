@@ -52,11 +52,11 @@ J2 180 0
  it('imports nodes and links while preserving elevations, geometry and hydraulic lengths',()=>{
   const result=importEpanetInp(inp,'AHD');
   const p=result.document.components.find(c=>c.id==='P1')!;
-  expect(result.document.components.find(c=>c.id==='J1')?.geometry[0].z).toBe(100);
+  expect(result.document.components.find(c=>c.id==='J1')?.properties.hydraulicElevationM).toBe(100);
   expect(p.properties.hydraulicLengthM).toBe(125);
   expect(p.properties.internalDiameterMm).toBe(150);
   expect(p.geometry[1].x).toBe(100);
-  expect(result.warnings).toHaveLength(0);
+  expect(result.warnings.some(w=>w.includes('no guaranteed CRS'))).toBe(true);
  });
  it('warns when EPANET coordinates are absent rather than pretending the layout is surveyed',()=>{
   const result=importEpanetInp('[JUNCTIONS]\nJ1 10 1\n[RESERVOIRS]\nR1 20\n[PIPES]\nP1 R1 J1 50 100 130 0 OPEN\n[END]');
