@@ -373,11 +373,17 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     try{
       const imported=importEpanetInp(linkedEpanetInp,waterCad.verticalDatum);
       const merged=mergeEpanetRoundTrip(waterCad,imported.document,linkedEpanetIdMap??[]);
-      const idMap=new Map((linkedEpanetIdMap?.length?linkedEpanetIdMap:exportWaterNetworkToEpanet(merged).idMap).map(item=>[item.epanetId,item.cadId]));
+      const resultIdMap=new Map<string,string>();
+      if(linkedEpanetIdMap?.length){
+        linkedEpanetIdMap.forEach(item=>{
+          const target=merged.components.find(component=>component.id===item.cadId);
+          if(item.kind==='link'||(target&&['junction','source','tank','reservoir'].includes(target.kind)))resultIdMap.set(item.epanetId,item.cadId);
+        });
+      }else exportWaterNetworkToEpanet(merged).idMap.forEach(item=>resultIdMap.set(item.epanetId,item.cadId));
       const frames=epanetSimulationToHydraulicSeries(linkedEpanetSimulation).map(frame=>({
         ...frame,
-        nodes:frame.nodes.map(node=>({...node,id:idMap.get(node.id)??node.id})),
-        links:frame.links.map(link=>({...link,id:idMap.get(link.id)??link.id}))
+        nodes:frame.nodes.map(node=>({...node,id:resultIdMap.get(node.id)??node.id})),
+        links:frame.links.map(link=>({...link,id:resultIdMap.get(link.id)??link.id}))
       }));
       setWaterCad(merged);
       setHydraulicReport(typeof linkedEpanetSimulation?.report==='string'?linkedEpanetSimulation.report:'');
