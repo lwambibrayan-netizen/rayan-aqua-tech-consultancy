@@ -101,6 +101,11 @@ test('engineer opens a project, verifies precision drafting, saves and opens 3D'
   await expect(ribbonContent.getByRole('button', { name: 'Arc' })).toBeVisible();
   const currentLayer = ribbonContent.getByLabel('Current drawing layer');
   await expect(currentLayer).toHaveValue('0');
+  const cadCanvas = page.getByRole('application', { name: /AquaCAD drawing canvas/ });
+  await ribbonContent.getByRole('button', { name: 'Line' }).click();
+  await cadCanvas.click({ position: { x: 70, y: 80 } });
+  await cadCanvas.click({ position: { x: 110, y: 80 } });
+  await expect(cadCanvas.locator('line[data-shape-id]').first()).toHaveAttribute('stroke', '#ffffff');
   await currentLayer.selectOption('WATER_PIPE');
   await expect(currentLayer).toHaveValue('WATER_PIPE');
   await ribbonContent.getByRole('button', { name: 'Circle' }).click();
@@ -131,7 +136,6 @@ test('engineer opens a project, verifies precision drafting, saves and opens 3D'
   await expect(page.locator('.aquacad-shell .aquacad-ribbon-content').getByRole('button', { name: /Fetch DEM from GIS/ })).toBeVisible();
   await ribbon.getByRole('tab', { name: 'Home' }).click();
 
-  const cadCanvas = page.getByRole('application', { name: /AquaCAD drawing canvas/ });
   await ribbonContent.getByRole('button', { name: 'Polyline' }).click();
   await cadCanvas.click({ position: { x: 260, y: 200 } });
   await cadCanvas.click({ position: { x: 300, y: 200 } });
