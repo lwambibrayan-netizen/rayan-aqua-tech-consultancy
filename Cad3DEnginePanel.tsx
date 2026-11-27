@@ -1213,6 +1213,54 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 30, 1.8, 8, false), material));
       }
     });
+    // Render the engineering network from project-metre XYZ geometry, not as a flat 2D extrusion.
+    const networkPoints = waterCad.components.flatMap(component => component.geometry);
+    const terrainValues = terrainGrid?.elevationsM.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
+    const verticalBase = terrainValues.length ? Math.min(...terrainValues) : networkPoints.length ? Math.min(...networkPoints.map(point => point.z ?? point.invertLevelM ?? 0)) : 0;
+    const allX = [...networkPoints.map(point => point.x), ...(terrainGrid ? [terrainGrid.originX, terrainGrid.originX + (terrainGrid.width-1)*terrainGrid.cellSizeX] : [])];
+    const allY = [...networkPoints.map(point => point.y), ...(terrainGrid ? [terrainGrid.originY, terrainGrid.originY + (terrainGrid.height-1)*terrainGrid.cellSizeY] : [])];
+    const centreX = allX.length ? (Math.min(...allX)+Math.max(...allX))/2 : 0;
+    const centreY = allY.length ? (Math.min(...allY)+Math.max(...allY))/2 : 0;
+    const span = Math.max(allX.length ? Math.max(...allX)-Math.min(...allX) : 0, allY.length ? Math.max(...allY)-Math.min(...allY) : 0, 10);
+    camera.position.set(span*0.9, span*0.8, span*1.1);
+    camera.lookAt(0,0,0);
+    if (terrainGrid) {
+      const positions:number[]=[]; const indices:number[]=[];
+      for(let row=0;row<terrainGrid.height;row++) for(let col=0;col<terrainGrid.width;col++) {
+        const elevation=terrainGrid.elevationsM[row*terrainGrid.width+col];
+        positions.push(terrainGrid.originX+col*terrainGrid.cellSizeX-centreX, elevation===null?0:elevation-verticalBase, terrainGrid.originY+row*terrainGrid.cellSizeY-centreY);
+      }
+      for(let row=0;row<terrainGrid.height-1;row++) for(let col=0;col<terrainGrid.width-1;col++) {
+        const a=row*terrainGrid.width+col,b=a+1,c=a+terrainGrid.width,d=c+1;
+        if([terrainGrid.elevationsM[a],terrainGrid.elevationsM[b],terrainGrid.elevationsM[c]].every(value=>value!==null)) indices.push(a,c,b);
+        if([terrainGrid.elevationsM[b],terrainGrid.elevationsM[c],terrainGrid.elevationsM[d]].every(value=>value!==null)) indices.push(b,c,d);
+      }
+      const geometry=new THREE.BufferGeometry();
+      geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+      geometry.setIndex(indices); geometry.computeVertexNormals();
+      const material=new THREE.MeshStandardMaterial({color:'#b8c6a5',side:THREE.DoubleSide,transparent:true,opacity:0.55,wireframe:false});
+      scene.add(new THREE.Mesh(geometry,material));
+    }
+    waterCad.components.forEach(component=>{
+      const points=component.geometry.map(point=>new THREE.Vector3(point.x-centreX,(point.z??point.invertLevelM??0)-verticalBase,point.y-centreY));
+      const overlayItem=hydraulicOverlay?.items.find(item=>item.componentId===component.id);
+      const colour=overlayItem?.colour??'#087e83';
+      if(component.kind==='pipe'&&points.length>1) {
+        const radius=Math.max((component.properties.externalDiameterMm??component.properties.nominalDiameterMm??100)/2000,0.025);
+        for(let index=1;index<points.length;index++) {
+          const curve=new THREE.LineCurve3(points[index-1],points[index]);
+          const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,1,radius,10,false),new THREE.MeshStandardMaterial({color:colour}));
+          scene.add(mesh);
+        }
+      } else if(points.length) {
+        const radius=Math.max((component.properties.nominalDiameterMm??150)/2000,0.12);
+        const marker=new THREE.Mesh(
+          component.kind==='tank'||component.kind==='reservoir'?new THREE.CylinderGeometry(radius,radius,Math.max(component.properties.tankOperatingLevelM??2,1),16):new THREE.SphereGeometry(radius,16,12),
+          new THREE.MeshStandardMaterial({color:colour})
+        );
+        marker.position.copy(points[0]); scene.add(marker);
+      }
+    });
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     const resize = () => {
@@ -1244,7 +1292,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         }
       });
     };
-  }, [view, shapes]);
+  }, [view, shapes, waterCad, terrainGrid, hydraulicOverlay]);
 
   const formatLength = (drawingUnits: number) => calibratedMetresPerUnit
     ? ((drawingUnits * calibratedMetresPerUnit) * (units === 'mm' ? 1000 : 1)).toFixed(3) + ' ' + units
@@ -1271,7 +1319,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const pts = component.geometry.map(point => ({ x: point.x / (calibratedMetresPerUnit || 1), y: point.y / (calibratedMetresPerUnit || 1) }));
     const p = pts[0] || {x:0,y:0};
     const selected = selectedWaterId === component.id;
-    const stroke = selected ? '#d04d3f' : '#087e83';
+    const hydraulicItem = hydraulicOverlay?.items.find(item => item.componentId === component.id);
+    const stroke = selected ? '#d04d3f' : hydraulicItem?.colour || '#087e83';
     const sw = Math.max(viewBox.width / 700, 1.2);
     const projectPoints = (points: {x:number;y:number}[]) => points.map(point => ({ x: point.x / (calibratedMetresPerUnit || 1), y: point.y / (calibratedMetresPerUnit || 1) }));
     if (component.kind === 'bend') {
