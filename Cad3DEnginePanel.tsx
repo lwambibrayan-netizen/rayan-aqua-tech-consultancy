@@ -35,8 +35,9 @@ type Props = {
   gisFeatures?: any[];
   linkedEpanetInp?: string;
   linkedEpanetSimulation?: any;
+  linkedEpanetIdMap?: Array<{epanetId:string;cadId:string;kind:'node'|'link'}>;
   linkedEpanetUpdatedAt?: string;
-  onSendToEpanet?: (input: string) => void;
+  onSendToEpanet?: (input: string, idMap: Array<{epanetId:string;cadId:string;kind:'node'|'link'}>) => void;
   onSave: (data: any) => Promise<void> | void;
 };
 type SnapPoint = { point: Point2D; kind: string; distance: number };
@@ -349,7 +350,7 @@ function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled:
   return best;
 }
 
-export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures = [], linkedEpanetInp = '', linkedEpanetSimulation, linkedEpanetUpdatedAt, onSendToEpanet, onSave }: Props) {
+export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures = [], linkedEpanetInp = '', linkedEpanetSimulation, linkedEpanetIdMap, linkedEpanetUpdatedAt, onSendToEpanet, onSave }: Props) {
   const [history, setHistory] = useState(() => createHistory<Shape[]>(initialData?.shapes || []));
   const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad ? { ...initialData.waterCad, horizontalCrs: initialData.waterCad.horizontalCrs ?? 'LOCAL_METRIC', horizontalUnits: initialData.waterCad.horizontalUnits ?? 'm' } : { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', horizontalCrs: 'LOCAL_METRIC', horizontalUnits: 'm' as const, components: [] });
   const [terrainGrid, setTerrainGrid] = useState<TerrainGrid | null>(() => initialData?.terrainGrid || null);
@@ -372,7 +373,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     try{
       const imported=importEpanetInp(linkedEpanetInp,waterCad.verticalDatum);
       const merged=mergeEpanetRoundTrip(waterCad,imported.document);
-      const idMap=new Map(exportWaterNetworkToEpanet(merged).idMap.map(item=>[item.epanetId,item.cadId]));
+      const idMap=new Map((linkedEpanetIdMap?.length?linkedEpanetIdMap:exportWaterNetworkToEpanet(merged).idMap).map(item=>[item.epanetId,item.cadId]));
       const frames=epanetSimulationToHydraulicSeries(linkedEpanetSimulation).map(frame=>({
         ...frame,
         nodes:frame.nodes.map(node=>({...node,id:idMap.get(node.id)??node.id})),
@@ -2054,7 +2055,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <button className="secondary-button" onClick={() => {setEpanetImportMode('replace');epanetFileRef.current?.click();}}>Import EPANET INP (replace)</button>
             <button className="secondary-button" onClick={() => {setEpanetImportMode('merge');epanetFileRef.current?.click();}}>Merge EPANET back (preserve CAD)</button>
             <button className="secondary-button" onClick={downloadEpanetInput}>Export CAD → EPANET INP</button>
-            <button className="primary-button" onClick={() => {if(!onSendToEpanet){setMessage('Project EPANET handoff is unavailable.');return;}const exported=exportWaterNetworkToEpanet(waterCad);if(exported.warnings.some(w=>w.startsWith('EPANET ID collision')||w.startsWith('EPANET node ID collision'))){setMessage('CAD-to-EPANET transfer blocked: resolve duplicate EPANET IDs first. '+exported.warnings.join(' '));return;}if(exported.warnings.length&&!window.confirm('The CAD network has '+exported.warnings.length+' export warning(s). Some objects may not transfer. Continue to EPANET?\n\n'+exported.warnings.slice(0,8).join('\n')))return;onSendToEpanet(exported.input);setMessage('CAD network sent to the project EPANET editor. Review the imported network and save it to synchronize hydraulic results back to CAD/GIS.');}}>Send CAD network to EPANET</button>
+            <button className="primary-button" onClick={() => {if(!onSendToEpanet){setMessage('Project EPANET handoff is unavailable.');return;}const exported=exportWaterNetworkToEpanet(waterCad);if(exported.warnings.some(w=>w.startsWith('EPANET ID collision')||w.startsWith('EPANET node ID collision'))){setMessage('CAD-to-EPANET transfer blocked: resolve duplicate EPANET IDs first. '+exported.warnings.join(' '));return;}if(exported.warnings.length&&!window.confirm('The CAD network has '+exported.warnings.length+' export warning(s). Some objects may not transfer. Continue to EPANET?\n\n'+exported.warnings.slice(0,8).join('\n')))return;onSendToEpanet(exported.input,exported.idMap);setMessage('CAD network sent to the project EPANET editor. Review the imported network and save it to synchronize hydraulic results back to CAD/GIS.');}}>Send CAD network to EPANET</button>
             <button className="primary-button" onClick={runProjectHydraulics} disabled={simulationBusy || !waterCad.components.length}>{simulationBusy ? 'Running EPANET…' : 'Run EPANET simulation'}</button>
             <button className="secondary-button" onClick={() => hydraulicResultsFileRef.current?.click()}>Import hydraulic results JSON</button>
             <button className="secondary-button" onClick={() => { const issues = buildTerrainIssues(waterCad); setMessage('Terrain check: ' + issues.length + ' issue(s). ' + issues.slice(0,5).map(issue => issue.componentId + ': ' + issue.message).join(' ')); }}>Check terrain cover</button>
