@@ -19,10 +19,11 @@ describe('advanced dimension geometry', () => {
     expect(d.firstExtension.a).toEqual({x:0,y:1});
     expect(d.secondExtension.a).toEqual({x:1,y:0});
   });
-  it('calculates radius and diameter leaders from a circle centre', () => {
+  it('anchors radial leaders to the circumference and diameter leaders to the opposite circumference', () => {
     const radius = calculateRadiusDimension({x:2,y:3},{x:5,y:3},{x:6,y:4});
     expect(radius.radius).toBe(3);
     expect(radius.centerMark).toHaveLength(2);
+    expect(radius.leader.a).toEqual({x:5,y:3});
     const diameter = calculateDiameterDimension({x:2,y:3},{x:5,y:3},{x:6,y:4});
     expect(diameter.diameter).toBe(6);
     expect(diameter.oppositePoint).toEqual({x:-1,y:3});
