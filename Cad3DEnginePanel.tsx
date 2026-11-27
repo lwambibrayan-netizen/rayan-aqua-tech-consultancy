@@ -887,7 +887,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const border='<rect x="5" y="5" width="'+(widthMm-10)+'" height="'+(heightMm-10)+'" fill="none" stroke="black" stroke-width="0.5"/>';
     const revisionRows=(drafting.revisionHistory||[]).slice(-5).map((r,i)=>'<text x="15" y="'+(heightMm-58+i*3.5)+'" font-size="2.1">'+safe(r.revision)+' · '+safe(r.date)+' · '+safe(r.description)+'</text>').join('');
     const revisionTable=revisionRows?'<text x="15" y="'+(heightMm-61)+'" font-size="2.4" font-weight="bold">REVISION HISTORY</text>'+revisionRows:'';
-    const notes=(drafting.sheet.generalNotes||'').split('\\n').filter(Boolean).slice(0,8).map((line,i)=>'<text x="15" y="'+(heightMm-24-i*3.2)+'" font-size="2.2">'+safe(line)+'</text>').join('');
+    const notes=(drafting.sheet.generalNotes||'').split('\n').filter(Boolean).slice(0,8).map((line,i)=>'<text x="15" y="'+(heightMm-24-i*3.2)+'" font-size="2.2">'+safe(line)+'</text>').join('');
     const keyPlan=drafting.sheet.keyPlanText?'<text x="15" y="14" font-size="3" font-weight="bold">KEY PLAN · '+safe(drafting.sheet.keyPlanText)+'</text>':'';
     const northArrow=drafting.sheet.showNorthArrow===false?'':'<g transform="translate('+(widthMm-22)+' 24)'><path d="M 0 9 L 0 -9 M 0 -9 L -3 -3 M 0 -9 L 3 -3" stroke="black" fill="none" stroke-width="0.6"/><text x="0" y="-12" text-anchor="middle" font-size="3">N</text></g>';
     const scaleBarModelM=Math.min(5,50*denominator/1000),scaleBarLengthMm=scaleBarModelM*1000/denominator;
