@@ -148,7 +148,8 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
     else if(shape.type==='circle') out.push(...entity('CIRCLE',['8',layer,'10',fmt(drawingPoints[0].x),'20',fmt(drawingPoints[0].y),'40',fmt((shape.radius||1)/metresPerDrawingUnit)]));
     else {
       const pts=shape.type==='rect'?[drawingPoints[0],{x:drawingPoints[1].x,y:drawingPoints[0].y},drawingPoints[1],{x:drawingPoints[0].x,y:drawingPoints[1].y}]:drawingPoints;
-      out.push(...entity('LWPOLYLINE',['8',layer,'90',pts.length,'70',shape.type==='rect'?'1':'0']));
+      const isClosed=shape.type==='rect'||(pts.length>2&&Math.hypot(pts[0].x-pts[pts.length-1].x,pts[0].y-pts[pts.length-1].y)<=1e-9);
+      out.push(...entity('LWPOLYLINE',['8',layer,'90',pts.length,'70',isClosed?'1':'0']));
       pts.forEach((p,i)=>out.push('10',fmt(p.x),'20',fmt(p.y),...(shape.bulges?.[i]?[ '42',fmt(shape.bulges[i]) ]:[])));
     }
   }
