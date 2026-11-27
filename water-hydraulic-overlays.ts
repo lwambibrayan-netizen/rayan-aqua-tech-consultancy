@@ -15,7 +15,7 @@ export function buildHydraulicOverlay(document:WaterCadDocument,results:Hydrauli
   const maximum=limits.maximum ?? (metric==='velocityMs'&&component?.kind==='pipe'?component.properties.velocityMaxMs:undefined);
   const severity:HydraulicOverlayItem['severity']=value===null?'warning':minimum!==undefined&&value<minimum||maximum!==undefined&&value>maximum?'critical':'normal';
   const colour=value===null?'#8a8f98':severity==='critical'?'#d43b35':metric==='flowLps'?'#1678c8':metric==='velocityMs'?'#d58a24':'#15936d';
-  return {componentId:item.id,value,label:value===null?'No result':value.toFixed(2),colour,severity,...(metric==='flowLps'&&value!==null?{direction:value>0?'forward':value<0?'reverse':'stagnant'}:{})};
+  return {componentId:item.id,value,label:value===null?'No result':value.toFixed(2),colour,severity,...(metric==='flowLps'&&value!==null?{direction:(value>0?'forward':value<0?'reverse':'stagnant') as 'forward'|'reverse'|'stagnant'}:{})};
  });
  const values=items.flatMap(item=>item.value===null?[]:[item.value]);
  return {metric,timeSeconds:results.timeSeconds,items,min:values.length?values.reduce((a,b)=>Math.min(a,b),Infinity):null,max:values.length?values.reduce((a,b)=>Math.max(a,b),-Infinity):null};
