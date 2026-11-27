@@ -245,7 +245,7 @@ function resolveHydraulicNodes(document: NetworkDocument): { portNodeIds: Map<st
   for (const [root, group] of groups) {
     const componentIds = new Set(group.map(port => port.componentId));
     const sourceNode = document.components.find(c => componentIds.has(c.id) && ['junction', 'source', 'tank', 'reservoir'].includes(c.kind));
-    const containsLink = group.some(port => {
+    const containsLink = group.length > 1 && group.some(port => {
       const component = document.components.find(c => c.id === port.componentId);
       return component && ['pipe', 'pump', 'valve'].includes(component.kind);
     });
@@ -258,16 +258,6 @@ function resolveHydraulicNodes(document: NetworkDocument): { portNodeIds: Map<st
       syntheticNodes.push({ id: nodeId, elevationM });
     }
   }
-  // Unconnected link ends still get explicit synthetic junctions, but are called out to the engineer.
-  document.components.filter(c => ['pipe', 'pump', 'valve'].includes(c.kind)).forEach(component => {
-    getWaterPorts(component).forEach(port => {
-      if (!portNodeIds.has(port.id)) {
-        const id = 'N_' + String(serial++).padStart(4, '0');
-        portNodeIds.set(port.id, id);
-        syntheticNodes.push({ id, elevationM: port.point.z ?? 0 });
-      }
-    });
-  });
   return { portNodeIds, syntheticNodes };
 }
 
