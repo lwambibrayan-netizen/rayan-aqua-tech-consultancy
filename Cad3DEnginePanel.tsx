@@ -612,6 +612,20 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     };
   }, [view, shapes]);
 
+  const formatLength = (drawingUnits: number) => calibratedMetresPerUnit
+    ? ((drawingUnits * calibratedMetresPerUnit) * (units === 'mm' ? 1000 : 1)).toFixed(3) + ' ' + units
+    : drawingUnits.toFixed(3) + ' drawing units (unscaled)';
+  const selectedMetrics = selectedShape ? (() => {
+    if (selectedShape.type === 'circle') return 'Diameter: ' + formatLength((selectedShape.radius || 0) * 2);
+    if (selectedShape.type === 'rect') {
+      const a = selectedShape.points[0], b = selectedShape.points[1];
+      return 'Width: ' + formatLength(Math.abs(b.x - a.x)) + ' · Height: ' + formatLength(Math.abs(b.y - a.y));
+    }
+    const points = selectedShape.points;
+    let total = 0;
+    for (let i = 1; i < points.length; i++) total += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    return (selectedShape.type === 'line' ? 'Length: ' : 'Total path length: ') + formatLength(total);
+  })() : '';
   const layerNames = Array.from(new Set(shapes.map(shape => shape.layer || '0'))).sort();
   const visibleShapes = shapes.filter(shape => !hiddenLayers.includes(shape.layer || '0'));
   const renderedShapes = visibleShapes.map(shape => {
@@ -750,9 +764,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         <label>Layer <input value={selectedShape.layer} onChange={e=>updateSelected({layer:e.target.value})} /></label>
         {selectedShape.points.map((point,index)=><div key={index} style={{display:'flex',gap:8,flexWrap:'wrap'}}><label>Point {index+1} X <input type="number" step="any" value={point.x} onChange={e=>updateSelected({points:selectedShape.points.map((p,i)=>i===index?{...p,x:Number(e.target.value)}:p)})}/></label><label>Y <input type="number" step="any" value={point.y} onChange={e=>updateSelected({points:selectedShape.points.map((p,i)=>i===index?{...p,y:Number(e.target.value)}:p)})}/></label></div>)}
         {selectedShape.type==='circle' && <label>Radius <input type="number" min="0.001" step="any" value={selectedShape.radius||1} onChange={e=>updateSelected({radius:Number(e.target.value)})}/></label>}
-        {selectedShape.type==='line' && <><small>Length: {calibratedMetresPerUnit
-          ? ((Math.hypot(selectedShape.points[1].x-selectedShape.points[0].x,selectedShape.points[1].y-selectedShape.points[0].y) * calibratedMetresPerUnit) * (units === 'mm' ? 1000 : 1)).toFixed(3) + ' ' + units
-          : Math.hypot(selectedShape.points[1].x-selectedShape.points[0].x,selectedShape.points[1].y-selectedShape.points[0].y).toFixed(3) + ' drawing units (unscaled)'}</small><button className="secondary-button" onClick={calibrateSelectedLine}>Calibrate scale from this line</button></>}
+        <small>{selectedMetrics}</small>{selectedShape.type==='line' && <button className="secondary-button" onClick={calibrateSelectedLine}>Calibrate scale from this line</button>}
       </div>}
       {message && <div className="alert">{message}</div>}
       <div className="panel" style={{ padding: 14 }}>
