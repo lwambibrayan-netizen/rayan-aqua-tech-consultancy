@@ -1145,6 +1145,28 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       </div>
 
 
+      <div className="panel" style={{ padding: 14, display: 'grid', gap: 9 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div><strong>Engineering object library</strong><div className="muted" style={{ fontSize: 12 }}>Parametric water symbols with named connection ports and default schedules</div></div>
+          <span className="muted" style={{ fontSize: 11 }}>{ENGINEERING_BLOCK_LIBRARY.length} library objects</span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <select value={libraryBlockName} onChange={event => setLibraryBlockName(event.target.value)} style={{ minWidth: 210, padding: 7 }}>
+            {ENGINEERING_BLOCK_LIBRARY.map(block => <option key={block.name} value={block.name}>{block.name.replaceAll('_', ' ')} · {block.category}</option>)}
+          </select>
+          <button className="secondary-button" onClick={insertEngineeringBlock} disabled={!calibratedMetresPerUnit}>Insert at drawing centre</button>
+          {!calibratedMetresPerUnit && <span className="muted" style={{ fontSize: 11 }}>Scale calibration required</span>}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="secondary-button" onClick={runEngineeringAudit}>Run engineering drawing audit</button>
+          {engineeringAudit && <strong style={{ fontSize: 12, color: engineeringAudit.status === 'FAIL' ? '#b42318' : engineeringAudit.status === 'PASS_WITH_WARNINGS' ? '#9a6700' : '#16794b' }}>{engineeringAudit.status} · {engineeringAudit.errors} errors · {engineeringAudit.warnings} warnings</strong>}
+        </div>
+        {engineeringAudit && <div style={{ display: 'grid', gap: 4, fontSize: 12 }}>
+          <span>{engineeringAudit.summary.shapeCount} CAD entities · {engineeringAudit.summary.annotationCount} annotations · {engineeringAudit.summary.waterComponentCount} water components · {engineeringAudit.summary.layerCount} layers · {engineeringAudit.summary.sheetCount} sheets</span>
+          {engineeringAudit.issues.slice(0, 12).map((issue, index) => <div key={issue.code + '-' + index} style={{ color: issue.severity === 'error' ? '#b42318' : '#9a6700' }}>{issue.severity.toUpperCase()} · {issue.code}: {issue.message}</div>)}
+          {engineeringAudit.issues.length > 12 && <span className="muted">Showing first 12 of {engineeringAudit.issues.length} findings.</span>}
+        </div>}
+      </div>
       <div className="panel" style={{ padding: 14 }}>
         <span className="eyebrow muted">PROFESSIONAL DRAFTING</span>
         <h3 style={{ margin: "5px 0" }}>Dimensions, annotations, layers & drawing sheets</h3>
