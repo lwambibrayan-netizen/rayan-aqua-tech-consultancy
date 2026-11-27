@@ -234,7 +234,7 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
   return out.join('\n');
 }
 export function importDraftingDxf(source:string, metresPerDrawingUnit?:number, scaleDenominator=100):DxfImportResult {
-  if(source.startsWith('AutoCAD Binary DXF')||source.includes('\\0')) throw new Error('Binary DXF is not supported. Export the drawing as ASCII DXF and import it again.');
+  if(source.startsWith('AutoCAD Binary DXF')||source.includes('\0')) throw new Error('Binary DXF is not supported. Export the drawing as ASCII DXF and import it again.');
   if(metresPerDrawingUnit!==undefined&&(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0)) throw new Error('Drawing calibration must be positive.');
   if(!Number.isFinite(scaleDenominator)||scaleDenominator<=0) throw new Error('Drawing scale denominator must be positive.');
   const warnings:string[]=[];
