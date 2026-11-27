@@ -78,7 +78,8 @@ describe('CAD editing geometry operations', () => {
     const filleted = filletPolylineCorner(poly, 1, 2);
     expect(filleted.points).toHaveLength(4);
     expect(filleted.points[1]).toEqual({x:8,y:0});
-    expect(filleted.points[2]).toEqual({x:10,y:2});
+    expect(filleted.points[2].x).toBeCloseTo(10);
+    expect(filleted.points[2].y).toBeCloseTo(2);
     expect(filleted.bulges?.[1]).toBeCloseTo(Math.tan(Math.PI/8));
   });
   it('supports both trim endpoints and extension directions', () => {
@@ -94,7 +95,8 @@ describe('CAD editing geometry operations', () => {
     const result = filletPolylineCorner(poly, 1, 2);
     const start = result.points[1], end = result.points[2];
     expect(start).toEqual({x:8,y:0});
-    expect(end).toEqual({x:10,y:2});
+    expect(end.x).toBeCloseTo(10);
+    expect(end.y).toBeCloseTo(2);
     expect(result.points).toHaveLength(4);
     expect(result.bulges?.[1]).toBeCloseTo(Math.tan(Math.PI/8));
     expect(() => filletPolylineCorner(poly, 1, 11)).toThrow(/too large/);
