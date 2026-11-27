@@ -52,7 +52,8 @@ export async function runEpanetHydraulicSimulation(input: string): Promise<Epane
     hydraulicsOpen = false;
     project.close();
     opened = false;
-    return { results, engine: 'OWA-EPANET via epanet-js', report: '' };
+    const report=workspace.readFile('rayan-aqua-report.rpt','utf8') as string;
+    return { results, engine: 'OWA-EPANET via epanet-js', report };
   } finally {
     if (hydraulicsOpen) { try { project.closeH(); } catch { /* retain original engine error */ } }
     if (opened) { try { project.close(); } catch { /* retain original engine error */ } }
