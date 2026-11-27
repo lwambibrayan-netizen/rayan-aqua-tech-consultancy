@@ -13,6 +13,7 @@ import { mergeLayerTemplate, validatePlotConfiguration, type LayerStandard } fro
 import { auditEngineeringDrawing, type EngineeringDrawingAudit } from './cad-engineering-verification';
 import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringBlock, type BlockInsert } from './cad-object-library';
 import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
+import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension } from './cad-dimension-geometry';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
@@ -328,7 +329,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [annotationText, setAnnotationText] = useState('');
   const [dimensionOffset, setDimensionOffset] = useState(2);
   const [dimensionPrecision, setDimensionPrecision] = useState(3);
-  const [dimensionKind, setDimensionKind] = useState<'aligned' | 'linear'>('aligned');
+  const [dimensionKind, setDimensionKind] = useState<'aligned' | 'linear' | 'angular' | 'radius' | 'diameter' | 'ordinate'>('aligned');
+  const [ordinateAxis, setOrdinateAxis] = useState<'x' | 'y'>('x');
   const [dimensionStyle, setDimensionStyle] = useState<DimensionStyle>(() => initialData?.drafting?.dimensionStyle || DIMENSION_STYLES.ISO);
   const [layerTemplate, setLayerTemplate] = useState<LayerStandard>('WATER_UTILITY');
   const [revisionDraft, setRevisionDraft] = useState({ revision: '', date: new Date().toISOString().slice(0,10), description: '', drawnBy: '', checkedBy: '', approvedBy: '', status: 'FOR REVIEW' as const });
@@ -471,13 +473,40 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         setMessage('Text annotation placed.'); return;
       }
       const next = [...annotationDraft, metres];
-      if (next.length < 2) { setAnnotationDraft(next); setMessage('First point set. Choose the second point.'); return; }
+      const requiredPoints = draftTool === 'dimension' && ['angular','radius','diameter','ordinate'].includes(dimensionKind) ? 3 : 2;
+      if (next.length < requiredPoints) { setAnnotationDraft(next); setMessage('Point ' + next.length + ' set. Choose point ' + (next.length + 1) + ' of ' + requiredPoints + '.'); return; }
       if (draftTool === 'dimension') {
         try {
-          const item = dimensionKind === 'linear' ? makeLinearDimension(makeId(), next[0], next[1], dimensionOffset * (calibratedMetresPerUnit || 1), 'DIMENSIONS', dimensionStyle.precision) : makeAlignedDimension(makeId(), next[0], next[1], dimensionOffset * (calibratedMetresPerUnit || 1), 'DIMENSIONS', dimensionStyle.precision);
-          item.textOverride = formatStyledDimension(dimensionKind === 'linear' ? Math.abs(next[1].x-next[0].x) : Math.hypot(next[1].x-next[0].x,next[1].y-next[0].y), dimensionStyle);
-          setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
-          setMessage('Aligned dimension placed.'); 
+          const scale = calibratedMetresPerUnit || 1;
+          if (dimensionKind === 'linear' || dimensionKind === 'aligned') {
+            const item = dimensionKind === 'linear' ? makeLinearDimension(makeId(), next[0], next[1], dimensionOffset * scale, 'DIMENSIONS', dimensionStyle.precision) : makeAlignedDimension(makeId(), next[0], next[1], dimensionOffset * scale, 'DIMENSIONS', dimensionStyle.precision);
+            const measured = dimensionKind === 'linear' ? Math.abs(next[1].x-next[0].x) : Math.hypot(next[1].x-next[0].x,next[1].y-next[0].y);
+            item.textOverride = formatStyledDimension(measured, dimensionStyle);
+            setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
+          } else {
+            const id = makeId(), graphics: Shape[] = [], pushLine = (a: Point2D, b: Point2D) => graphics.push({ id: makeId(), type: 'line', points: [{x:a.x/scale,y:a.y/scale},{x:b.x/scale,y:b.y/scale}], layer: 'DIMENSIONS' });
+            let labelPoint: Point2D, label = '';
+            if (dimensionKind === 'angular') {
+              const g = calculateAngularDimension(next[0], next[1], next[2], Math.max(0.001, Math.abs(dimensionOffset * scale)));
+              pushLine(g.firstExtension.a,g.firstExtension.b); pushLine(g.secondExtension.a,g.secondExtension.b);
+              const arcPoints = Array.from({length:25},(_,i)=>{const a=g.arc.startAngleRad+(g.arc.endAngleRad-g.arc.startAngleRad)*i/24;return {x:(g.arc.center.x+Math.cos(a)*g.arc.radius)/scale,y:(g.arc.center.y+Math.sin(a)*g.arc.radius)/scale};});
+              graphics.push({id:makeId(),type:'polyline',points:arcPoints,layer:'DIMENSIONS'}); labelPoint=g.labelPoint; label=(g.angleRad*180/Math.PI).toFixed(dimensionStyle.precision)+'°';
+            } else if (dimensionKind === 'radius' || dimensionKind === 'diameter') {
+              const g = dimensionKind === 'radius' ? calculateRadiusDimension(next[0],next[1],next[2]) : calculateDiameterDimension(next[0],next[1],next[2]);
+              g.centerMark.forEach(line=>pushLine(line.a,line.b)); pushLine(g.leader.a,g.leader.b);
+              if (dimensionKind === 'diameter') pushLine(g.oppositePoint,next[2]);
+              labelPoint=g.labelPoint; label=(dimensionKind === 'radius'?'R ':'Ø ')+formatStyledDimension(dimensionKind === 'radius'?g.radius:g.diameter,dimensionStyle);
+            } else {
+              const offset = ordinateAxis === 'x' ? next[2].y-next[1].y : next[2].x-next[1].x;
+              const g = calculateOrdinateDimension(next[0],next[1],ordinateAxis,offset);
+              pushLine(g.originExtension.a,g.originExtension.b); pushLine(g.featureExtension.a,g.featureExtension.b); pushLine(g.dimensionLine.a,g.dimensionLine.b);
+              labelPoint=g.labelPoint; label=formatStyledDimension(g.value,dimensionStyle);
+            }
+            setShapes(current => [...current,...graphics]);
+            const note: DraftAnnotation = {id,kind:'text',layer:'DIMENSIONS',at:labelPoint,text:label,heightMm:dimensionStyle.textHeightMm,rotationDeg:0};
+            setDrafting(current => ({...current,annotations:[...current.annotations,note]}));
+          }
+          setMessage(dimensionKind.charAt(0).toUpperCase()+dimensionKind.slice(1)+' dimension placed. Advanced dimensions are saved as editable CAD linework and text; associative remeasurement is not yet supported.');
         } catch (error) { setMessage(error instanceof Error ? error.message : 'Dimension could not be placed.'); }
       } else {
         const item: DraftAnnotation = { id: makeId(), kind: 'leader', layer: 'ANNOTATION', points: next, text: annotationText || 'Note', textHeightMm: 2.5 };
@@ -1233,11 +1262,13 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
           <button className={draftTool === "dimension" && dimensionKind === "aligned" ? "primary-button" : "secondary-button"} onClick={() => { setDimensionKind("aligned"); setDraftTool("dimension"); setAnnotationDraft([]); setMessage("Select two points for an aligned dimension."); }}>Aligned dimension</button>
           <button className={draftTool === "dimension" && dimensionKind === "linear" ? "primary-button" : "secondary-button"} onClick={() => { setDimensionKind("linear"); setDraftTool("dimension"); setAnnotationDraft([]); setMessage("Select two points for a horizontal/vertical linear dimension."); }}>Linear dimension</button>
+          {(['angular','radius','diameter','ordinate'] as const).map(kind => <button key={kind} className={draftTool === 'dimension' && dimensionKind === kind ? 'primary-button' : 'secondary-button'} onClick={() => { setDimensionKind(kind); setDraftTool('dimension'); setAnnotationDraft([]); setMessage(kind === 'angular' ? 'Select vertex, first ray point and second ray point.' : kind === 'ordinate' ? 'Select datum origin, feature point and offset direction point.' : 'Select circle centre, circle edge and leader landing point.'); }}>{kind[0].toUpperCase()+kind.slice(1)} dimension</button>)}
           <button className={draftTool === "text" ? "primary-button" : "secondary-button"} onClick={() => { setDraftTool("text"); setMessage("Click the drawing to place text."); }}>Place text</button>
           <button className={draftTool === "leader" ? "primary-button" : "secondary-button"} onClick={() => { setDraftTool("leader"); setAnnotationDraft([]); setMessage("Click leader arrow point, then text landing point."); }}>Leader</button>
           {draftTool !== "none" && <button className="secondary-button" onClick={() => { setDraftTool("none"); setAnnotationDraft([]); }}>Cancel annotation</button>}
           <label>Text / note <input value={annotationText} onChange={e => setAnnotationText(e.target.value)} style={{ width: 180 }}/></label>
-          <label>Dimension offset (m) <input type="number" step="any" value={dimensionOffset} onChange={e => setDimensionOffset(Number(e.target.value))} style={{ width: 75 }}/></label>
+          <label>Dimension offset / angular radius (m) <input type="number" step="any" value={dimensionOffset} onChange={e => setDimensionOffset(Number(e.target.value))} style={{ width: 95 }}/></label>
+          <label>Ordinate axis <select value={ordinateAxis} onChange={e => setOrdinateAxis(e.target.value as 'x'|'y')}><option value="x">X</option><option value="y">Y</option></select></label>
           <label>Precision <select value={dimensionPrecision} onChange={e => { const precision = Number(e.target.value); setDimensionPrecision(precision); setDimensionStyle(current => ({ ...current, precision })); }}><option value={0}>0</option><option value={1}>0.0</option><option value={2}>0.00</option><option value={3}>0.000</option><option value={4}>0.0000</option></select></label>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 9, marginTop: 12 }}>
