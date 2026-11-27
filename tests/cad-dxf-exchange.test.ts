@@ -43,4 +43,30 @@ describe('structured DXF exchange', () => {
     expect(result.shapes[0].points).toHaveLength(4);
     expect(result.shapes[0].bulges?.[0]).toBe(0.25);
   });
+
+  it('expands a scaled and rotated BLOCK INSERT into model geometry', () => {
+    const source = ['0','SECTION','2','BLOCKS','0','BLOCK','8','0','2','VALVE','10','0','20','0',
+      '0','CIRCLE','8','0','10','0','20','0','40','1','0','ENDBLK','0','ENDSEC',
+      '0','SECTION','2','ENTITIES','0','INSERT','8','SYMBOLS','2','VALVE','10','10','20','20','41','2','42','2','50','90',
+      '0','ENDSEC','0','EOF'].join('\\n');
+    const imported = importDraftingDxf(source);
+    expect(imported.shapes).toHaveLength(1);
+    expect(imported.shapes[0].type).toBe('circle');
+    expect(imported.shapes[0].points[0]).toEqual({x:10,y:20});
+    expect(imported.shapes[0].radius).toBe(2);
+    expect(imported.shapes[0].layer).toBe('SYMBOLS');
+  });
+  it('converts SPLINE, ELLIPSE and polyline-boundary HATCH to editable polylines', () => {
+    const source = ['0','SECTION','2','ENTITIES',
+      '0','SPLINE','8','CURVES','11','0','21','0','11','5','21','8','11','10','21','0',
+      '0','ELLIPSE','8','ELLIPSES','10','20','20','20','11','5','21','0','40','0.5','41','0','42','6.283185307',
+      '0','HATCH','8','HATCHED','92','0','72','0','73','1','93','3','10','0','20','0','10','4','20','0','10','2','20','3',
+      '0','ENDSEC','0','EOF'].join('\\n');
+    const imported = importDraftingDxf(source);
+    expect(imported.shapes).toHaveLength(3);
+    expect(imported.shapes.every(shape => shape.type === 'polyline')).toBe(true);
+    expect(imported.shapes[0].points.length).toBeGreaterThan(3);
+    expect(imported.shapes[1].points.length).toBeGreaterThan(16);
+    expect(imported.shapes[2].points[0]).toEqual(imported.shapes[2].points[3]);
+  });
 });
