@@ -20,7 +20,7 @@ export type WaterEngineeringProperties = {
   roughness?: number;
   invertInletM?: number;
   invertOutletM?: number;
-  coverDepthM?: number;
+  coverDepthM?: number;\n  groundStartM?: number;\n  groundEndM?: number;\n  externalDiameterMm?: number;\n  rotationDeg?: number;\n  fittingLengthM?: number;\n  fittingRunLengthM?: number;\n  fittingBranchLengthM?: number;
   bendAngleDeg?: number;
   bendRadiusM?: number;
   branchDiameterMm?: number;
@@ -69,10 +69,10 @@ export function createWaterComponent(kind: WaterComponentKind, id: string, x: nu
   const geometry: WaterPoint[] = [{ x, y }];
   if (kind === 'pipe') {
     geometry.push({ x: x + 10, y });
-    Object.assign(properties, { material: 'HDPE', nominalDiameterMm: 110, internalDiameterMm: 96, pressureClass: 'PN16', roughness: 140, velocityMinMs: 0.3, velocityMaxMs: 2.0 });
-  } else if (kind === 'bend') Object.assign(properties, { nominalDiameterMm: 110, bendAngleDeg: 90, bendRadiusM: 0.5 });
-  else if (kind === 'tee') Object.assign(properties, { nominalDiameterMm: 110, branchDiameterMm: 110 });
-  else if (kind === 'reducer') Object.assign(properties, { nominalDiameterMm: 160, outletDiameterMm: 110 });
+    Object.assign(properties, { material: 'HDPE', nominalDiameterMm: 110, internalDiameterMm: 96, externalDiameterMm: 110, pressureClass: 'PN16', roughness: 140, velocityMinMs: 0.3, velocityMaxMs: 2.0 });
+  } else if (kind === 'bend') Object.assign(properties, { nominalDiameterMm: 110, bendAngleDeg: 90, bendRadiusM: 0.5, rotationDeg: 0 });
+  else if (kind === 'tee') Object.assign(properties, { nominalDiameterMm: 110, branchDiameterMm: 110, rotationDeg: 0, fittingRunLengthM: 1, fittingBranchLengthM: 0.5 });
+  else if (kind === 'reducer') Object.assign(properties, { nominalDiameterMm: 160, outletDiameterMm: 110, rotationDeg: 0, fittingLengthM: 0.5 });
   else if (kind === 'valve') Object.assign(properties, { nominalDiameterMm: 110, valveType: 'gate', valveSetting: 100 });
   else if (kind === 'pump') Object.assign(properties, { nominalDiameterMm: 110, pumpDutyFlowM3h: 15, pumpDutyHeadM: 40, pumpEfficiencyPct: 75 });
   else if (kind === 'tank' || kind === 'reservoir') Object.assign(properties, { tankType: 'ground', tankCapacityM3: 100, tankOperatingLevelM: 3, tankDiameterM: 7 });
