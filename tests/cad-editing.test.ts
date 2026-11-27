@@ -204,6 +204,22 @@ describe('CAD editing geometry operations', () => {
     expect(() => editEntityGrip(rectangle, 4, {x:0,y:0})).toThrow(/Rectangle grip index/);
   });
 
+  it('keeps closed polyline grips closed when editing either copy of the seam vertex', () => {
+    const closed: CadEditableEntity = {
+      id: 'closed-grip', type: 'polyline',
+      points: [{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10},{x:0,y:0}],
+      layer: 'WATER',
+    };
+    const movedFirst = editEntityGrip(closed, 0, {x:-2,y:-3});
+    expect(movedFirst.points[0]).toEqual({x:-2,y:-3});
+    expect(movedFirst.points[movedFirst.points.length-1]).toEqual({x:-2,y:-3});
+    const movedClosing = editEntityGrip(closed, 4, {x:2,y:3});
+    expect(movedClosing.points[0]).toEqual({x:2,y:3});
+    expect(movedClosing.points[4]).toEqual({x:2,y:3});
+    expect(closed.points[0]).toEqual({x:0,y:0});
+    expect(closed.points[4]).toEqual({x:0,y:0});
+  });
+
   it('scales geometry accurately and preserves circular arc orientation', () => {
     expect(scaleEntities([line], {x: 0, y: 0}, 2)[0].points[1]).toEqual({x: 20, y: 0});
     const circle: CadEditableEntity = { id: 'c1', type: 'circle', points: [{x: 1, y: 1}], radius: 3, layer: 'WATER' };
