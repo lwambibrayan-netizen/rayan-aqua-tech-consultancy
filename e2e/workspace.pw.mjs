@@ -91,11 +91,11 @@ test('engineer opens a project, uses visible CAD navigation, saves and opens 3D'
   await expect(drawingArea).toBeVisible();
 
   await ribbon.getByRole('tab', { name: 'Modify' }).click();
-  await expect(ribbon.getByRole('button', { name: 'Move', exact: true })).toBeVisible();
-  await expect(drawingArea.getByRole('button', { name: 'Move', exact: true })).toHaveCount(0);
+  await expect(ribbon.getByText('Move', { exact: true })).toBeVisible();
+  await expect(drawingArea.getByRole('button', { name: /Move/ })).toHaveCount(0);
   await ribbon.getByRole('tab', { name: 'Home' }).click();
-  await expect(ribbon.getByRole('button', { name: 'Line', exact: true })).toBeVisible();
-  await expect(drawingArea.getByRole('button', { name: 'Line', exact: true })).toHaveCount(0);
+  await expect(ribbon.getByText('Line', { exact: true })).toBeVisible();
+  await expect(drawingArea.getByRole('button', { name: /Line/ })).toHaveCount(0);
   await ribbon.getByRole('tab', { name: 'Drafting' }).click();
   await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="drafting"]')).toBeVisible();
   await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="drafting"]')).toContainText('Dimensions, annotations, layers & drawing sheets');
