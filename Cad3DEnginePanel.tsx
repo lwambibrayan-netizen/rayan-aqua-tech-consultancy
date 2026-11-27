@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
-import { connectPipeEndpoints, createWaterComponent, component3dLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
+import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
@@ -435,9 +435,15 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
       const resolved = resolveDraftPoint(event.currentTarget, raw);
       if (activeWaterTool === 'pipe') {
-        if (!waterDraft.length) { setWaterDraft([resolved.point]); setMessage('Pipe start snapped/set. Click the pipe end point.'); return; }
-        if (Math.hypot(resolved.point.x-waterDraft[0].x,resolved.point.y-waterDraft[0].y) < 0.01) { setMessage('Pipe length must be greater than zero. Choose a different end point.'); return; }
-        commitWaterPlacement('pipe',[waterDraft[0],resolved.point]); return;
+        const last = waterDraft[waterDraft.length - 1];
+        if (last && Math.hypot(resolved.point.x - last.x, resolved.point.y - last.y) < 0.01) {
+          setMessage('Route vertex is too close to the previous point. Choose a distinct point.');
+          return;
+        }
+        const next = [...waterDraft, resolved.point];
+        setWaterDraft(next);
+        setMessage(next.length === 1 ? 'Pipe route started. Click additional route vertices, then choose Finish pipe route.' : next.length + ' route points set. Continue drawing or finish the route.');
+        return;
       }
       commitWaterPlacement(activeWaterTool,[resolved.point]); return;
     }
@@ -611,9 +617,13 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setMessage(kind === 'pipe' ? 'Click the pipe start and end points. Object snapping is active.' : 'Click the placement point for the ' + kind + '. Object snapping is active.');
   }
   function commitWaterPlacement(kind: WaterComponentKind, points: Point2D[]) {
-    const serial = waterCad.components.filter(item => item.kind === kind).length + 1;
     const prefix: Record<WaterComponentKind,string> = { pipe:'P', bend:'B', tee:'T', reducer:'RED', valve:'V', pump:'PU', tank:'TK', chamber:'CH', hydrant:'HYD', meter:'M', 'air-valve':'AV', washout:'WO', reservoir:'RES', source:'SRC', junction:'J' };
-    const id = prefix[kind] + '-' + String(serial).padStart(3,'0');
+    let serial = 1;
+    let id = prefix[kind] + '-' + String(serial).padStart(3, '0');
+    while (waterCad.components.some(item => item.id === id)) {
+      serial += 1;
+      id = prefix[kind] + '-' + String(serial).padStart(3, '0');
+    }
     const metres = points.map(point => ({ x: point.x * calibratedMetresPerUnit!, y: point.y * calibratedMetresPerUnit! }));
     const component = createWaterComponent(kind, id, metres[0].x, metres[0].y);
     component.geometry = kind === 'pipe' ? metres : [{ ...metres[0] }];
@@ -900,6 +910,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Choose Place, then click in the drawing. Pipes need two snapped clicks; fittings and equipment need one. A verified CAD scale is required so plan coordinates are stored in metres. Confirm elevations against the project survey datum.</p>
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
           {(['pipe','bend','tee','reducer','valve','pump','tank','chamber','hydrant','meter','air-valve','washout','reservoir','source','junction'] as WaterComponentKind[]).map(kind => <button key={kind} className={activeWaterTool===kind?'primary-button':'secondary-button'} onClick={() => addWaterComponent(kind)}>Place {kind}</button>)}
+          {activeWaterTool === 'pipe' && waterDraft.length >= 2 && <button className="primary-button" onClick={() => commitWaterPlacement('pipe', waterDraft)}>Finish pipe route ({waterDraft.length} points)</button>}
           {activeWaterTool && <button className="secondary-button" onClick={()=>{setActiveWaterTool(null);setWaterDraft([]);setMessage('Water component placement cancelled.');}}>Cancel placement</button>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) minmax(180px, 2fr)', gap: 10, marginTop: 12 }}>
