@@ -77,3 +77,39 @@ describe('associative dimension anchors', () => {
     expect(resolveAssociativeDimension(dimension, [], 1).b).toEqual({x:2,y:0});
   });
 });
+
+describe('associative radial and angular dimensions', () => {
+  it('tracks a circle centre and radius after the source circle is edited', async () => {
+    const { findAssociativeCircle, resolveAssociativeRadialDimension } = await import('../cad-drafting');
+    const initial = [{ id: 'circle-1', type: 'circle', points: [{x:2,y:3}], radius: 4 }];
+    const circleId = findAssociativeCircle({x:2,y:3}, initial, 0.002, 1);
+    const annotation = { id: 'rad-1', kind: 'radial' as const, layer: 'DIMENSIONS', circleId, center: {x:2,y:3}, radiusM: 4, dimensionType: 'diameter' as const, leaderAngleRad: 0, precision: 3 };
+    const edited = [{ id: 'circle-1', type: 'circle', points: [{x:5,y:6}], radius: 7 }];
+    const resolved = resolveAssociativeRadialDimension(annotation, edited, 1);
+    expect(resolved.center).toEqual({x:5,y:6});
+    expect(resolved.radiusM).toBe(7);
+  });
+  it('tracks both rays of an angular dimension when their source vertices move', async () => {
+    const { resolveAssociativeAngularDimension, measureAngularDimension } = await import('../cad-drafting');
+    const annotation = {
+      id: 'ang-1', kind: 'angular' as const, layer: 'DIMENSIONS',
+      vertex: {x:0,y:0}, rayA: {x:1,y:0}, rayB: {x:0,y:1}, offsetM: 1, precision: 2,
+      association: {
+        vertex: {entityId:'a',pointIndex:0},
+        rayA: {entityId:'a',pointIndex:1},
+        rayB: {entityId:'b',pointIndex:1},
+      },
+    };
+    const entities = [
+      {id:'a',type:'line',points:[{x:0,y:0},{x:2,y:0}]},
+      {id:'b',type:'line',points:[{x:0,y:0},{x:2,y:2}]},
+    ];
+    const resolved = resolveAssociativeAngularDimension(annotation, entities, 1);
+    expect(measureAngularDimension(resolved) * 180 / Math.PI).toBeCloseTo(45);
+    const moved = [
+      {id:'a',type:'line',points:[{x:0,y:0},{x:2,y:0}]},
+      {id:'b',type:'line',points:[{x:0,y:0},{x:0,y:2}]},
+    ];
+    expect(measureAngularDimension(resolveAssociativeAngularDimension(annotation, moved, 1)) * 180 / Math.PI).toBeCloseTo(90);
+  });
+});
