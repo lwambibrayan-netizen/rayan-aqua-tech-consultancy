@@ -46,6 +46,78 @@ function normalizeLegacyPolylines(input: Pair[], warnings: string[]): Pair[] {
   return output;
 }
 
+
+function splitEntities(pairs: Pair[]): Array<{type:string;values:Pair[]}> {
+  const result:Array<{type:string;values:Pair[]}>=[];
+  let current:{type:string;values:Pair[]}|null=null;
+  for(const pair of pairs){
+    if(pair[0]==='0'){if(current)result.push(current);current={type:pair[1],values:[]};}
+    else if(current)current.values.push(pair);
+  }
+  if(current)result.push(current);
+  return result;
+}
+function expandBlockInserts(pairs: Pair[], warnings: string[]): Pair[] {
+  const blocks=new Map<string,{base:{x:number;y:number};entities:Array<{type:string;values:Pair[]}>}>();
+  const blockSection=pairs.findIndex((p,i)=>p[0]==='2'&&p[1]==='BLOCKS');
+  if(blockSection>=0){
+    let i=blockSection+1;
+    while(i<pairs.length && !(pairs[i][0]==='0'&&pairs[i][1]==='ENDSEC')){
+      if(pairs[i][0]!=='0'||pairs[i][1]!=='BLOCK'){i++;continue;}
+      const header:Pair[]=[];i++;
+      while(i<pairs.length&&pairs[i][0]!=='0')header.push(pairs[i++]);
+      const name=header.find(p=>p[0]==='2')?.[1]||header.find(p=>p[0]==='3')?.[1]||'';
+      const base={x:Number(header.find(p=>p[0]==='10')?.[1]||0),y:Number(header.find(p=>p[0]==='20')?.[1]||0)};
+      const body:Pair[]=[];
+      while(i<pairs.length&&!(pairs[i][0]==='0'&&pairs[i][1]==='ENDBLK'))body.push(pairs[i++]);
+      if(i<pairs.length)i++;
+      if(name)blocks.set(name.toUpperCase(),{base,entities:splitEntities(body).filter(e=>e.type!=='ENDBLK'&&e.type!=='ENDSEC')});
+    }
+  }
+  const section=pairs.findIndex(p=>p[0]==='2'&&p[1]==='ENTITIES');
+  if(section<0)return pairs;
+  const end=pairs.findIndex((p,i)=>i>section&&p[0]==='0'&&p[1]==='ENDSEC');
+  if(end<0)return pairs;
+  const prefix=pairs.slice(0,section+1), entities=splitEntities(pairs.slice(section+1,end)), suffix=pairs.slice(end);
+  const expanded:Pair[]=[];
+  for(const item of entities){
+    if(item.type!=='INSERT'){expanded.push(['0',item.type],...item.values);continue;}
+    const get=(code:string)=>item.values.find(p=>p[0]===code)?.[1];
+    const name=(get('2')||'').toUpperCase(), block=blocks.get(name);
+    if(!block){warnings.push('Skipped INSERT referencing missing BLOCK '+(get('2')||'(unnamed)')+'.');continue;}
+    const at={x:Number(get('10')||0),y:Number(get('20')||0)},sx=Number(get('41')||1),sy=Number(get('42')||1),angle=Number(get('50')||0)*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle),insertLayer=get('8')||'0';
+    if(![at.x,at.y,sx,sy,angle].every(Number.isFinite)||sx===0||sy===0){warnings.push('Skipped INSERT with invalid transform.');continue;}
+    for(const child of block.entities){
+      if(child.type==='INSERT'){warnings.push('Nested BLOCK INSERT was skipped; nested block references are not yet expanded.');continue;}
+      const values:Pair[]=[];let row=0;
+      for(const [code,value] of child.values){
+        const numeric=Number(value);
+        if(['10','11','12','13','14','15','16','17','18','19'].includes(code)){row=Number(code);values.push([code,value]);continue;}
+        if(['20','21','22','23','24','25','26','27','28','29'].includes(code)){
+          const xPair=String(Number(code)-10),x=Number(child.values.find((p,j)=>p[0]===xPair&&j<child.values.findIndex(q=>q[0]===code))?.[1]||0);
+          const px=(x-block.base.x)*sx,py=(numeric-block.base.y)*sy;
+          values[values.length-1]=[xPair,fmt(at.x+px*cos-py*sin)];
+          values.push([code,fmt(at.y+px*sin+py*cos)]);row=0;continue;
+        }
+        if(code==='8'&&value==='0')values.push(['8',insertLayer]);
+        else if(code==='40'&&Number.isFinite(numeric))values.push([code,fmt(numeric*Math.sqrt(Math.abs(sx*sy)))]);
+        else values.push([code,value]);
+      }
+      expanded.push(['0',child.type],...values);
+    }
+  }
+  return [...prefix,...expanded,...suffix];
+}
+function sampleCatmullRom(points:{x:number;y:number}[],steps=8):{x:number;y:number}[]{
+  if(points.length<3)return points;
+  const out:{x:number;y:number}[]=[];
+  for(let i=0;i<points.length-1;i++){
+    const p0=points[Math.max(0,i-1)],p1=points[i],p2=points[i+1],p3=points[Math.min(points.length-1,i+2)];
+    for(let j=0;j<steps;j++){const t=j/steps,t2=t*t,t3=t2*t;out.push({x:0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),y:0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3)});}
+  }
+  out.push({...points[points.length-1]});return out;
+}
+
 export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, metresPerDrawingUnit=1):string {
   if(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0) throw new Error('A valid drawing calibration is required for DXF export.');
   const insunits=Math.abs(metresPerDrawingUnit-1)<1e-9?6:Math.abs(metresPerDrawingUnit-0.001)<1e-9?4:0;
@@ -89,7 +161,7 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
   if(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0) throw new Error('Drawing calibration must be positive.');
   if(!Number.isFinite(scaleDenominator)||scaleDenominator<=0) throw new Error('Drawing scale denominator must be positive.');
   const warnings:string[]=[];
-  const pairs=normalizeLegacyPolylines(pairsOf(source), warnings);
+  const pairs=expandBlockInserts(normalizeLegacyPolylines(pairsOf(source), warnings), warnings);
   const start=pairs.findIndex(p=>p[0]==='2'&&p[1]==='ENTITIES');
   if(start<0) throw new Error('DXF ENTITIES section not found.');
   const shapes:DxfShape[]=[],annotations:DraftAnnotation[]=[],layers=new Set<string>();
@@ -115,6 +187,27 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
       let sweep=b-a;if(sweep<=0)sweep+=Math.PI*2;
       const p1={x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)},p2={x:cx+r*Math.cos(b),y:cy+r*Math.sin(b)};
       shapes.push({id,type:'polyline',points:[p1,p2],bulges:[Math.tan(sweep/4),0],layer});
+    } else if(current.type==='SPLINE') {
+      const readPoints=(xCode:string,yCode:string)=>{const points:{x:number;y:number}[]=[];let x:number|null=null;for(const [code,value] of v){if(code===xCode)x=Number(value);else if(code===yCode&&x!==null){points.push({x,y:Number(value)});x=null;}}return points;};
+      const points=readPoints('11','21').length>=2?readPoints('11','21'):readPoints('10','20');
+      if(points.length>=2)shapes.push({id,type:'polyline',points:sampleCatmullRom(points),layer});
+      else warnings.push('Skipped SPLINE without at least two usable fit/control points.');
+    } else if(current.type==='ELLIPSE') {
+      const cx=num('10'),cy=num('20'),mx=num('11'),my=num('21'),ratio=num('40'),start=num('41'),end=num('42')||Math.PI*2;
+      const major=Math.hypot(mx,my),minor=major*ratio;
+      if(major>0&&ratio>0){let sweep=end-start;if(sweep<=0)sweep+=Math.PI*2;const rotation=Math.atan2(my,mx),count=Math.max(16,Math.ceil(Math.abs(sweep)/(Math.PI*2)*64));const points=Array.from({length:count+1},(_,i)=>{const t=start+sweep*i/count;return {x:cx+major*Math.cos(t)*Math.cos(rotation)-minor*Math.sin(t)*Math.sin(rotation),y:cy+major*Math.cos(t)*Math.sin(rotation)+minor*Math.sin(t)*Math.cos(rotation)};});shapes.push({id,type:'polyline',points,layer});}
+      else warnings.push('Skipped ELLIPSE with invalid major axis or ratio.');
+    } else if(current.type==='HATCH') {
+      const pathIndex=v.findIndex(p=>p[0]==='92');
+      if(pathIndex>=0&&Number(v[pathIndex][1])&2){warnings.push('Skipped HATCH with unsupported edge-based boundary; only polyline hatch boundaries are supported.');}
+      else if(pathIndex>=0){
+        const vertexStart=v.findIndex((p,i)=>i>pathIndex&&p[0]==='93');
+        const count=vertexStart>=0?Number(v[vertexStart][1]):0;
+        const points:{x:number;y:number}[]=[];let x:number|null=null;
+        if(count>1)for(let i=vertexStart+1;i<v.length&&points.length<count;i++){const [code,value]=v[i];if(code==='10')x=Number(value);else if(code==='20'&&x!==null){points.push({x,y:Number(value)});x=null;}}
+        if(points.length>=2){if(Number(v.find((p,i)=>i>pathIndex&&p[0]==='73')?.[1]||0)===1)points.push({...points[0]});shapes.push({id,type:'polyline',points,layer});}
+        else warnings.push('Skipped HATCH without a readable closed polyline boundary.');
+      } else warnings.push('Skipped HATCH without a supported polyline boundary path.');
     } else if(current.type==='DIMENSION') {
       const a={x:num('13')*metresPerDrawingUnit,y:num('23')*metresPerDrawingUnit};
       const b={x:num('14')*metresPerDrawingUnit,y:num('24')*metresPerDrawingUnit};
