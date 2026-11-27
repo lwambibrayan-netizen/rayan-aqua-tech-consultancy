@@ -412,6 +412,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
     const speedPattern=component.properties.pumpSpeedPattern;
     const headPattern=component.properties.hydraulicHeadPatternId;
     if(demandPattern&&!definedPatterns.has(safeId(demandPattern))) warnings.push('Node '+component.id+' references missing demand pattern '+demandPattern+'.');
+    (component.properties.additionalDemands??[]).forEach((demand,index)=>{if(demand.patternId&&!definedPatterns.has(safeId(demand.patternId)))warnings.push('Node '+component.id+' additional demand '+(index+1)+' references missing pattern '+demand.patternId+'.');});
     if(headPattern&&!definedPatterns.has(safeId(headPattern))) warnings.push('Reservoir '+component.id+' references missing head pattern '+headPattern+'.');
     if(speedPattern&&!definedPatterns.has(safeId(speedPattern))) warnings.push('Pump '+component.id+' references missing speed pattern '+speedPattern+'.');
   });
