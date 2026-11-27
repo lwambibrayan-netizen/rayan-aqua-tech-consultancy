@@ -46,15 +46,18 @@ describe('structured DXF exchange', () => {
 
   it('expands a scaled and rotated BLOCK INSERT into model geometry', () => {
     const source = ['0','SECTION','2','BLOCKS','0','BLOCK','8','0','2','VALVE','10','0','20','0',
-      '0','CIRCLE','8','0','10','0','20','0','40','1','0','ENDBLK','0','ENDSEC',
+      '0','CIRCLE','8','0','10','0','20','0','40','1',
+      '0','LINE','8','0','10','0','20','0','11','2','21','0','0','ENDBLK','0','ENDSEC',
       '0','SECTION','2','ENTITIES','0','INSERT','8','SYMBOLS','2','VALVE','10','10','20','20','41','2','42','2','50','90',
       '0','ENDSEC','0','EOF'].join('\n');
     const imported = importDraftingDxf(source);
-    expect(imported.shapes).toHaveLength(1);
-    expect(imported.shapes[0].type).toBe('circle');
-    expect(imported.shapes[0].points[0]).toEqual({x:10,y:20});
-    expect(imported.shapes[0].radius).toBe(2);
-    expect(imported.shapes[0].layer).toBe('SYMBOLS');
+    expect(imported.shapes).toHaveLength(2);
+    const circle = imported.shapes.find(shape => shape.type === 'circle')!;
+    const line = imported.shapes.find(shape => shape.type === 'line')!;
+    expect(circle.points[0]).toEqual({x:10,y:20});
+    expect(circle.radius).toBe(2);
+    expect(line.points).toEqual([{x:10,y:20},{x:10,y:24}]);
+    expect(circle.layer).toBe('SYMBOLS');
   });
   it('converts SPLINE, ELLIPSE and polyline-boundary HATCH to editable polylines', () => {
     const source = ['0','SECTION','2','ENTITIES',
