@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
+import { createWaterComponent, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
 
 type Point2D = { x: number; y: number };
 type Shape = {
@@ -312,6 +313,8 @@ function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled:
 
 export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures = [], onSave }: Props) {
   const [history, setHistory] = useState(() => createHistory<Shape[]>(initialData?.shapes || []));
+  const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
+  const [selectedWaterId, setSelectedWaterId] = useState('');
   const shapes = history.present;
   function setShapes(next: Shape[] | ((current: Shape[]) => Shape[])) {
     setHistory(current => pushHistory(current, typeof next === 'function' ? next(current.present) : next));
@@ -357,6 +360,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
 
   useEffect(() => {
     setHistory(createHistory<Shape[]>(initialData?.shapes || []));
+    setWaterCad(initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
+    setSelectedWaterId('');
     setCalibratedMetresPerUnit(Number.isFinite(initialData?.calibratedMetresPerUnit) && initialData.calibratedMetresPerUnit > 0 ? initialData.calibratedMetresPerUnit : null);
     setViewBox(initialData?.viewport && [initialData.viewport.x, initialData.viewport.y, initialData.viewport.width, initialData.viewport.height].every(Number.isFinite)
       ? initialData.viewport : { x: 0, y: 0, width: WIDTH, height: HEIGHT });
@@ -566,6 +571,22 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     }
     setShapes(current => [...current, ...added]);
     setMessage('Imported ' + added.length + ' CAD elements from the saved GIS draft. Coordinates are normalized drawing space, not survey-control coordinates.');
+  }
+
+
+  const selectedWaterComponent = waterCad.components.find(component => component.id === selectedWaterId) || null;
+  function addWaterComponent(kind: WaterComponentKind) {
+    const serial = waterCad.components.filter(item => item.kind === kind).length + 1;
+    const prefix: Record<WaterComponentKind,string> = { pipe:'P', bend:'B', tee:'T', reducer:'RED', valve:'V', pump:'PU', tank:'TK', chamber:'CH', hydrant:'HYD', meter:'M', 'air-valve':'AV', washout:'WO', reservoir:'RES', source:'SRC', junction:'J' };
+    const id = prefix[kind] + '-' + String(serial).padStart(3,'0');
+    const component = createWaterComponent(kind, id, 0, 0);
+    setWaterCad(current => ({ ...current, components: [...current.components, component] }));
+    setSelectedWaterId(id);
+    setMessage(kind.toUpperCase() + ' component added to the water engineering schedule. Set its surveyed coordinates, levels and properties before design use.');
+  }
+  function updateWaterProperties(patch: Partial<WaterCadComponent['properties']>) {
+    if (!selectedWaterId) return;
+    setWaterCad(current => ({ ...current, components: current.components.map(item => item.id === selectedWaterId ? { ...item, properties: { ...item.properties, ...patch } } : item) }));
   }
 
   const selectedShape: SelectedShape = shapes.find(shape => shape.id === selectedShapeId) || null;
@@ -778,6 +799,42 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>Grid step (drawing units) <input type="number" min="0.1" step="any" value={gridSize} onChange={event => setGridSize(Math.max(0.1, Number(event.target.value) || 10))} style={{ width: 66, padding: 6 }} /></label>
           <span className="muted" style={{ fontSize: 11 }}>{calibratedMetresPerUnit ? `Calibrated: ${calibratedMetresPerUnit.toPrecision(5)} m per drawing unit` : 'Unscaled legacy drawing · calibrate a known line for real measurements'}</span>
         </div>
+      </div>
+
+
+      <div className="panel" style={{ padding: 14 }}>
+        <span className="eyebrow muted">WATER ENGINEERING OBJECTS</span>
+        <h3 style={{ margin: '5px 0' }}>Network component library</h3>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Add editable engineering records for pipes, fittings, equipment and structures. Coordinates and elevations must be verified against the project survey datum.</p>
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+          {(['pipe','bend','tee','reducer','valve','pump','tank','chamber','hydrant','meter','air-valve','washout','reservoir','source','junction'] as WaterComponentKind[]).map(kind => <button key={kind} className="secondary-button" onClick={() => addWaterComponent(kind)}>+ {kind}</button>)}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) minmax(180px, 2fr)', gap: 10, marginTop: 12 }}>
+          <label style={{ fontSize: 12 }}>Component register
+            <select value={selectedWaterId} onChange={event => setSelectedWaterId(event.target.value)} style={{ display: 'block', width: '100%', marginTop: 4 }}>
+              <option value="">Select component</option>
+              {waterCad.components.map(item => <option key={item.id} value={item.id}>{item.id} · {item.kind}</option>)}
+            </select>
+            <span className="muted">{waterCad.components.length} water objects in this project</span>
+          </label>
+          {selectedWaterComponent ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(125px,1fr))', gap: 8 }}>
+            <label style={{ fontSize: 12 }}>Tag<input value={selectedWaterComponent.properties.tag} onChange={e => updateWaterProperties({ tag: e.target.value })} style={{ display: 'block', width: '100%' }} /></label>
+            <label style={{ fontSize: 12 }}>Nominal diameter (mm)<input type="number" min="1" value={selectedWaterComponent.properties.nominalDiameterMm ?? ''} onChange={e => updateWaterProperties({ nominalDiameterMm: Number(e.target.value) })} style={{ display: 'block', width: '100%' }} /></label>
+            {selectedWaterComponent.kind === 'pipe' ? <>
+              <label style={{ fontSize: 12 }}>Internal bore (mm)<input type="number" min="1" value={selectedWaterComponent.properties.internalDiameterMm ?? ''} onChange={e => updateWaterProperties({ internalDiameterMm: Number(e.target.value) })} style={{ display: 'block', width: '100%' }} /></label>
+              <label style={{ fontSize: 12 }}>Material<select value={selectedWaterComponent.properties.material || 'HDPE'} onChange={e => updateWaterProperties({ material: e.target.value as WaterCadComponent['properties']['material'] })} style={{ display: 'block', width: '100%' }}><option>HDPE</option><option>DI</option><option>uPVC</option><option>steel</option><option>concrete</option><option>GRP</option><option>other</option></select></label>
+              <label style={{ fontSize: 12 }}>Inlet invert (m)<input type="number" step="any" value={selectedWaterComponent.properties.invertInletM ?? ''} onChange={e => updateWaterProperties({ invertInletM: Number(e.target.value) })} style={{ display: 'block', width: '100%' }} /></label>
+              <label style={{ fontSize: 12 }}>Outlet invert (m)<input type="number" step="any" value={selectedWaterComponent.properties.invertOutletM ?? ''} onChange={e => updateWaterProperties({ invertOutletM: Number(e.target.value) })} style={{ display: 'block', width: '100%' }} /></label>
+              <label style={{ fontSize: 12 }}>Flow (m³/h)<input type="number" min="0" step="any" value={selectedWaterComponent.properties.flowM3h ?? ''} onChange={e => updateWaterProperties({ flowM3h: Number(e.target.value) })} style={{ display: 'block', width: '100%' }} /></label>
+              <label style={{ fontSize: 12 }}>Pressure class<input value={selectedWaterComponent.properties.pressureClass || ''} onChange={e => updateWaterProperties({ pressureClass: e.target.value })} style={{ display: 'block', width: '100%' }} /></label>
+            </> : null}
+            <label style={{ fontSize: 12 }}>Notes<input value={selectedWaterComponent.properties.notes || ''} onChange={e => updateWaterProperties({ notes: e.target.value })} style={{ display: 'block', width: '100%' }} /></label>
+            <button className="secondary-button" onClick={() => { setWaterCad(current => ({ ...current, components: current.components.filter(item => item.id !== selectedWaterId) })); setSelectedWaterId(''); }}>Delete component</button>
+          </div> : <p className="muted" style={{ fontSize: 12 }}>Select an object to edit its engineering schedule. Additional object-specific properties will be added in the next implementation pass.</p>}
+        </div>
+        <label style={{ display: 'block', marginTop: 10, fontSize: 12 }}>Project vertical datum / level reference
+          <input value={waterCad.verticalDatum} onChange={e => setWaterCad(current => ({ ...current, verticalDatum: e.target.value }))} style={{ display: 'block', width: '100%' }} />
+        </label>
       </div>
 
       {view === '2d' ? (
