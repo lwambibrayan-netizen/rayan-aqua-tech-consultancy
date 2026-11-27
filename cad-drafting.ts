@@ -185,6 +185,8 @@ export function validateDraftingDocument(doc: DraftingDocument): string[] {
     if (points.some(point => !Number.isFinite(point.x) || !Number.isFinite(point.y))) issues.push('Annotation ' + item.id + ' contains invalid coordinates.');
     if (item.kind === 'text' && (!item.text.trim() || item.heightMm <= 0)) issues.push('Text annotations require content and a positive paper text height.');
     if (item.kind === 'leader' && (item.points.length < 2 || !item.text.trim() || item.textHeightMm <= 0)) issues.push('Leaders require at least two points, text and a positive text height.');
+    if (item.kind === 'radial' && (!Number.isFinite(item.radiusM) || item.radiusM <= 0 || !Number.isFinite(item.leaderAngleRad))) issues.push('Radial dimensions require a positive radius and a finite leader angle.');
+    if (item.kind === 'angular') { try { measureAngularDimension(item); } catch { issues.push('Angular dimensions require two non-zero rays.'); } }
     if ((item.kind === 'linear' || item.kind === 'aligned') && (item.a.x === item.b.x && item.a.y === item.b.y)) issues.push('A dimension cannot measure a zero-length segment.');
   }
   const sheet = sheetDimensionsMm(doc.sheet);
