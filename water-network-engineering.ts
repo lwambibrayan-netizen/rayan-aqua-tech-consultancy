@@ -47,6 +47,16 @@ function componentAxis(c: WaterCadComponent): WaterPoint {
 
 /** Returns true engineering connection ports for pipes and inline/branch fittings. */
 export function getWaterPorts(c: WaterCadComponent): WaterPort[] {
+  if (c.customPorts?.length) {
+    return c.customPorts.map((port, index) => ({
+      id: c.id + ':' + port.id,
+      componentId: c.id,
+      index,
+      point: { ...port.point },
+      role: port.role,
+      diameterMm: port.diameterMm ?? c.properties.nominalDiameterMm,
+    }));
+  }
   const centre = c.geometry[0] ?? { x: 0, y: 0 };
   const axis = componentAxis(c);
   const perpendicular = { x: -axis.y, y: axis.x };
