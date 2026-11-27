@@ -624,7 +624,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             setDraftTool('none'); setAnnotationDraft([]); return;
           } else if (dimensionKind === 'radius' || dimensionKind === 'diameter') {
             const circleId = findAssociativeCircle(next[0], shapes, 0.002, scale);
-            const item: DraftAnnotation = { id: makeId(), kind: 'radial', layer: 'DIMENSIONS', circleId, center: next[0], dimensionType: dimensionKind, leaderAngleRad: Math.atan2(next[2].y-next[0].y, next[2].x-next[0].x), precision: dimensionStyle.precision };
+            const item: DraftAnnotation = { id: makeId(), kind: 'radial', layer: 'DIMENSIONS', circleId, center: next[0], radiusM: Math.hypot(next[1].x-next[0].x, next[1].y-next[0].y), dimensionType: dimensionKind, leaderAngleRad: Math.atan2(next[2].y-next[0].y, next[2].x-next[0].x), precision: dimensionStyle.precision };
             setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
             setMessage(circleId ? 'Associative circle dimension placed. Radius and diameter update when the circle changes.' : 'Radius/diameter dimension placed without an associative circle reference.');
             setDraftTool('none'); setAnnotationDraft([]); return;
