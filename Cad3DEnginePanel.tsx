@@ -1375,7 +1375,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           }
         }
       } else if(component.kind==='pump'||component.kind==='valve'||component.kind==='meter') {
-        const ports=getWaterPorts(component).slice(0,2).map(port=>to3d(port.point));
+        const ports=getWaterPorts(component).slice(0,2).map((port,index)=>to3d({...port.point,z:(index===0?fromElevation:toElevation)??baseLevel},index));
         if(ports.length===2){
           const direction=ports[1].clone().sub(ports[0]);const length=Math.max(direction.length(),component.properties.fittingLengthM??0.5);
           const mesh=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,length,16),new THREE.MeshStandardMaterial({color:colour}));
