@@ -341,7 +341,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   nodes.filter(n => n.kind === 'tank').forEach(n => {
     const p = n.properties;
     const level = p.tankOperatingLevelM ?? 1;
-    lines.push([safeId(n.id), fmt(n.properties.hydraulicElevationM ?? n.geometry[0]?.z ?? 0), fmt(level), '0', fmt(Math.max(level + 1, level * 1.5)), fmt(p.tankDiameterM ?? 1), '0'].join(' '));
+    lines.push([safeId(n.id), fmt(n.properties.hydraulicElevationM ?? n.geometry[0]?.z ?? 0), fmt(level), '0', fmt(p.tankMinLevelM ?? 0), fmt(p.tankMaxLevelM ?? Math.max(level + 1, level * 1.5)), fmt(p.tankDiameterM ?? 1), fmt(p.tankMinVolumeM3 ?? 0)].join(' '));
   });
   lines.push('', '[PIPES]', ';ID Node1 Node2 Length_m Diameter_mm Roughness MinorLoss Status');
   for (const p of pipes) {
@@ -355,7 +355,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
       warnings.push('Pipe ' + p.id + ' omitted: positive length and internal diameter are required.');
       continue;
     }
-    lines.push([safeId(p.id), fromNode, toNode, fmt(length), fmt(p.properties.internalDiameterMm), fmt(p.properties.roughness ?? 130), fmt(p.properties.minorLossCoefficient ?? 0), 'OPEN'].join(' '));
+    lines.push([safeId(p.id), fromNode, toNode, fmt(length), fmt(p.properties.internalDiameterMm), fmt(p.properties.roughness ?? 130), fmt(p.properties.minorLossCoefficient ?? 0), p.properties.initialStatus ?? 'OPEN'].join(' '));
   }
   // EPANET check valves are pipe links with status CV, not GPV valves.
   valves.filter(v => v.properties.valveType === 'check').forEach(v => {
@@ -368,8 +368,9 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   pumps.forEach(p => {
     const [fromNode, toNode] = linkEnds(p);
     if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode)) warnings.push('Pump ' + p.id + ' omitted: connect its inlet and outlet ports.');
-    else if (!(p.properties.pumpCurvePoints?.length || (p.properties.pumpDutyFlowM3h && p.properties.pumpDutyFlowM3h > 0 && p.properties.pumpDutyHeadM && p.properties.pumpDutyHeadM > 0))) warnings.push('Pump ' + p.id + ' omitted: a valid pump curve or positive duty flow and head are required.');
-    else lines.push([safeId(p.id), fromNode, toNode, 'HEAD ' + safeId('CURVE_' + p.id)].join(' '));
+    else if (p.properties.pumpPowerKw && p.properties.pumpPowerKw > 0) lines.push([safeId(p.id),fromNode,toNode,'POWER '+fmt(p.properties.pumpPowerKw)].join(' '));
+    else if (!(p.properties.pumpCurvePoints?.length || (p.properties.pumpDutyFlowM3h && p.properties.pumpDutyFlowM3h > 0 && p.properties.pumpDutyHeadM && p.properties.pumpDutyHeadM > 0))) warnings.push('Pump ' + p.id + ' omitted: a valid pump curve, constant power, or positive duty flow and head is required.');
+    else lines.push([safeId(p.id), fromNode, toNode, 'HEAD ' + safeId('CURVE_' + p.id), ...(p.properties.pumpSpeedPattern?['PATTERN',safeId(p.properties.pumpSpeedPattern)]:['SPEED',fmt(p.properties.pumpSpeedMultiplier??1)])].join(' '));
   });
   lines.push('', '[VALVES]', ';ID Node1 Node2 Diameter_mm Type Setting MinorLoss');
   valves.filter(v => v.properties.valveType !== 'check').forEach(v => {
