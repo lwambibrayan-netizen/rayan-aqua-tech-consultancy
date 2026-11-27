@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   boundsOfPoints,
+  createHistory,
+  objectSnapCandidates,
+  panViewport,
+  pixelsPerMetreAtScale,
+  pushHistory,
+  redoHistory,
+  undoHistory,
+  zoomViewportAt,
   directionAngleDegrees,
   distance,
   fromMetres,
@@ -89,5 +97,59 @@ describe('CAD metric geometry foundation', () => {
 
   it('rejects invalid viewport scales instead of producing misleading coordinates', () => {
     expect(() => worldToScreen({ x: 0, y: 0 }, { ...viewport, pixelsPerMetre: 0 })).toThrow(/greater than zero/);
+  });
+});
+
+
+describe('CAD viewport, object snapping and edit history', () => {
+  it('derives a physical viewport scale from a drawing ratio', () => {
+    expect(pixelsPerMetreAtScale(100)).toBeCloseTo(37.79527559, 6);
+    expect(() => pixelsPerMetreAtScale(0)).toThrow(/Scale denominator/);
+  });
+
+  it('zooms around the cursor without moving the world point beneath it', () => {
+    const anchor = { x: 515, y: 275 };
+    const before = screenToWorld(anchor, viewport);
+    const zoomed = zoomViewportAt(viewport, anchor, 2);
+    const after = screenToWorld(anchor, zoomed);
+    expect(after.x).toBeCloseTo(before.x, 10);
+    expect(after.y).toBeCloseTo(before.y, 10);
+    expect(zoomed.pixelsPerMetre).toBe(40);
+  });
+
+  it('pans by screen-space deltas while preserving scale', () => {
+    const panned = panViewport(viewport, { x: 40, y: -20 });
+    expect(panned.pixelsPerMetre).toBe(viewport.pixelsPerMetre);
+    expect(worldToScreen({ x: 100, y: 200 }, panned)).toEqual({ x: 360, y: 280 });
+  });
+
+  it('builds endpoint, midpoint, nearest, centre, quadrant and intersection snaps', () => {
+    const candidates = objectSnapCandidates(
+      { x: 4, y: 2 },
+      [
+        [{ x: 0, y: 0 }, { x: 10, y: 0 }],
+        [{ x: 5, y: -5 }, { x: 5, y: 5 }],
+      ],
+      [{ center: { x: 20, y: 20 }, radius: 5 }],
+    );
+    const kinds = new Set(candidates.map(candidate => candidate.kind));
+    ['ENDPOINT', 'MIDPOINT', 'NEAREST', 'CENTER', 'QUADRANT', 'INTERSECTION'].forEach(kind => {
+      expect(kinds.has(kind as any)).toBe(true);
+    });
+    expect(candidates.find(candidate => candidate.kind === 'INTERSECTION')?.point).toEqual({ x: 5, y: 0 });
+  });
+
+  it('supports undo, redo and discards redo history after a new edit', () => {
+    let history = createHistory(['line-1']);
+    history = pushHistory(history, ['line-1', 'circle-1']);
+    history = pushHistory(history, ['line-1', 'circle-1', 'pipe-1']);
+    history = undoHistory(history);
+    expect(history.present).toEqual(['line-1', 'circle-1']);
+    history = redoHistory(history);
+    expect(history.present).toEqual(['line-1', 'circle-1', 'pipe-1']);
+    history = undoHistory(history);
+    history = pushHistory(history, ['line-1', 'rectangle-1']);
+    expect(history.future).toHaveLength(0);
+    expect(undoHistory(createHistory('initial')).present).toBe('initial');
   });
 });
