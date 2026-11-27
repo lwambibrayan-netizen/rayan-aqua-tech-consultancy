@@ -47,9 +47,15 @@ export type WaterEngineeringProperties = {
   /** EPANET reservoir fixed hydraulic head in metres. */
   hydraulicHeadM?: number;
   pumpEfficiencyPct?: number;
+  pumpSpeedMultiplier?: number;
+  pumpSpeedPattern?: string;
+  initialStatus?: 'OPEN' | 'CLOSED';
   tankType?: 'ground' | 'elevated' | 'underground';
   tankCapacityM3?: number;
   tankOperatingLevelM?: number;
+  tankMinLevelM?: number;
+  tankMaxLevelM?: number;
+  tankMinVolumeM3?: number;
   tankDiameterM?: number;
   chamberLengthM?: number;
   chamberWidthM?: number;
