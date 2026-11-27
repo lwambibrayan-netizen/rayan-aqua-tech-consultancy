@@ -874,7 +874,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       : layout));
   }
   function runEngineeringAudit() {
-    const result = auditEngineeringDrawing({ drafting: { ...drafting, dimensionStyle }, waterCad, shapes, metresPerDrawingUnit: calibratedMetresPerUnit, paperLayouts });
+    const result = auditEngineeringDrawing({ drafting: { ...drafting, dimensionStyle }, waterCad, shapes, metresPerDrawingUnit: calibratedMetresPerUnit, paperLayouts, layerStandard: layerTemplate, dimensionStyle });
     setEngineeringAudit(result);
     setMessage('Engineering drawing audit completed: ' + result.status + ' · ' + result.errors + ' errors · ' + result.warnings + ' warnings.');
   }
