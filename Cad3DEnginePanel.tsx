@@ -14,6 +14,7 @@ import { auditEngineeringDrawing, type EngineeringDrawingAudit } from './cad-eng
 import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringBlock, instantiateEngineeringPorts, type BlockInsert } from './cad-object-library';
 import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
 import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension, calculateBaselineDimensions, calculateChainDimensions } from './cad-dimension-geometry';
+import { circleFromCenterRadius, circleFromCenterDiameter, circleFromDiameter, circleFromThreePoints, ellipseFromBounds, arcFromThreePoints, arcFromCenterStartAngle } from './cad-primitives';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 import { applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, sampleGroundProfile, sampleTerrainElevation, samplePipeCentrelineElevation, type TerrainGrid } from './water-terrain-engineering';
 import { epanetSimulationToHydraulicSeries, importEpanetInp, mergeEpanetRoundTrip, type HydraulicResults } from './water-epanet-bridge';
@@ -446,13 +447,16 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   function setShapes(next: Shape[] | ((current: Shape[]) => Shape[])) {
     setHistory(current => pushHistory(current, typeof next === 'function' ? next(current.present) : next));
   }
-  const [mode, setMode] = useState<'select' | 'line' | 'polyline' | 'rect' | 'circle'>('select');
+  const [mode, setMode] = useState<'select' | 'line' | 'polyline' | 'rect' | 'circle' | 'ellipse' | 'arc'>('select');
+  const [circleMethod, setCircleMethod] = useState<'center-radius'|'center-diameter'|'two-point'|'three-point'>('center-radius');
+  const [arcMethod, setArcMethod] = useState<'three-point'|'center-start-angle'>('three-point');
+  const [arcSweepDegrees, setArcSweepDegrees] = useState(90);
   const [draft, setDraft] = useState<Point2D[]>([]);
   const [view, setView] = useState<'2d' | '3d'>('2d');
   const [ribbonTab, setRibbonTab] = useState<'Home'|'Modify'|'Insert'|'Annotate'|'Drafting'|'Water Network'|'3D Modeling'|'Analyze'|'View'|'Output'|'Manage'>('Home');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [commandLine, setCommandLine] = useState('');
-  const [layer, setLayer] = useState('WATER_NETWORK');
+  const [layer, setLayer] = useState('0');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [units, setUnits] = useState('m');
@@ -714,11 +718,33 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const point = resolved.point;
 
     if (mode === 'circle') {
-      setShapes(current => [...current, {
-        id: makeId(), type: 'circle', points: [point], radius: 12, layer,
-      }]);
-      setMode('select');
-      setMessage('Circle created. Endpoint and centre snapping are available when drawing connected geometry.');
+      const next=[...draft,point];
+      const required=circleMethod==='three-point'?3:2;
+      if(next.length<required){setDraft(next);setMessage('Circle '+circleMethod+': point '+next.length+' set. Choose point '+(next.length+1)+' of '+required+'.');return;}
+      try{
+        const id=makeId();
+        const circle=circleMethod==='three-point'?circleFromThreePoints(next[0],next[1],next[2],id,layer)
+          :circleMethod==='two-point'?circleFromDiameter(next[0],next[1],id,layer)
+          :circleMethod==='center-diameter'?circleFromCenterDiameter(next[0],next[1],id,layer)
+          :circleFromCenterRadius(next[0],next[1],id,layer);
+        setShapes(current=>[...current,circle]);setDraft([]);setMode('select');
+        setMessage('Circle created using '+circleMethod+'. Radius '+formatLength(circle.radius)+', diameter '+formatLength(circle.radius*2)+'.');
+      }catch(error){setDraft([]);setMode('select');setMessage(error instanceof Error?error.message:'Circle construction failed.');}
+      return;
+    }
+    if (mode === 'ellipse') {
+      const next=[...draft,point];
+      if(next.length<2){setDraft(next);setMessage('Ellipse: opposite corner 1 set. Choose the other bounding corner.');return;}
+      try{const ellipse=ellipseFromBounds(next[0],next[1],makeId(),layer);setShapes(current=>[...current,ellipse]);setDraft([]);setMode('select');setMessage('Ellipse created as a closed, segmented polyline on layer '+layer+'.');}
+      catch(error){setDraft([]);setMode('select');setMessage(error instanceof Error?error.message:'Ellipse construction failed.');}
+      return;
+    }
+    if (mode === 'arc') {
+      const next=[...draft,point];
+      const required=arcMethod==='three-point'?3:2;
+      if(next.length<required){setDraft(next);setMessage('Arc '+arcMethod+': point '+next.length+' set. Choose point '+(next.length+1)+' of '+required+'.');return;}
+      try{const arc=arcMethod==='three-point'?arcFromThreePoints(next[0],next[1],next[2],makeId(),layer):arcFromCenterStartAngle(next[0],next[1],arcSweepDegrees,makeId(),layer);setShapes(current=>[...current,arc]);setDraft([]);setMode('select');setMessage('Circular arc created with true bulge geometry on layer '+layer+'.');}
+      catch(error){setDraft([]);setMode('select');setMessage(error instanceof Error?error.message:'Arc construction failed.');}
       return;
     }
 
@@ -1229,7 +1255,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const name = newLayerName.trim().toUpperCase().replace(/\\s+/g, '_');
     if (!name) return;
     if (drafting.layers.some(item => item.name.toUpperCase() === name)) { setMessage('That layer already exists.'); return; }
-    setDrafting(current => ({ ...current, layers: [...current.layers, { name, color: '#555555', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }] }));
+    setDrafting(current => ({ ...current, layers: [...current.layers, { name, color: '#ffffff', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }] }));
     setNewLayerName('');
   }
   function applyLayerTemplate() {
@@ -1593,7 +1619,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     ? ((drawingUnits * calibratedMetresPerUnit) * (units === 'mm' ? 1000 : 1)).toFixed(3) + ' ' + units
     : drawingUnits.toFixed(3) + ' drawing units (unscaled)';
   const selectedMetrics = selectedShape ? (() => {
-    if (selectedShape.type === 'circle') return 'Diameter: ' + formatLength((selectedShape.radius || 0) * 2);
+    if (selectedShape.type === 'circle') return 'Radius: ' + formatLength(selectedShape.radius || 0) + ' · Diameter: ' + formatLength((selectedShape.radius || 0) * 2);
     if (selectedShape.type === 'rect') {
       const a = selectedShape.points[0], b = selectedShape.points[1];
       return 'Width: ' + formatLength(Math.abs(b.x - a.x)) + ' · Height: ' + formatLength(Math.abs(b.y - a.y));
@@ -1671,7 +1697,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   });
   const renderedShapes = visibleShapes.map(shape => {
     const layerStyle = drafting.layers.find(item => item.name === (shape.layer || '0'));
-    const color = layerStyle?.color || (shape.layer === 'WATER_NETWORK' ? '#167b78' : '#c08c3c');
+    const color = layerStyle?.color || '#ffffff';
     const lineWeight = Math.max(0.7, (layerStyle?.lineWeightMm || 0.25) * 5);
     const dashArray = layerStyle?.lineType === 'DASHED' || layerStyle?.lineType === 'HIDDEN' ? '8 5' : layerStyle?.lineType === 'CENTER' ? '12 4 2 4' : layerStyle?.lineType === 'PHANTOM' ? '12 4 2 4 2 4' : undefined;
     if (shape.type === 'circle') {
@@ -1721,7 +1747,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <div className="aquacad-ribbon-groups">
             {ribbonTab==='Home' && <>
               <div className="aquacad-ribbon-group"><strong>Draw</strong><div className="aquacad-tool-grid">
-                {([['↖','Select','select'],['╱','Line','line'],['⌁','Polyline','polyline'],['▭','Rectangle','rect'],['○','Circle','circle']] as const).map(([icon,label,tool])=><button key={tool} title={label} className={mode===tool?'selected':''} onClick={()=>{setMode(tool);setDraft([]);}}><i>{icon}</i><span>{label}</span></button>)}
+                {([['↖','Select','select'],['╱','Line','line'],['⌁','Polyline','polyline'],['▭','Rectangle','rect'],['○','Circle','circle'],['⬭','Ellipse','ellipse'],['⌒','Arc','arc']] as const).map(([icon,label,tool])=><button key={tool} title={label} className={mode===tool?'selected':''} onClick={()=>{setMode(tool);setDraft([]);setMessage(label+' tool active. '+(tool==='circle'?'Choose a construction method below.':tool==='ellipse'?'Pick opposite bounding corners.':tool==='arc'?'Choose an arc construction method below.':'Specify points in the drawing.'));}}><i>{icon}</i><span>{label}</span></button>)}
+                <label>Layer <select aria-label="Current drawing layer" value={layer} onChange={e=>setLayer(e.target.value)}>{drafting.layers.map(item=><option key={item.name} value={item.name}>{item.name}</option>)}</select></label>
+                {mode==='circle'&&<label>Circle method <select value={circleMethod} onChange={e=>{setCircleMethod(e.target.value as typeof circleMethod);setDraft([]);}}><option value="center-radius">Centre + radius</option><option value="center-diameter">Centre + diameter</option><option value="two-point">2-point diameter</option><option value="three-point">3-point</option></select></label>}
+                {mode==='arc'&&<><label>Arc method <select value={arcMethod} onChange={e=>{setArcMethod(e.target.value as typeof arcMethod);setDraft([]);}}><option value="three-point">3-point arc</option><option value="center-start-angle">Centre + start + angle</option></select></label>{arcMethod==='center-start-angle'&&<label>Sweep ° <input type="number" min="-359.999" max="359.999" step="any" value={arcSweepDegrees} onChange={e=>setArcSweepDegrees(Number(e.target.value))} style={{width:72}}/></label>}</>}
               </div></div>
               <div className="aquacad-ribbon-group"><strong>Modify</strong><div className="aquacad-tool-grid">
                 <button title="Undo" onClick={()=>setHistory(current=>undoHistory(current))} disabled={!history.past.length}><i>↶</i><span>Undo</span></button>
@@ -1765,7 +1794,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
                   <label>Segment # <input type="number" min="0" value={segmentIndex} onChange={e=>setSegmentIndex(Math.max(0,Math.floor(Number(e.target.value)||0)))} style={{width:54}}/></label>
                   <label>Endpoint <select value={commandEndpoint} onChange={e=>setCommandEndpoint(Number(e.target.value) as 0|1)}><option value={0}>Start</option><option value={1}>End</option></select></label>
                   <label>Corner # <input type="number" min="1" value={cornerIndex} onChange={e=>setCornerIndex(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
-                  <button disabled={selectedShapes.length!==2||!selectedShapes.some(x=>x.id===selectedShapeId&&['line','polyline'].includes(x.type))||!selectedShapes.some(x=>x.id!==selectedShapeId&&x.type==='line')} onClick={()=>{try{const target=selectedShapes.find(item=>item.id===selectedShapeId)!;const cutter=selectedShapes.find(item=>item.id!==selectedShapeId)!;const pick=target.type==='polyline'?target.points[Math.min(segmentIndex+(commandEndpoint===0?0:1),target.points.length-1)]:target.points[commandEndpoint];previewDrawing(shapes.map(x=>x.id===selectedShapeId?(x.type==='line'?trimLine(x,cutter,pick):trimPolylineSegment(x,cutter,pick,segmentIndex)):x),'TRIM');}catch(e){setMessage(e instanceof Error?e.message:'Trim failed.')}}}><i>✂</i><span>Trim</span></button>
+                  <button title="Select the target entity, then Shift-select a straight cutting edge. Set the endpoint or polyline segment above, then preview Trim." disabled={selectedShapes.length!==2||!selectedShapes.some(x=>x.id===selectedShapeId&&['line','polyline'].includes(x.type))||!selectedShapes.some(x=>x.id!==selectedShapeId&&x.type==='line')} onClick={()=>{try{const target=selectedShapes.find(item=>item.id===selectedShapeId)!;const cutter=selectedShapes.find(item=>item.id!==selectedShapeId)!;const pick=target.type==='polyline'?target.points[Math.min(segmentIndex+(commandEndpoint===0?0:1),target.points.length-1)]:target.points[commandEndpoint];previewDrawing(shapes.map(x=>x.id===selectedShapeId?(x.type==='line'?trimLine(x,cutter,pick):trimPolylineSegment(x,cutter,pick,segmentIndex)):x),'TRIM');}catch(e){setMessage(e instanceof Error?e.message:'Trim failed.')}}}><i>✂</i><span>Trim</span></button>
                   <button disabled={selectedShapes.length!==2||!selectedShapes.some(x=>x.id===selectedShapeId&&['line','polyline'].includes(x.type))||!selectedShapes.some(x=>x.id!==selectedShapeId&&x.type==='line')} onClick={()=>{try{const target=selectedShapes.find(item=>item.id===selectedShapeId)!;const boundary=selectedShapes.find(item=>item.id!==selectedShapeId)!;previewDrawing(shapes.map(x=>x.id===selectedShapeId?(x.type==='line'?extendLine(x,boundary,commandEndpoint):extendPolylineSegment(x,boundary,commandEndpoint,segmentIndex)):x),'EXTEND');}catch(e){setMessage(e instanceof Error?e.message:'Extend failed.')}}}><i>↗</i><span>Extend</span></button>
                   <button disabled={selectedShapes.length!==1||selectedShapes[0].type!=='polyline'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapes[0].id?chamferPolylineCorner(x,cornerIndex,commandDistance):x),'CHAMFER');}catch(e){setMessage(e instanceof Error?e.message:'Chamfer failed.')}}}><i>⌜</i><span>Chamfer</span></button>
                   <button disabled={selectedShapes.length!==1||selectedShapes[0].type!=='polyline'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapes[0].id?filletPolylineCorner(x,cornerIndex,commandDistance):x),'FILLET');}catch(e){setMessage(e instanceof Error?e.message:'Fillet failed.')}}}><i>⌒</i><span>Fillet</span></button>
@@ -2362,7 +2391,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           const cmd = commandLine.trim().toLowerCase();
           if (['l','line'].includes(cmd)) { setMode('line'); setDraft([]); setMessage('LINE: specify first point in drawing.'); }
           else if (['pl','pline','polyline'].includes(cmd)) { setMode('polyline'); setDraft([]); setMessage('PLINE: specify first point in drawing.'); }
-          else if (['c','circle'].includes(cmd)) { setMode('circle'); setDraft([]); setMessage('CIRCLE: specify centre point in drawing.'); }
+          else if (['c','circle'].includes(cmd)) { setMode('circle'); setDraft([]); setMessage('CIRCLE: choose construction method, then specify its points.'); }
+          else if (['el','ellipse'].includes(cmd)) { setMode('ellipse'); setDraft([]); setMessage('ELLIPSE: specify opposite bounding corners.'); }
+          else if (['a','arc'].includes(cmd)) { setMode('arc'); setDraft([]); setMessage('ARC: choose 3-point or centre-start-angle construction.'); }
           else if (['rec','rect','rectangle'].includes(cmd)) { setMode('rect'); setDraft([]); setMessage('RECTANGLE: specify first corner.'); }
           else if (['e','erase','delete'].includes(cmd)) { deleteSelectedShape(); }
           else if (cmd === 'u' || cmd === 'undo') { setHistory(current => undoHistory(current)); }
@@ -2372,7 +2403,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           else if (cmd === 'ortho') { setOrthoEnabled(v => !v); }
           else if (cmd === 'grid') { setGridSnapEnabled(v => !v); }
           else if (cmd === 'save') { saveDrawing(); }
-          else if (cmd === 'help' || cmd === '?') { setMessage('Commands: LINE (L), PLINE (PL), CIRCLE (C), RECTANGLE (REC), ERASE (E), UNDO (U), REDO, ZOOM (Z), OSNAP, ORTHO, GRID, SAVE.'); }
+          else if (cmd === 'help' || cmd === '?') { setMessage('Commands: LINE (L), PLINE (PL), CIRCLE (C), ELLIPSE (EL), ARC (A), RECTANGLE (REC), ERASE (E), UNDO (U), REDO, ZOOM (Z), OSNAP, ORTHO, GRID, SAVE.'); }
           else if (cmd) { setMessage('Unknown command: ' + commandLine + '. Type HELP for available commands.'); }
           setCommandLine('');
         }}>
