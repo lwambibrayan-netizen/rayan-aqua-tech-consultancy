@@ -372,7 +372,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     }
     try{
       const imported=importEpanetInp(linkedEpanetInp,waterCad.verticalDatum);
-      const merged=mergeEpanetRoundTrip(waterCad,imported.document);
+      const merged=mergeEpanetRoundTrip(waterCad,imported.document,linkedEpanetIdMap??[]);
       const idMap=new Map((linkedEpanetIdMap?.length?linkedEpanetIdMap:exportWaterNetworkToEpanet(merged).idMap).map(item=>[item.epanetId,item.cadId]));
       const frames=epanetSimulationToHydraulicSeries(linkedEpanetSimulation).map(frame=>({
         ...frame,
@@ -380,6 +380,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         links:frame.links.map(link=>({...link,id:idMap.get(link.id)??link.id}))
       }));
       setWaterCad(merged);
+      setHydraulicReport(typeof linkedEpanetSimulation?.report==='string'?linkedEpanetSimulation.report:'');
       if(frames.length){
         setHydraulicResultSeries(frames);
         setHydraulicTimeIndex(frames.length-1);
