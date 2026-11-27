@@ -429,6 +429,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const selectionRef = useRef<{pointerId:number;start:Point2D;current:Point2D}|null>(null);
   const suppressSelectionClick = useRef(false);
   const [commandDistance, setCommandDistance] = useState(5);
+  const [moveDeltaX, setMoveDeltaX] = useState(5);
+  const [moveDeltaY, setMoveDeltaY] = useState(0);
   const [scaleFactor, setScaleFactor] = useState(1.1);
   const [gripIndex, setGripIndex] = useState(0);
   const [commandAngle, setCommandAngle] = useState(90);
@@ -1654,8 +1656,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
                   <label>Distance <input type="number" step="any" value={commandDistance} onChange={e=>setCommandDistance(Number(e.target.value))} style={{width:76}}/></label>
                   <label>Angle ° <input type="number" step="any" value={commandAngle} onChange={e=>setCommandAngle(Number(e.target.value))} style={{width:68}}/></label>
                   <label>Scale × <input type="number" min="0.001" step="any" value={scaleFactor} onChange={e=>setScaleFactor(Number(e.target.value))} style={{width:68}}/></label>
-                  <button disabled={!selectedShapes.length} onClick={()=>{try{const pivot=selectedShapes[0].points[0];previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?moveEntities([x],{x:commandDistance,y:commandDistance})[0]:x),'MOVE');}catch(e){setMessage(e instanceof Error?e.message:'Move failed.')}}}><i>↔</i><span>Move</span></button>
-                  <button disabled={!selectedShapes.length} onClick={()=>{try{previewDrawing([...shapes,...copyEntities(selectedShapes,{x:commandDistance,y:commandDistance})],'COPY');}catch(e){setMessage(e instanceof Error?e.message:'Copy failed.')}}}><i>▣</i><span>Copy</span></button>
+                  <label>ΔX <input type="number" step="any" value={moveDeltaX} onChange={e=>setMoveDeltaX(Number(e.target.value))} style={{width:58}}/></label>
+                  <label>ΔY <input type="number" step="any" value={moveDeltaY} onChange={e=>setMoveDeltaY(Number(e.target.value))} style={{width:58}}/></label>
+                  <label>Array spacing <input type="number" min="0.001" step="any" value={arraySpacing} onChange={e=>setArraySpacing(Math.max(0.001,Number(e.target.value)||0.001))} style={{width:66}}/></label>
+                  <button disabled={!selectedShapes.length} onClick={()=>{try{const pivot=selectedShapes[0].points[0];previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?moveEntities([x],{x:moveDeltaX,y:moveDeltaY})[0]:x),'MOVE');}catch(e){setMessage(e instanceof Error?e.message:'Move failed.')}}}><i>↔</i><span>Move</span></button>
+                  <button disabled={!selectedShapes.length} onClick={()=>{try{previewDrawing([...shapes,...copyEntities(selectedShapes,{x:moveDeltaX,y:moveDeltaY})],'COPY');}catch(e){setMessage(e instanceof Error?e.message:'Copy failed.')}}}><i>▣</i><span>Copy</span></button>
                   <button disabled={!selectedShapes.length} onClick={()=>{try{const pivot=selectedShapes[0].points[0];previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?rotateEntities([x],pivot,commandAngle)[0]:x),'ROTATE');}catch(e){setMessage(e instanceof Error?e.message:'Rotate failed.')}}}><i>⟳</i><span>Rotate</span></button>
                   <button disabled={!selectedShapes.length} onClick={()=>{try{const a=selectedShapes[0].points[0],b={x:a.x,y:a.y+1};previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?mirrorEntities([x],a,b)[0]:x),'MIRROR');}catch(e){setMessage(e instanceof Error?e.message:'Mirror failed.')}}}><i>⇋</i><span>Mirror</span></button>
                   <button disabled={!selectedShapes.length||!Number.isFinite(scaleFactor)||scaleFactor<=0} onClick={()=>{try{const base=selectedShapes[0].points[0];const scaled=scaleEntities(selectedShapes,base,scaleFactor);const byId=new Map(scaled.map(item=>[item.id,item]));previewDrawing(shapes.map(x=>byId.get(x.id)||x),'SCALE');}catch(e){setMessage(e instanceof Error?e.message:'Scale failed.')}}}><i>⤢</i><span>Scale</span></button>
