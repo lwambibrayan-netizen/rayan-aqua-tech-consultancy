@@ -868,10 +868,6 @@ function App() {
                   />
                   <CapabilityLine label="Interactive GIS mapping and GeoJSON" status="Available" />
                   <CapabilityLine label="Native QGIS / PostGIS processing" status="Not connected" />
-                  <CapabilityLine
-                    label="Full CAD / 3D clash engine"
-                    status="Not connected"
-                  />
                 </div>
               </div>
             </>
