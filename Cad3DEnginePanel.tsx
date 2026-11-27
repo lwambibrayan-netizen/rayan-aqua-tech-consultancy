@@ -785,6 +785,25 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     downloadWaterFile('rayanaqua-preliminary-boq.csv', csv, 'text/csv');
   }
 
+  function updateDrawingSheet(patch: Partial<DraftingDocument['sheet']>) {
+    setDrafting(current => {
+      const sheet = { ...current.sheet, ...patch };
+      const sheets = [...current.sheets];
+      sheets[current.activeSheetIndex] = sheet;
+      return { ...current, sheet, sheets };
+    });
+  }
+  function selectDrawingSheet(index: number) {
+    setDrafting(current => ({ ...current, activeSheetIndex: index, sheet: { ...current.sheets[index] } }));
+  }
+  function addDrawingSheet() {
+    setDrafting(current => {
+      const index = current.sheets.length;
+      const sheet = { ...current.sheet, drawingNumber: 'RA-WTR-' + String(index + 1).padStart(3, '0'), title: 'Water Engineering Detail', revision: 'P01', status: 'PRELIMINARY' as const };
+      return { ...current, sheet, sheets: [...current.sheets, sheet], activeSheetIndex: index };
+    });
+  }
+
   function addDraftLayer() {
     const name = newLayerName.trim().toUpperCase().replace(/\\s+/g, '_');
     if (!name) return;
@@ -1071,19 +1090,20 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 9, marginTop: 12 }}>
           <label>Standard <select value={drafting.standard} onChange={e => setDrafting(v => ({ ...v, standard: e.target.value as DraftingDocument["standard"] }))}><option value="ISO">ISO / EN</option><option value="BS">British Standards</option><option value="ANSI">ANSI / ASME</option></select></label>
-          <label>Sheet <select value={drafting.sheet.size} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, size: e.target.value as DraftingDocument["sheet"]["size"] } }))}>{["A0","A1","A2","A3","A4","CUSTOM"].map(x => <option key={x}>{x}</option>)}</select></label>
-          <label>Orientation <select value={drafting.sheet.orientation} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, orientation: e.target.value as "landscape"|"portrait" } }))}><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
-          <label>Plot scale <select value={drafting.sheet.scale} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, scale: e.target.value } }))}>{["1:20","1:25","1:50","1:75","1:100","1:150","1:200","1:250","1:500","1:1000","1:2000"].map(x => <option key={x}>{x}</option>)}</select></label>
-          <label>Units <select value={drafting.sheet.units} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, units: e.target.value as "m"|"mm" } }))}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
-          <label>Drawing number <input value={drafting.sheet.drawingNumber} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, drawingNumber: e.target.value } }))}/></label>
-          <label>Drawing title <input value={drafting.sheet.title} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, title: e.target.value } }))}/></label>
-          <label>Revision <input value={drafting.sheet.revision} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, revision: e.target.value } }))}/></label>
-          <label>Status <select value={drafting.sheet.status} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, status: e.target.value as DraftingDocument["sheet"]["status"] } }))}>{["PRELIMINARY","FOR REVIEW","FOR APPROVAL","FOR CONSTRUCTION","AS BUILT"].map(x => <option key={x}>{x}</option>)}</select></label>
-          <label>Designer <input value={drafting.sheet.designer} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, designer: e.target.value } }))}/></label>
-          <label>Checker <input value={drafting.sheet.checker} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, checker: e.target.value } }))}/></label>
-          <label>Approver <input value={drafting.sheet.approver} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, approver: e.target.value } }))}/></label>
-          <label>Company <input value={drafting.sheet.company} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, company: e.target.value } }))}/></label>
-          <label>Issue date <input type="date" value={drafting.sheet.date} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, date: e.target.value } }))}/></label>
+          <label>Sheet set <select value={drafting.activeSheetIndex} onChange={e => selectDrawingSheet(Number(e.target.value))}>{drafting.sheets.map((sheet,index) => <option key={index} value={index}>{sheet.drawingNumber} · {sheet.title}</option>)}</select></label><button className="secondary-button" onClick={addDrawingSheet}>Add sheet</button>
+          <label>Sheet <select value={drafting.sheet.size} onChange={e => updateDrawingSheet({ size: e.target.value as DraftingDocument["sheet"]["size"] })}>{["A0","A1","A2","A3","A4","CUSTOM"].map(x => <option key={x}>{x}</option>)}</select></label>
+          <label>Orientation <select value={drafting.sheet.orientation} onChange={e => updateDrawingSheet({ orientation: e.target.value as "landscape"|"portrait" })}><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
+          <label>Plot scale <select value={drafting.sheet.scale} onChange={e => updateDrawingSheet({ scale: e.target.value })}>{["1:20","1:25","1:50","1:75","1:100","1:150","1:200","1:250","1:500","1:1000","1:2000"].map(x => <option key={x}>{x}</option>)}</select></label>
+          <label>Units <select value={drafting.sheet.units} onChange={e => updateDrawingSheet({ units: e.target.value as "m"|"mm" })}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
+          <label>Drawing number <input value={drafting.sheet.drawingNumber} onChange={e => updateDrawingSheet({ drawingNumber: e.target.value })}/></label>
+          <label>Drawing title <input value={drafting.sheet.title} onChange={e => updateDrawingSheet({ title: e.target.value })}/></label>
+          <label>Revision <input value={drafting.sheet.revision} onChange={e => updateDrawingSheet({ revision: e.target.value })}/></label>
+          <label>Status <select value={drafting.sheet.status} onChange={e => updateDrawingSheet({ status: e.target.value as DraftingDocument["sheet"]["status"] })}>{["PRELIMINARY","FOR REVIEW","FOR APPROVAL","FOR CONSTRUCTION","AS BUILT"].map(x => <option key={x}>{x}</option>)}</select></label>
+          <label>Designer <input value={drafting.sheet.designer} onChange={e => updateDrawingSheet({ designer: e.target.value })}/></label>
+          <label>Checker <input value={drafting.sheet.checker} onChange={e => updateDrawingSheet({ checker: e.target.value })}/></label>
+          <label>Approver <input value={drafting.sheet.approver} onChange={e => updateDrawingSheet({ approver: e.target.value })}/></label>
+          <label>Company <input value={drafting.sheet.company} onChange={e => updateDrawingSheet({ company: e.target.value })}/></label>
+          <label>Issue date <input type="date" value={drafting.sheet.date} onChange={e => updateDrawingSheet({ date: e.target.value })}/></label>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
           <button className="secondary-button" onClick={validateDrafting}>Validate drafting</button>
