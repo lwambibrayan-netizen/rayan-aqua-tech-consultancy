@@ -131,7 +131,20 @@ export function selectEntitiesInWindow<T extends CadEditableEntity>(entities:T[]
     }
     let points=entity.points;
     let segments:Array<[Point2D,Point2D]>=[];
-    if(entity.type==='rect'){
+    if(entity.type==='polyline'&&entity.bulges?.some(value=>Math.abs(value)>1e-12)){
+      const expanded:Point2D[]=[];
+      for(let i=0;i<entity.points.length-1;i++){
+        const a=entity.points[i],b=entity.points[i+1],bulge=entity.bulges?.[i]||0;
+        if(Math.abs(bulge)<1e-12){expanded.push(...(i?[b]:[a,b]));continue;}
+        const dx=b.x-a.x,dy=b.y-a.y,chord=Math.hypot(dx,dy),radius=chord*(1+bulge*bulge)/(4*Math.abs(bulge));
+        const mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2},off=chord*(1-bulge*bulge)/(4*bulge);
+        const center={x:mid.x-dy/chord*off,y:mid.y+dx/chord*off},start=Math.atan2(a.y-center.y,a.x-center.x),sweep=4*Math.atan(bulge);
+        const arc=Array.from({length:65},(_,k)=>{const angle=start+sweep*k/64;return {x:center.x+radius*Math.cos(angle),y:center.y+radius*Math.sin(angle)};});
+        expanded.push(...(i?arc.slice(1):arc));
+      }
+      points=expanded;
+      segments=points.slice(1).map((v,i)=>[points[i],v]);
+    } else if(entity.type==='rect'){
       const [a,b]=entity.points; points=[a,{x:b.x,y:a.y},b,{x:a.x,y:b.y}];
       segments=points.map((v,i)=>[v,points[(i+1)%4]]);
     }else if(entity.type==='line')segments=[[entity.points[0],entity.points[1]]];
