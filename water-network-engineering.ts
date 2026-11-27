@@ -368,7 +368,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   pumps.forEach(p => {
     const [fromNode, toNode] = linkEnds(p);
     if (!fromNode || !toNode || !nodeIds.has(fromNode) || !nodeIds.has(toNode)) warnings.push('Pump ' + p.id + ' omitted: connect its inlet and outlet ports.');
-    else if (!(p.properties.pumpDutyFlowM3h && p.properties.pumpDutyFlowM3h > 0 && p.properties.pumpDutyHeadM && p.properties.pumpDutyHeadM > 0)) warnings.push('Pump ' + p.id + ' omitted: positive duty flow and head are required for a single-point pump curve.');
+    else if (!(p.properties.pumpCurvePoints?.length || (p.properties.pumpDutyFlowM3h && p.properties.pumpDutyFlowM3h > 0 && p.properties.pumpDutyHeadM && p.properties.pumpDutyHeadM > 0))) warnings.push('Pump ' + p.id + ' omitted: a valid pump curve or positive duty flow and head are required.');
     else lines.push([safeId(p.id), fromNode, toNode, 'HEAD ' + safeId('CURVE_' + p.id)].join(' '));
   });
   lines.push('', '[VALVES]', ';ID Node1 Node2 Diameter_mm Type Setting MinorLoss');
@@ -382,8 +382,9 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   if (unsupported.length) warnings.push('EPANET does not model physical ' + [...new Set(unsupported.map(c => c.kind))].join(', ') + ' as standalone hydraulic elements; preserve them in CAD/GIS and model hydraulic losses through suitable pipe minor-loss values or supported links.');
   if (document.components.some(c => c.kind === 'junction') && !document.components.some(c => c.kind === 'source' || c.kind === 'reservoir' || c.kind === 'tank')) warnings.push('No fixed-head source, reservoir or tank is defined; the hydraulic model may be unsolvable.');
   lines.push('', '[CURVES]', ';CurveID Flow_LPS Head_m');
-  pumps.filter(p => { const [a, b] = linkEnds(p); return a && b && nodeIds.has(a) && nodeIds.has(b) && p.properties.pumpDutyFlowM3h && p.properties.pumpDutyHeadM; }).forEach(p => {
-    lines.push([safeId('CURVE_' + p.id), fmt((p.properties.pumpDutyFlowM3h ?? 0) * 1000 / 3600), fmt(p.properties.pumpDutyHeadM ?? 0)].join(' '));
+  pumps.filter(p => { const [a, b] = linkEnds(p); return a && b && nodeIds.has(a) && nodeIds.has(b) && (p.properties.pumpCurvePoints?.length || (p.properties.pumpDutyFlowM3h && p.properties.pumpDutyHeadM)); }).forEach(p => {
+    const points=p.properties.pumpCurvePoints?.length ? p.properties.pumpCurvePoints : [{flowM3h:p.properties.pumpDutyFlowM3h??0,headM:p.properties.pumpDutyHeadM??0}];
+    points.forEach(point=>lines.push([safeId('CURVE_' + p.id),fmt(point.flowM3h*1000/3600),fmt(point.headM)].join(' ')));
   });
   lines.push('', '[OPTIONS]', 'UNITS LPS', 'HEADLOSS H-W', 'SPECIFIC GRAVITY 1', 'VISCOSITY 1', 'TRIALS 40', 'ACCURACY 0.001', '', '[TIMES]', 'DURATION 0', 'HYDRAULIC TIMESTEP 1:00', 'QUALITY TIMESTEP 0:05', '', '[REPORT]', 'STATUS YES', 'SUMMARY YES', 'NODES ALL', 'LINKS ALL', '', '[COORDINATES]');
   nodes.forEach(n => { const point = n.geometry[0]; if (point) lines.push([safeId(n.id), fmt(point.x), fmt(point.y)].join(' ')); });
