@@ -1675,9 +1675,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
                 {(['pump','tank','chamber','hydrant','meter'] as WaterComponentKind[]).map(kind=><button key={kind} onClick={()=>addWaterComponent(kind)}><i>{kind==='pump'?'⚙':kind==='tank'?'▣':kind==='hydrant'?'●':'◉'}</i><span>{kind[0].toUpperCase()+kind.slice(1)}</span></button>)}
               </div></div>
               <div className="aquacad-ribbon-group"><strong>Network Nodes</strong><div className="aquacad-tool-grid">
-                <button onClick={()=>addWaterComponent('junction' as WaterComponentKind)}><i>•</i><span>Junction</span></button>
-                <button onClick={()=>addWaterComponent('reservoir' as WaterComponentKind)}><i>◍</i><span>Reservoir</span></button>
-                <button onClick={()=>addWaterComponent('borehole' as WaterComponentKind)}><i>◌</i><span>Borehole</span></button>
+                <button onClick={()=>addWaterComponent('meter')}><i>◉</i><span>Meter</span></button>
+                <button onClick={()=>addWaterComponent('hydrant')}><i>●</i><span>Hydrant</span></button>
+                <button onClick={()=>addWaterComponent('chamber')}><i>▯</i><span>Chamber</span></button>
               </div></div>
             </>}
             {ribbonTab==='3D Modeling' && <div className="aquacad-ribbon-group"><strong>3D workspace</strong><div className="aquacad-tool-grid">
