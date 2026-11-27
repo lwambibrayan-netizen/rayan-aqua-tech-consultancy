@@ -782,6 +782,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               if (selectionRef.current?.pointerId === event.pointerId) {
                 const end = selectionRef.current.current;
                 const start = selectionRef.current.start;
+                setLastSelectionWindow({ minX: Math.min(start.x,end.x), minY: Math.min(start.y,end.y), maxX: Math.max(start.x,end.x), maxY: Math.max(start.y,end.y) });
                 setLastSelectionWindow({minX:Math.min(start.x,end.x),minY:Math.min(start.y,end.y),maxX:Math.max(start.x,end.x),maxY:Math.max(start.y,end.y)});
                 if (Math.hypot(end.x-start.x,end.y-start.y)>2) suppressSelectionClick.current=true;
                 if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
