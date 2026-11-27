@@ -24,6 +24,8 @@ export type DraftingDocument = {
   layers: DraftLayer[];
   annotations: DraftAnnotation[];
   sheet: DrawingSheet;
+  sheets: DrawingSheet[];
+  activeSheetIndex: number;
 };
 export const DEFAULT_DRAFT_LAYERS: DraftLayer[] = [
   { name: '0', color: '#202020', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
@@ -53,11 +55,16 @@ export function sheetDimensionsMm(sheet: DrawingSheet): { widthMm: number; heigh
   return sheet.orientation === 'landscape' ? { widthMm: long, heightMm: short } : { widthMm: short, heightMm: long };
 }
 export function createDraftingDocument(partial?: Partial<DraftingDocument>): DraftingDocument {
+  const fallbackSheet = { ...DEFAULT_DRAWING_SHEET, ...(partial?.sheet ?? {}) };
+  const sheets = partial?.sheets?.length ? partial.sheets.map(sheet => ({ ...sheet })) : [fallbackSheet];
+  const activeSheetIndex = Math.max(0, Math.min(partial?.activeSheetIndex ?? 0, sheets.length - 1));
+  const sheet = { ...(sheets[activeSheetIndex] ?? fallbackSheet) };
+  sheets[activeSheetIndex] = sheet;
   return {
     standard: partial?.standard ?? 'ISO',
     layers: partial?.layers?.length ? partial.layers : DEFAULT_DRAFT_LAYERS.map(layer => ({ ...layer })),
     annotations: partial?.annotations ?? [],
-    sheet: { ...DEFAULT_DRAWING_SHEET, ...(partial?.sheet ?? {}) },
+    sheet, sheets, activeSheetIndex,
   };
 }
 export function measureDimension(annotation: Extract<DraftAnnotation, { kind: 'linear' | 'aligned' }>): number {
