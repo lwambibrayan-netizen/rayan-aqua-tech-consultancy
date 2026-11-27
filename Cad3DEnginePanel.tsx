@@ -848,7 +848,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               : ['tank','reservoir','chamber','hydrant'].includes(block.waterKind || '') ? 'node'
               : /branch|drain/i.test(port.id) ? 'branch'
               : index === 0 ? 'inlet' : 'outlet',
-            diameterMm: port.nominalDiameterMm ?? Number(block.defaultProperties.nominalDiameterMm ?? component.properties.nominalDiameterMm) || undefined,
+            diameterMm: port.nominalDiameterMm ?? (Number(block.defaultProperties.nominalDiameterMm ?? component.properties.nominalDiameterMm) || undefined),
           }));
         }
         setWaterCad(current => ({ ...current, components: [...current.components, component] }));
