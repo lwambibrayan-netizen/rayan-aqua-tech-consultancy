@@ -18,6 +18,7 @@ import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq,
 import { applyTerrainToPipe, buildTerrainIssues, sampleGroundProfile, type TerrainGrid } from './water-terrain-engineering';
 import { importEpanetInp, type HydraulicResults } from './water-epanet-bridge';
 import { buildHydraulicOverlay, type HydraulicOverlay, type HydraulicOverlayMetric } from './water-hydraulic-overlays';
+import { runEpanetHydraulicSimulation } from './water-epanet-runner';
 
 type Point2D = { x: number; y: number };
 type Shape = {
@@ -333,6 +334,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
   const [terrainGrid, setTerrainGrid] = useState<TerrainGrid | null>(() => initialData?.terrainGrid || null);
   const [hydraulicResults, setHydraulicResults] = useState<HydraulicResults | null>(() => initialData?.hydraulicResults || null);
+  const [hydraulicResultSeries, setHydraulicResultSeries] = useState<HydraulicResults[]>(() => initialData?.hydraulicResultSeries || []);
+  const [hydraulicTimeIndex, setHydraulicTimeIndex] = useState(0);
+  const [simulationBusy, setSimulationBusy] = useState(false);
   const [hydraulicMetric, setHydraulicMetric] = useState<HydraulicOverlayMetric>('velocityMs');
   const [hydraulicOverlay, setHydraulicOverlay] = useState<HydraulicOverlay | null>(() => initialData?.hydraulicOverlay || null);
   const [terrainCoverM, setTerrainCoverM] = useState(1.2);
@@ -410,6 +414,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setWaterCad(initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
     setTerrainGrid(initialData?.terrainGrid || null);
     setHydraulicResults(initialData?.hydraulicResults || null);
+    setHydraulicResultSeries(initialData?.hydraulicResultSeries || []);
+    setHydraulicTimeIndex(0);
     setHydraulicOverlay(initialData?.hydraulicOverlay || null);
     setDrafting(createDraftingDocument(initialData?.drafting));
     setPaperLayouts(initialData?.paperLayouts || []);
@@ -929,12 +935,41 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (epanetFileRef.current) epanetFileRef.current.value = '';
   }
 
+  async function runProjectHydraulics() {
+    if (simulationBusy) return;
+    setSimulationBusy(true);
+    try {
+      const exported = exportWaterNetworkToEpanet(waterCad);
+      if (exported.warnings.length && !window.confirm('The EPANET export has '+exported.warnings.length+' warning(s). Some CAD components may not be represented in the hydraulic model. Review the warnings before proceeding. Run the model anyway?\n\n'+exported.warnings.slice(0,8).join('\n'))) return;
+      const output = await runEpanetHydraulicSimulation(exported.input);
+      if (!output.results.length) throw new Error('EPANET completed without returning hydraulic timesteps.');
+      const finalIndex=output.results.length-1;
+      const finalResult=output.results[finalIndex];
+      setHydraulicResultSeries(output.results);
+      setHydraulicTimeIndex(finalIndex);
+      setHydraulicResults(finalResult);
+      setHydraulicOverlay(buildHydraulicOverlay(waterCad,finalResult,hydraulicMetric));
+      setMessage('OWA-EPANET simulation completed: '+output.results.length+' hydraulic timestep(s); final time '+finalResult.timeSeconds+' s. Review pressure, flow, velocity and headloss overlays. '+(exported.warnings.length?exported.warnings.length+' export warning(s) remain.':''));
+    } catch (error) { setMessage(error instanceof Error ? 'EPANET simulation failed: '+error.message : 'EPANET simulation failed.'); }
+    finally { setSimulationBusy(false); }
+  }
+
+  function selectHydraulicTime(index:number) {
+    const result=hydraulicResultSeries[index];
+    if(!result)return;
+    setHydraulicTimeIndex(index);
+    setHydraulicResults(result);
+    setHydraulicOverlay(buildHydraulicOverlay(waterCad,result,hydraulicMetric));
+  }
+
   async function importHydraulicResultsFile(file?: File) {
     if (!file) return;
     try {
       const results = JSON.parse(await file.text()) as HydraulicResults;
       if (!Number.isFinite(results.timeSeconds) || !Array.isArray(results.nodes) || !Array.isArray(results.links)) throw new Error('Results JSON must include timeSeconds, nodes[] and links[].');
       setHydraulicResults(results);
+      setHydraulicResultSeries([results]);
+      setHydraulicTimeIndex(0);
       setHydraulicOverlay(buildHydraulicOverlay(waterCad, results, hydraulicMetric));
       setMessage('Hydraulic results loaded for ' + results.timeSeconds + ' seconds. Results are matched to CAD IDs; unmatched IDs are not displayed.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Hydraulic result import failed.'); }
@@ -966,6 +1001,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         waterCad,
         terrainGrid,
         hydraulicResults,
+        hydraulicResultSeries,
         hydraulicOverlay,
         drafting: { ...drafting, dimensionStyle },
         paperLayouts,
@@ -1659,6 +1695,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <button className="secondary-button" onClick={() => terrainFileRef.current?.click()}>Import terrain grid JSON</button>
             <button className="secondary-button" onClick={() => epanetFileRef.current?.click()}>Import EPANET INP → CAD</button>
             <button className="secondary-button" onClick={downloadEpanetInput}>Export CAD → EPANET INP</button>
+            <button className="primary-button" onClick={runProjectHydraulics} disabled={simulationBusy || !waterCad.components.length}>{simulationBusy ? 'Running EPANET…' : 'Run EPANET simulation'}</button>
             <button className="secondary-button" onClick={() => hydraulicResultsFileRef.current?.click()}>Import hydraulic results JSON</button>
             <button className="secondary-button" onClick={() => { const issues = buildTerrainIssues(waterCad); setMessage('Terrain check: ' + issues.length + ' issue(s). ' + issues.slice(0,5).map(issue => issue.componentId + ': ' + issue.message).join(' ')); }}>Check terrain cover</button>
           </div>
@@ -1669,10 +1706,15 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <button className="primary-button" onClick={applyTerrainToSelectedPipe} disabled={!terrainGrid || selectedWaterComponent?.kind !== 'pipe'}>Route selected pipe to cover</button>
             <label style={{ fontSize: 12 }}>Drawing overlay<select value={hydraulicMetric} onChange={e => changeHydraulicMetric(e.target.value as HydraulicOverlayMetric)} style={{ display: 'block' }}><option value="pressureM">Node pressure (m)</option><option value="flowLps">Link flow (L/s)</option><option value="velocityMs">Velocity (m/s)</option><option value="headlossM">Headloss (m)</option></select></label>
           </div>
+          {hydraulicResultSeries.length>1 && <label style={{ fontSize: 12, display: 'block', marginTop: 8 }}>Simulation timestep
+            <select value={hydraulicTimeIndex} onChange={e=>selectHydraulicTime(Number(e.target.value))} style={{ display: 'block' }}>
+              {hydraulicResultSeries.map((result,index)=><option key={result.timeSeconds+'-'+index} value={index}>{result.timeSeconds} seconds</option>)}
+            </select>
+          </label>}
           {hydraulicOverlay && <div style={{ overflowX: 'auto', marginTop: 8 }}>
             <strong style={{ fontSize: 12 }}>Hydraulic overlay · {hydraulicOverlay.metric} · t={hydraulicOverlay.timeSeconds}s · range {hydraulicOverlay.min?.toFixed(2) ?? '—'} to {hydraulicOverlay.max?.toFixed(2) ?? '—'}</strong>
             <table style={{ width: '100%', fontSize: 11 }}><thead><tr><th align="left">Network ID</th><th align="right">Value</th><th align="left">Status</th></tr></thead><tbody>{hydraulicOverlay.items.map(item => <tr key={item.componentId}><td>{item.componentId}</td><td align="right">{item.label}</td><td style={{ color: item.colour }}>{item.severity}</td></tr>)}</tbody></table>
-            <p className="muted" style={{ fontSize: 10 }}>Colours are applied to matching network components in the 2D drawing. This JSON import displays supplied engine results; it does not itself execute a hydraulic simulation.</p>
+            <p className="muted" style={{ fontSize: 10 }}>Simulation is run locally by the bundled OWA-EPANET engine. Colours are applied to matching network components in the 2D and 3D drawings. Imported results JSON is also supported.</p>
           </div>}
         </div>
         <label style={{ display: 'block', marginTop: 10, fontSize: 12 }}>Project vertical datum / level reference
