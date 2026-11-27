@@ -601,9 +601,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         setMessage('Text annotation placed.'); return;
       }
       const next = [...annotationDraft, metres];
-      const selectedCircle = shapes.find(shape => shape.id === selectedShapeId && shape.type === 'circle');
-      const selectedCircleDimension = Boolean(selectedCircle && draftTool === 'dimension' && ['radius','diameter'].includes(dimensionKind));
-      const requiredPoints = selectedCircleDimension ? 1 : draftTool === 'dimension' && ['angular','radius','diameter','ordinate'].includes(dimensionKind) ? 3 : draftTool === 'dimension' && ['baseline','chain'].includes(dimensionKind) ? 4 : 2;
+      const requiredPoints = draftTool === 'dimension' && ['angular','radius','diameter','ordinate'].includes(dimensionKind) ? 3 : draftTool === 'dimension' && ['baseline','chain'].includes(dimensionKind) ? 4 : 2;
       if (next.length < requiredPoints) { setAnnotationDraft(next); setMessage('Point ' + next.length + ' set. Choose point ' + (next.length + 1) + ' of ' + requiredPoints + '.'); return; }
       if (draftTool === 'dimension') {
         try {
@@ -622,14 +620,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               const arcPoints = Array.from({length:25},(_,i)=>{const a=g.arc.startAngleRad+(g.arc.endAngleRad-g.arc.startAngleRad)*i/24;return {x:(g.arc.center.x+Math.cos(a)*g.arc.radius)/scale,y:(g.arc.center.y+Math.sin(a)*g.arc.radius)/scale};});
               graphics.push({id:makeId(),type:'polyline',points:arcPoints,layer:'DIMENSIONS'}); labelPoint=g.labelPoint; label=(g.angleRad*180/Math.PI).toFixed(dimensionStyle.precision)+'°';
             } else if (dimensionKind === 'radius' || dimensionKind === 'diameter') {
-              let center=next[0], pointOnCircle=next[1], labelAt=next[2];
-              if(selectedCircleDimension && selectedCircle){
-                center={x:selectedCircle.points[0].x*scale,y:selectedCircle.points[0].y*scale};
-                const dx=next[0].x-center.x,dy=next[0].y-center.y,length=Math.hypot(dx,dy)||1;
-                pointOnCircle={x:center.x+(dx/length)*(selectedCircle.radius??0)*scale,y:center.y+(dy/length)*(selectedCircle.radius??0)*scale};
-                labelAt=next[0];
-              }
-              const g = dimensionKind === 'radius' ? calculateRadiusDimension(center,pointOnCircle,labelAt) : calculateDiameterDimension(center,pointOnCircle,labelAt);
+              const g = dimensionKind === 'radius' ? calculateRadiusDimension(next[0],next[1],next[2]) : calculateDiameterDimension(next[0],next[1],next[2]);
               g.centerMark.forEach(line=>pushLine(line.a,line.b)); pushLine(g.leader.a,g.leader.b);
               labelPoint=g.labelPoint; label=(dimensionKind === 'radius'?'R ':'Ø ')+formatStyledDimension(dimensionKind === 'radius'?g.radius:g.radius*2,dimensionStyle);
             } else if (dimensionKind === 'ordinate') {
@@ -1851,7 +1842,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             </>}
             {ribbonTab==='Annotate' && <>
               <div className="aquacad-ribbon-group"><strong>Dimensions</strong><div className="aquacad-tool-grid">
-                {(['aligned','linear','angular','radius','diameter','ordinate'] as const).map(kind=><button key={kind} className={draftTool==='dimension'&&dimensionKind===kind?'selected':''} onClick={()=>{setDimensionKind(kind);setDraftTool('dimension');setAnnotationDraft([]);setMessage((kind==='radius'||kind==='diameter')&&selectedShape?.type==='circle'?'Circle selected: click the label position to place its '+kind+' dimension.':'Select the required points to place a '+kind+' dimension.')}}><i>↔</i><span>{kind[0].toUpperCase()+kind.slice(1)}</span></button>)}
+                {(['aligned','linear','angular','radius','diameter','ordinate'] as const).map(kind=><button key={kind} className={draftTool==='dimension'&&dimensionKind===kind?'selected':''} onClick={()=>{setDimensionKind(kind);setDraftTool('dimension');setAnnotationDraft([]);setMessage('Select the required points to place a '+kind+' dimension.')}}><i>↔</i><span>{kind[0].toUpperCase()+kind.slice(1)}</span></button>)}
               </div></div>
               <div className="aquacad-ribbon-group"><strong>Text & Leaders</strong><div className="aquacad-tool-grid">
                 <button onClick={()=>{setDraftTool('text');setMessage('Click the drawing to place text.')}}><i>A</i><span>Text</span></button>
