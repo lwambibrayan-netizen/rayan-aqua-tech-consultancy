@@ -86,6 +86,7 @@ PC1 0 50
 PC1 5 40
 [STATUS]
 PU1 CLOSED
+V1 CLOSED
 [COORDINATES]
 R1 0 0
 J1 10 0
@@ -129,6 +130,8 @@ J1 100 1 PAT1
 R1 110
 [PUMPS]
 PU1 R1 J1 HEAD PC1 SPEED 1.1 PATTERN PAT1
+[VALVES]
+V1 R1 J1 100 PRV 25 0.4
 [PATTERNS]
 PAT1 1 2 3
 [CURVES]
@@ -146,7 +149,12 @@ J1 10 0
   expect(result.document.components.find(c=>c.id==='PU1')?.properties.pumpSpeedPattern).toBe('PAT1');
   expect(result.document.components.find(c=>c.id==='PU1')?.properties.pumpSpeedMultiplier).toBeCloseTo(1.1);
   expect(result.document.components.find(c=>c.id==='PU1')?.properties.initialStatus).toBe('CLOSED');
+  expect(result.document.components.find(c=>c.id==='V1')?.properties.valveSetting).toBe(25);
+  expect(result.document.components.find(c=>c.id==='V1')?.properties.minorLossCoefficient).toBeCloseTo(0.4);
+  expect(result.document.components.find(c=>c.id==='V1')?.properties.initialStatus).toBe('CLOSED');
   expect(exportWaterNetworkToEpanet(result.document).input).toContain('PU1 CLOSED');
+  expect(exportWaterNetworkToEpanet(result.document).input).toContain('V1 R1 J1 100 PRV 25 0.4');
+  expect(exportWaterNetworkToEpanet(result.document).input).toContain('V1 CLOSED');
   expect(exportWaterNetworkToEpanet(result.document).input).toContain('SPEED 1.1 PATTERN PAT1');
  });
  it('round-trips pipe vertices, additional demands, emitters, solver options and simulation times',()=>{
