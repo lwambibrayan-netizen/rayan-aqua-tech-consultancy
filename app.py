@@ -75,7 +75,7 @@ def sample(ds,x,y):
  a=ds.GetRasterBand(1).ReadAsArray(col,row,1,1)
  if a is None:return None
  z=float(a[0,0]); return z if math.isfinite(z) and z>-9990 else None
-def terrain_grid(path,max_dimension=64):
+def terrain_grid(path,max_dimension=64,epsg=None):
  if not isinstance(max_dimension,int) or max_dimension<16 or max_dimension>96:raise ValueError("Terrain grid maxDimension must be an integer from 16 to 96.")
  source=gdal.Open(path)
  if source is None:raise RuntimeError("Terrain DEM could not be opened for CAD surface export.")
@@ -93,9 +93,9 @@ def terrain_grid(path,max_dimension=64):
  if gt[1]<=0 or gt[5]>=0:raise RuntimeError("Terrain grid requires a north-up projected DEM with positive X and negative Y pixel spacing.")
  elevations=[None if not math.isfinite(float(v)) else round(float(v),3) for v in values.reshape(-1)]
  if sum(v is not None for v in elevations)<4:raise RuntimeError("Terrain DEM has fewer than four valid elevation samples.")
- grid={"width":out_width,"height":out_height,"originX":round(float(gt[0]+gt[1]*0.5),3),"originY":round(float(gt[3]+gt[5]*(out_height-0.5)),3),"cellSizeX":round(float(gt[1]),3),"cellSizeY":round(float(-gt[5]),3),"elevationsM":elevations,"crs":"UNASSIGNED","verticalDatum":"EGM2008 (Copernicus DEM)"}
+ grid={"width":out_width,"height":out_height,"originX":round(float(gt[0]+gt[1]*0.5),3),"originY":round(float(gt[3]+gt[5]*(out_height-0.5)),3),"cellSizeX":round(float(gt[1]),3),"cellSizeY":round(float(-gt[5]),3),"elevationsM":elevations,"crs":"EPSG:"+str(epsg),"verticalDatum":"EGM2008 (Copernicus DEM)"}
  sampled=None; source=None
- if grid["crs"]=="UNASSIGNED":raise RuntimeError("Terrain DEM CRS must be assigned by the processing operation.")
+ if not epsg:raise RuntimeError("Terrain grid export requires a verified projected DEM EPSG code.")
  return grid
 def profile(ds,coords,spacing):
  if not isinstance(coords,list) or len(coords)<2 or len(coords)>20000:raise ValueError("Each route needs at least two coordinate vertices.")
@@ -290,7 +290,7 @@ class Handler(BaseHTTPRequestHandler):
    ds=gdal.Open(dem)
    profile_result=profile(ds,[[38.501,-3.399],[38.509,-3.391]],30)
    ds=None
-   cad_grid=terrain_grid(dem,32); grid_count=len(cad_grid["elevationsM"])
+   cad_grid=terrain_grid(dem,32,epsg); grid_count=len(cad_grid["elevationsM"])
    if grid_count!=cad_grid["width"]*cad_grid["height"] or cad_grid["cellSizeX"]<=0 or cad_grid["cellSizeY"]<=0:raise RuntimeError("CAD terrain-grid self-test failed its dimensions or cell-size checks.")
    if sum(value is not None for value in cad_grid["elevationsM"])<4:raise RuntimeError("CAD terrain-grid self-test found insufficient valid elevation samples.")
    report={"status":"passed","dem_source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"crs":"EPSG:"+str(epsg),"contour_features":len(contour_result["features"]),"slope_mean_degrees":slope_result["mean_slope_degrees"],"profile_sample_count":profile_result["sample_count"],"profile_valid_samples":profile_result["valid_sample_count"],"profile_min_elevation_m":profile_result["minimum_elevation_m"],"profile_max_elevation_m":profile_result["maximum_elevation_m"],"cad_grid_width":cad_grid["width"],"cad_grid_height":cad_grid["height"],"cad_grid_valid_samples":sum(value is not None for value in cad_grid["elevationsM"]),"cad_grid_crs":"EPSG:"+str(epsg),"cad_grid_vertical_datum":cad_grid["verticalDatum"]}
@@ -307,8 +307,7 @@ class Handler(BaseHTTPRequestHandler):
    folder=outdir(user,project); op=urlparse(self.path).path.rstrip("/")
    if op.endswith("/terrain/grid"):
     w,s,e,n=check_bbox(b.get("bbox",{})); bb={"west":w,"south":s,"east":e,"north":n}
-    dem,res,epsg=dem_for(bb,folder); grid=terrain_grid(dem,int(b.get("maxDimension",64)))
-    grid["crs"]="EPSG:"+str(epsg)
+    dem,res,epsg=dem_for(bb,folder); grid=terrain_grid(dem,int(b.get("maxDimension",64)),epsg)
     payload={"grid":grid,"dem":{"source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"type":"Digital Surface Model","crs":"EPSG:"+str(epsg),"bbox":bb}}
     output=persist_output(folder,"terrain-grid",payload,metadata={"crs":grid["crs"],"width":grid["width"],"height":grid["height"]})
     send(self,200,{**payload,"output":output})
