@@ -1815,6 +1815,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         </label>
         <label style={{ display: 'block', fontSize: 12 }}>Project vertical datum / level reference
           <input value={waterCad.verticalDatum} onChange={e => setWaterCad(current => ({ ...current, verticalDatum: e.target.value }))} style={{ display: 'block', width: '100%' }} />
+          <span className="muted">Must match the terrain datum; no vertical datum transformation is performed.</span>
         </label>
         </div>
         {terrainGrid && <p className="muted" style={{fontSize:11}}>Terrain CRS: {terrainGrid.crs}. {waterCad.horizontalCrs===terrainGrid.crs && waterCad.horizontalUnits==='m' && waterCad.verticalDatum===terrainGrid.verticalDatum ? 'Horizontal CRS, metre units and vertical datum match.' : 'CRS, units or vertical datum do not match; terrain routing and co-registered 3D terrain are disabled until coordinates and levels are properly transformed.'}</p>}
