@@ -1999,7 +1999,14 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <strong>Interactive 3D model viewport</strong>
           <span className="muted" style={{ fontSize: 12 }}> Drag to orbit · scroll/pinch to zoom</span>
           <div ref={hostRef} style={{ width: '100%', height: 'min(65vh, 620px)', minHeight: 350, marginTop: 10, borderRadius: 8, overflow: 'hidden' }} />
-          <p className="muted" style={{ fontSize: 12 }}>Conceptual geometry only; not yet BIM, structural analysis or terrain modelling.</p>
+          <p className="muted" style={{ fontSize: 12 }}>
+            {waterCad.horizontalUnits==='unknown'
+              ? 'Plan coordinates are unreferenced and their horizontal scale is provisional; terrain alignment is disabled until units and CRS are verified.'
+              : terrainGrid && waterCad.horizontalUnits==='m' && waterCad.horizontalCrs===terrainGrid.crs && waterCad.verticalDatum===terrainGrid.verticalDatum
+                ? 'Terrain surface is co-registered to the project CRS and vertical datum. Pipe routes use stored Z/invert levels or connected node elevations; EPANET node elevations are not surveyed pipe inverts.'
+                : '3D engineering visualization uses the project coordinate units and available Z/invert or hydraulic node elevations. Import and align terrain to generate surveyed ground profiles; unverified elevations must not be used for construction.'}
+            {' '}This is not structural analysis or a full BIM model.
+          </p>
         </div>
       )}
 
