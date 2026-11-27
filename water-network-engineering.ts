@@ -217,6 +217,44 @@ export function buildPreliminaryBoq(document: WaterCadDocument, trenchWidthM = 0
   return lines;
 }
 
+export type TopologyIssue = { componentId: string; severity: 'error' | 'warning'; code: string; message: string };
+
+export function validateWaterNetworkTopology(document: NetworkDocument, toleranceM = 0.05): TopologyIssue[] {
+  const issues: TopologyIssue[] = [];
+  const ports = document.components.flatMap(getWaterPorts);
+  const byId = new Map(ports.map(port => [port.id, port]));
+  const used = new Map<string, string>();
+  for (const connection of document.connections ?? []) {
+    const a = byId.get(connection.aPortId), b = byId.get(connection.bPortId);
+    if (!a || !b) {
+      issues.push({ componentId: a?.componentId ?? b?.componentId ?? 'network', severity: 'error', code: 'UNKNOWN_PORT', message: 'Connection ' + connection.id + ' references a port that no longer exists.' });
+      continue;
+    }
+    for (const port of [a, b]) {
+      if (used.has(port.id)) issues.push({ componentId: port.componentId, severity: 'error', code: 'PORT_ALREADY_USED', message: 'Port ' + port.id + ' is assigned to more than one connection.' });
+      used.set(port.id, connection.id);
+    }
+    if (dist(a.point, b.point) > toleranceM) issues.push({ componentId: a.componentId, severity: 'error', code: 'PORT_GAP', message: 'Connected ports ' + a.id + ' and ' + b.id + ' exceed the ' + toleranceM + ' m connection tolerance.' });
+    if (finite(a.diameterMm) && finite(b.diameterMm) && Math.abs(a.diameterMm - b.diameterMm) > 1) issues.push({ componentId: a.componentId, severity: 'error', code: 'PORT_DIAMETER_MISMATCH', message: 'Connected ports ' + a.id + ' and ' + b.id + ' have incompatible diameters.' });
+  }
+  for (const component of document.components) {
+    if (component.kind === 'pipe') {
+      getWaterPorts(component).forEach((port, index) => {
+        const explicitNode = index === 0 ? component.fromNodeId : component.toNodeId;
+        if (!used.has(port.id) && !explicitNode) issues.push({ componentId: component.id, severity: 'warning', code: 'OPEN_PIPE_END', message: 'Pipe ' + component.id + ' has an unconnected ' + (index === 0 ? 'start' : 'end') + ' port.' });
+      });
+    } else if (['bend', 'tee', 'reducer', 'valve', 'pump'].includes(component.kind)) {
+      getWaterPorts(component).forEach(port => {
+        if (!used.has(port.id)) issues.push({ componentId: component.id, severity: 'warning', code: 'OPEN_FITTING_PORT', message: component.kind + ' ' + component.id + ' has an unconnected ' + port.role + ' port.' });
+      });
+    }
+  }
+  if (document.components.some(c => c.kind === 'pipe') && !document.components.some(c => c.kind === 'source' || c.kind === 'reservoir' || c.kind === 'tank')) {
+    issues.push({ componentId: 'network', severity: 'warning', code: 'NO_FIXED_HEAD', message: 'Network has no reservoir, source or tank boundary; hydraulic simulation may not converge.' });
+  }
+  return issues;
+}
+
 type HydraulicNode = { id: string; elevationM: number; sourceComponent?: WaterCadComponent };
 
 function resolveHydraulicNodes(document: NetworkDocument): { portNodeIds: Map<string, string>; syntheticNodes: HydraulicNode[] } {
