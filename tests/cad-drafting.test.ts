@@ -14,6 +14,16 @@ describe('professional drafting model', () => {
     expect(formatDimension(3.1254, 2, 'm')).toBe('3.13 m');
     expect(formatDimension(3.1254, 0, 'mm')).toBe('3125 mm');
   });
+  it('preserves independent metadata across a multi-sheet drawing set', () => {
+    const doc = createDraftingDocument();
+    const second = { ...doc.sheet, drawingNumber: 'RA-WTR-002', title: 'Longitudinal Profile' };
+    doc.sheets.push(second);
+    doc.activeSheetIndex = 1;
+    doc.sheet = doc.sheets[1];
+    expect(doc.sheets).toHaveLength(2);
+    expect(doc.sheet.title).toBe('Longitudinal Profile');
+    expect(doc.sheets[0].drawingNumber).toBe('RA-WTR-001');
+  });
   it('rejects zero-length dimensions and invalid layer/sheet settings', () => {
     expect(() => makeLinearDimension('D0', { x: 1, y: 1 }, { x: 1, y: 1 }, 0)).toThrow();
     const doc = createDraftingDocument();
