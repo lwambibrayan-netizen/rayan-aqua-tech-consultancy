@@ -3,7 +3,7 @@ import { createHistory, pushHistory, undoHistory, redoHistory, objectSnapCandida
 import { moveEntities, copyEntities, rotateEntities, mirrorEntities, stretchEntities, rectangularArray, trimLine, extendLine, offsetLine, offsetPolyline, selectEntitiesInWindow, chamferPolylineCorner, filletPolylineCorner, editEntityGrip, scaleEntities, validateCadEntities, trimPolylineSegment, extendPolylineSegment } from './cad-editing';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
+import { Download, FileUp, Layers3, Save, Crosshair, Maximize2, Minimize2, ChevronDown } from 'lucide-react';
 import { api } from './client';
 import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
 import { createDraftingDocument, makeAlignedDimension, makeLinearDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
@@ -382,12 +382,29 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [portA, setPortA] = useState('');
   const [portB, setPortB] = useState('');
   const shapes = history.present;
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, []);
+
+  async function toggleCadFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch {
+      setIsFullscreen(value => !value);
+    }
+  }
+
   function setShapes(next: Shape[] | ((current: Shape[]) => Shape[])) {
     setHistory(current => pushHistory(current, typeof next === 'function' ? next(current.present) : next));
   }
   const [mode, setMode] = useState<'select' | 'line' | 'polyline' | 'rect' | 'circle'>('select');
   const [draft, setDraft] = useState<Point2D[]>([]);
   const [view, setView] = useState<'2d' | '3d'>('2d');
+  const [ribbonTab, setRibbonTab] = useState<'Home'|'Insert'|'Annotate'|'Layers'|'View'|'Output'>('Home');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [layer, setLayer] = useState('WATER_NETWORK');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1580,22 +1597,39 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   });
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
-      <div className="panel" style={{ padding: 14 }}>
-        <span className="eyebrow muted">DRAFTING + MODEL SPACE</span>
-        <h2 style={{ margin: '5px 0' }}>CAD & 3D engineering</h2>
-        <p className="muted" style={{ fontSize: 13 }}>Project drawing · DXF exchange · interactive model view</p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="secondary-button" onClick={() => fileRef.current?.click()}><FileUp size={15} /> Import DXF/JSON</button>
-          <button className="secondary-button" onClick={downloadDxf}><Download size={15} /> Export DXF</button>
-          <button className="primary-button" onClick={saveDrawing} disabled={busy}><Save size={15} />{busy ? 'Saving…' : 'Save drawing'}</button>
-          <button className="secondary-button" onClick={importGisDraft}><Layers3 size={15} /> Bring in GIS draft</button>
+    <div className={`aquacad-shell ${isFullscreen ? 'aquacad-fullscreen' : ''}`}>
+      <div className="aquacad-titlebar">
+        <div className="aquacad-titlelockup"><span className="aquacad-mark">A</span><div><strong>AquaCAD</strong><small>RayanAqua · Project drawing environment</small></div></div>
+        <div className="aquacad-title-actions">
+          <span className="aquacad-project-label">PROJECT DRAWING</span>
+          <button className="aquacad-window-button" onClick={toggleCadFullscreen} title={isFullscreen ? 'Exit full screen' : 'Maximize CAD workspace'} aria-label={isFullscreen ? 'Restore CAD workspace' : 'Maximize CAD workspace'}>
+            {isFullscreen ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}<span>{isFullscreen ? 'Restore' : 'Maximize'}</span>
+          </button>
         </div>
+      </div>
+      <div className="aquacad-ribbon">
+        <div className="aquacad-ribbon-tabs" role="tablist" aria-label="CAD ribbon">
+          {(['Home','Insert','Annotate','Layers','View','Output'] as const).map(tab => <button key={tab} role="tab" aria-selected={ribbonTab===tab} className={ribbonTab===tab?'active':''} onClick={()=>setRibbonTab(tab)}>{tab}<ChevronDown size={12}/></button>)}
+        </div>
+        <div className="aquacad-ribbon-content">
         <input ref={fileRef} type="file" accept=".dxf,.json" hidden onChange={event => importFile(event.target.files?.[0])} />
         <input ref={terrainFileRef} type="file" accept=".json,application/json" hidden onChange={event => importTerrainGridFile(event.target.files?.[0])} />
         <input ref={epanetFileRef} type="file" accept=".inp,.txt,text/plain" hidden onChange={event => importEpanetFile(event.target.files?.[0],epanetImportMode)} />
         <input ref={hydraulicResultsFileRef} type="file" accept=".json,application/json" hidden onChange={event => importHydraulicResultsFile(event.target.files?.[0])} />
-
+        <div className="aquacad-ribbon-groups">
+          {ribbonTab==='Home' && <>
+            <div className="aquacad-ribbon-group"><strong>Draw</strong><div>{(['select','line','polyline','rect','circle'] as const).map(tool=><button key={tool} className={mode===tool?'selected':''} onClick={()=>{setMode(tool);setDraft([]);}}>{tool==='rect'?'Rectangle':tool[0].toUpperCase()+tool.slice(1)}</button>)}</div></div>
+            <div className="aquacad-ribbon-group"><strong>Modify</strong><div><button onClick={()=>setHistory(current=>undoHistory(current))} disabled={!history.past.length}>Undo</button><button onClick={()=>setHistory(current=>redoHistory(current))} disabled={!history.future.length}>Redo</button><button onClick={()=>setSelectedShapeIds([])}>Clear selection</button></div></div>
+            <div className="aquacad-ribbon-group"><strong>Precision</strong><div><button className={snapEnabled?'selected':''} onClick={()=>setSnapEnabled(v=>!v)}>Object snap {snapEnabled?'On':'Off'}</button><button className={orthoEnabled?'selected':''} onClick={()=>setOrthoEnabled(v=>!v)}>Ortho {orthoEnabled?'On':'Off'}</button><button className={gridSnapEnabled?'selected':''} onClick={()=>setGridSnapEnabled(v=>!v)}>Grid snap</button></div></div>
+          </>}
+          {ribbonTab==='Insert' && <div className="aquacad-ribbon-group"><strong>Water network components</strong><div>{(['pipe','bend','tee','reducer','valve','pump','tank','chamber','hydrant','meter'] as WaterComponentKind[]).map(kind=><button key={kind} onClick={()=>addWaterComponent(kind)}>+ {kind}</button>)}<button onClick={()=>fileRef.current?.click()}><FileUp size={13}/> Import DXF</button><button onClick={importGisDraft}><Layers3 size={13}/> GIS draft</button></div></div>}
+          {ribbonTab==='Annotate' && <div className="aquacad-ribbon-group"><strong>Dimensions & notes</strong><div><button onClick={()=>{setDimensionKind('aligned');setDraftTool('dimension');setAnnotationDraft([]);setMessage('Select two points for an aligned dimension.');}}>Aligned dimension</button><button onClick={()=>{setDimensionKind('linear');setDraftTool('dimension');setAnnotationDraft([]);setMessage('Select two points for a linear dimension.');}}>Linear dimension</button><button onClick={()=>{setDraftTool('text');setMessage('Click the drawing to place text.');}}>Text</button><button onClick={()=>{setDraftTool('leader');setAnnotationDraft([]);setMessage('Click leader arrow point, then text landing point.');}}>Leader</button><button onClick={()=>setDraftTool('none')}>Cancel annotation</button></div></div>}
+          {ribbonTab==='Layers' && <div className="aquacad-ribbon-group"><strong>Layer management</strong><div><select value={layer} onChange={e=>setLayer(e.target.value)}>{drafting.layers.map(item=><option key={item.name} value={item.name} disabled={item.locked}>{item.name}</option>)}</select><select value={layerTemplate} onChange={e=>setLayerTemplate(e.target.value as LayerStandard)}><option value="WATER_UTILITY">Water utility</option><option value="CIVIL_SITE">Civil / site</option><option value="MECHANICAL">Mechanical</option></select><button onClick={applyLayerTemplate}>Apply layer standard</button><button onClick={runEngineeringAudit}>Drawing audit</button></div></div>}
+          {ribbonTab==='View' && <div className="aquacad-ribbon-group"><strong>View controls</strong><div><button className={view==='2d'?'selected':''} onClick={()=>setView('2d')}>2D Model</button><button className={view==='3d'?'selected':''} onClick={()=>setView('3d')}>3D Model</button><button className={panMode?'selected':''} onClick={()=>setPanMode(v=>!v)}>Pan</button><button onClick={()=>setViewBox({x:0,y:0,width:WIDTH,height:HEIGHT})}>Zoom extents / reset</button><button onClick={toggleCadFullscreen}>{isFullscreen?'Restore window':'Maximize window'}</button></div></div>}
+          {ribbonTab==='Output' && <div className="aquacad-ribbon-group"><strong>Drawing files & sheets</strong><div><button onClick={downloadDxf}><Download size={13}/> Export DXF</button><button onClick={()=>fileRef.current?.click()}><FileUp size={13}/> Import DXF / JSON</button><button onClick={()=>exportSheetSvg(true)}>Print / PDF</button><button className="primary" onClick={saveDrawing} disabled={busy}><Save size={13}/> {busy?'Saving…':'Save drawing'}</button></div></div>}
+        </div>
+        </div>
+        <div className="aquacad-quickbar"><span>Model: {view.toUpperCase()}</span><span>{shapes.length} entities</span><span>{waterCad.components.length} water objects</span><span>{units}</span><span>{snapEnabled?'OSNAP ON':'OSNAP OFF'}</span></div>
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <button className={view === '2d' ? 'primary-button' : 'secondary-button'} onClick={() => setView('2d')}>2D CAD</button>
           <button className={view === '3d' ? 'primary-button' : 'secondary-button'} onClick={() => setView('3d')}>3D view</button>
