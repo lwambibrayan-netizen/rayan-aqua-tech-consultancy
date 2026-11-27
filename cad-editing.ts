@@ -350,15 +350,17 @@ export function scaleEntities<T extends CadEditableEntity>(
     throw new Error('Scale factors must be finite and non-zero.');
   }
   return entities.map(entity => {
-    if (entity.bulges?.some(value => Math.abs(value) > 1e-12) && Math.abs(Math.abs(scaleX) - Math.abs(scaleY)) > 1e-10) {
-      throw new Error('Non-uniform scaling of bulged circular arcs is not supported; use uniform scaling to preserve exact geometry.');
+    const nonUniform = Math.abs(Math.abs(scaleX) - Math.abs(scaleY)) > 1e-10;
+    if ((entity.type === 'circle' || entity.bulges?.some(value => Math.abs(value) > 1e-12)) && nonUniform) {
+      throw new Error('Non-uniform scaling of circles or bulged circular arcs is not supported; use uniform scaling to preserve exact geometry.');
     }
     const points = entity.points.map(point => ({
       x: basePoint.x + (point.x - basePoint.x) * scaleX,
       y: basePoint.y + (point.y - basePoint.y) * scaleY,
     }));
     const radius = entity.type === 'circle' ? (entity.radius ?? 0) * Math.abs(scaleX) : entity.radius;
-    return { ...entity, points, ...(radius === undefined ? {} : { radius }) };
+    const bulges = entity.bulges?.map(value => scaleX * scaleY < 0 ? -value : value);
+    return { ...entity, points, ...(radius === undefined ? {} : { radius }), ...(bulges === undefined ? {} : { bulges }) };
   });
 }
 
