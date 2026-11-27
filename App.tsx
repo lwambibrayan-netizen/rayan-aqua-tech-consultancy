@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import EpanetEnginePanel from './EpanetEnginePanel';
-import GisEnginePanel from './GisEnginePanel';
-import Cad3DEnginePanel from './Cad3DEnginePanel';
-import BoqEnginePanel from './BoqEnginePanel';
-import ReportGenerator from './ReportGenerator';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+
+// Load specialist engineering engines only when their workspace is opened.
+const EpanetEnginePanel = lazy(() => import('./EpanetEnginePanel'));
+const GisEnginePanel = lazy(() => import('./GisEnginePanel'));
+const Cad3DEnginePanel = lazy(() => import('./Cad3DEnginePanel'));
+const BoqEnginePanel = lazy(() => import('./BoqEnginePanel'));
+const ReportGenerator = lazy(() => import('./ReportGenerator'));
+
+function EngineeringModuleLoading({ label }: { label: string }) {
+  return <div className="panel" role="status" aria-live="polite">Loading {label}…</div>;
+}
 import { api, auth } from './client';
 import {
   Activity,
@@ -1141,7 +1147,9 @@ function App() {
               <div className="page-intro"><div><span className="eyebrow muted">COMPUTER-AIDED DESIGN</span><h1>CAD & 3D workspace</h1><p>Project-centred 2D drafting, DXF exchange and interactive 3D geometry inspection.</p></div></div>
               {!activeProject ? <ChooseProject projects={projects} onChoose={openProject} /> : <>
                 <div className="active-project-strip"><span><Box size={17} /> {activeProject.title}</span><span className="status-pill">{drawingDoc ? 'Saved version ' + drawingDoc.version : 'Unsaved drawing'}</span></div>
-                <Cad3DEnginePanel projectId={activeProject.id} initialData={drawingDoc?.data} gisFeatures={gisDoc?.data?.featureCollection?.features ?? []} linkedEpanetInp={hydraulicDoc?.data?.inp ?? ''} linkedEpanetSimulation={hydraulicDoc?.data?.simulation} linkedEpanetIdMap={hydraulicDoc?.data?.cadIdMap} linkedEpanetUpdatedAt={hydraulicDoc?.data?.generatedAt} onSendToEpanet={openEpanetFromCad} onSave={data => saveDocument('drawing', data)} />
+                <Suspense fallback={<EngineeringModuleLoading label="CAD and 3D workspace" />}>
+                   <Cad3DEnginePanel projectId={activeProject.id} initialData={drawingDoc?.data} gisFeatures={gisDoc?.data?.featureCollection?.features ?? []} linkedEpanetInp={hydraulicDoc?.data?.inp ?? ''} linkedEpanetSimulation={hydraulicDoc?.data?.simulation} linkedEpanetIdMap={hydraulicDoc?.data?.cadIdMap} linkedEpanetUpdatedAt={hydraulicDoc?.data?.generatedAt} onSendToEpanet={openEpanetFromCad} onSave={data => saveDocument('drawing', data)} />
+                 </Suspense>
               </>}
             </div>
           )}
@@ -1163,7 +1171,9 @@ function App() {
                     <span><MapPinned size={17} /> {activeProject.title}</span>
                     <span className="status-pill">{gisDoc ? 'Saved version ' + gisDoc.version : 'GIS draft'}</span>
                   </div>
-                  <GisEnginePanel projectId={activeProject.id} projectTitle={activeProject.title} initialData={gisDoc?.data} hydraulicNetwork={hydraulicDoc?.data?.network} hydraulicSimulation={hydraulicDoc?.data?.simulation} onSave={data => saveDocument('gis', data)} onSendToEpanet={openLinkedEpanet} onSendTerrainGrid={async grid => { const drawing = drawingDoc?.data ?? {}; await saveDocument('drawing', { ...drawing, terrainGrid: grid, terrainGridSource: 'Copernicus DEM via PyQGIS', terrainGridUpdatedAt: new Date().toISOString() }); }} />
+                  <Suspense fallback={<EngineeringModuleLoading label="GIS workspace" />}>
+                   <GisEnginePanel projectId={activeProject.id} projectTitle={activeProject.title} initialData={gisDoc?.data} hydraulicNetwork={hydraulicDoc?.data?.network} hydraulicSimulation={hydraulicDoc?.data?.simulation} onSave={data => saveDocument('gis', data)} onSendToEpanet={openLinkedEpanet} onSendTerrainGrid={async grid => { const drawing = drawingDoc?.data ?? {}; await saveDocument('drawing', { ...drawing, terrainGrid: grid, terrainGridSource: 'Copernicus DEM via PyQGIS', terrainGridUpdatedAt: new Date().toISOString() }); }} />
+                 </Suspense>
                 </>
               )}
               <div className="notice-panel">
@@ -1193,13 +1203,15 @@ function App() {
                     <span><ClipboardList size={17} /> {activeProject.title}</span>
                     <span className="status-pill">{boqDoc ? 'Saved version ' + boqDoc.version : 'Draft BOQ'}</span>
                   </div>
-                  <BoqEnginePanel
+                  <Suspense fallback={<EngineeringModuleLoading label="bill of quantities" />}>
+                   <BoqEnginePanel
                     projectTitle={activeProject.title}
                     initialData={boqDoc?.data}
                     hydraulicNetwork={hydraulicDoc?.data?.network}
                     gisFeatures={gisDoc?.data?.featureCollection?.features ?? []}
                     onSave={data => saveDocument('boq', data)}
                   />
+                 </Suspense>
                 </>
               )}
             </div>
@@ -1222,7 +1234,8 @@ function App() {
                     <span><FileText size={17} /> {activeProject.title}</span>
                     <span className="status-pill">{reportDoc ? 'Saved report notes · v' + reportDoc.version : 'Project report · not yet saved'}</span>
                   </div>
-                  <ReportGenerator
+                  <Suspense fallback={<EngineeringModuleLoading label="project reports" />}>
+                   <ReportGenerator
                     project={activeProject}
                     hydraulic={hydraulicDoc?.data}
                     gis={gisDoc?.data}
@@ -1233,6 +1246,7 @@ function App() {
                     savedReport={reportDoc?.data}
                     onSave={data => saveDocument('report', data)}
                   />
+                 </Suspense>
                 </>
               )}
             </div>
@@ -1253,7 +1267,8 @@ function App() {
               {!activeProject ? <ChooseProject projects={projects} onChoose={openProject} /> : <>
               <div className="active-project-strip"><span><Calculator size={17} /> {activeProject.title}</span><span className="status-pill">Project calculations</span></div>
               <ProjectCalculators initialData={calculationDoc?.data} onSave={data => saveDocument('calculations', data)} />
-              <EpanetEnginePanel
+              <Suspense fallback={<EngineeringModuleLoading label="EPANET hydraulic engine" />}>
+               <EpanetEnginePanel
                 projectTitle={activeProject.title}
                 initialData={hydraulicDoc?.data?.network ? { ...hydraulicDoc.data.network, simulation: hydraulicDoc.data.simulation ?? null } : undefined}
                 gisFeatures={pendingGisFeatures ?? gisDoc?.data?.featureCollection?.features ?? []}
@@ -1264,6 +1279,7 @@ function App() {
                 cadImportIdMap={pendingCadIdMap}
                 onSave={data => saveDocument('hydraulic', data)}
               />
+              </Suspense>
               </>}
               <div className="tools-grid">
                 <ToolCard
