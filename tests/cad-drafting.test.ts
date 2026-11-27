@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDraftingDocument, formatDimension, makeLinearDimension, measureDimension, sheetDimensionsMm, validateDraftingDocument } from '../cad-drafting';
+import { createDraftingDocument, formatDimension, makeAlignedDimension, makeLinearDimension, measureDimension, sheetDimensionsMm, validateDraftingDocument } from '../cad-drafting';
 
 describe('professional drafting model', () => {
   it('creates ISO layers and A3 landscape sheet defaults', () => {
@@ -9,8 +9,8 @@ describe('professional drafting model', () => {
     expect(sheetDimensionsMm(doc.sheet)).toEqual({ widthMm: 420, heightMm: 297 });
   });
   it('measures aligned and linear dimensions in model metres and formats paper units', () => {
-    const dim = makeLinearDimension('D1', { x: 0, y: 0 }, { x: 3, y: 4 }, 1);
-    expect(measureDimension(dim)).toBe(3);
+    const dim = makeAlignedDimension('D1', { x: 0, y: 0 }, { x: 3, y: 4 }, 1);
+    expect(measureDimension(dim)).toBe(5);
     expect(formatDimension(3.1254, 2, 'm')).toBe('3.13 m');
     expect(formatDimension(3.1254, 0, 'mm')).toBe('3125 mm');
   });
