@@ -1141,7 +1141,7 @@ function App() {
                     <span><MapPinned size={17} /> {activeProject.title}</span>
                     <span className="status-pill">{gisDoc ? 'Saved version ' + gisDoc.version : 'GIS draft'}</span>
                   </div>
-                  <GisEnginePanel projectId={activeProject.id} projectTitle={activeProject.title} initialData={gisDoc?.data} hydraulicNetwork={hydraulicDoc?.data?.network} hydraulicSimulation={hydraulicDoc?.data?.simulation} onSave={data => saveDocument('gis', data)} onSendToEpanet={openLinkedEpanet} />
+                  <GisEnginePanel projectId={activeProject.id} projectTitle={activeProject.title} initialData={gisDoc?.data} hydraulicNetwork={hydraulicDoc?.data?.network} hydraulicSimulation={hydraulicDoc?.data?.simulation} onSave={data => saveDocument('gis', data)} onSendToEpanet={openLinkedEpanet} onSendTerrainGrid={async grid => { const drawing = drawingDoc?.data ?? {}; await saveDocument('drawing', { ...drawing, terrainGrid: grid, terrainGridSource: 'Copernicus DEM via PyQGIS', terrainGridUpdatedAt: new Date().toISOString() }); }} />
                 </>
               )}
               <div className="notice-panel">
