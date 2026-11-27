@@ -26,5 +26,7 @@ describe('professional drawing standards', () => {
   it('persists revision history and dimension style configuration', () => {
     const doc = createDraftingDocument({ revisionHistory: [{ revision:'P01', date:'2026-11-27', description:'Initial issue', drawnBy:'A', checkedBy:'B', approvedBy:'', status:'FOR REVIEW' }] });
     expect(doc.revisionHistory[0].revision).toBe('P01');
+    const styled = createDraftingDocument({ dimensionStyle: { name:'ISO-25', textHeightMm:2.5, arrowSizeMm:2.5, extensionOffsetMm:1, extensionBeyondMm:1.5, textGapMm:1, precision:2, decimalSeparator:'.', zeroSuppress:'trailing', unit:'m', prefix:'', suffix:'', tolerance:{mode:'none',upper:0,lower:0} } });
+    expect(styled.dimensionStyle?.name).toBe('ISO-25');
   });
 });
