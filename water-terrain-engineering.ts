@@ -60,12 +60,12 @@ export function sampleGroundProfile(grid: TerrainGrid, route: WaterPoint[], spac
 }
 /** Applies sampled ground and a specified crown cover to every pipe vertex.
  * The pipe invert and centreline are derived independently from ground level. */
-export function applyTerrainToPipe(pipe: WaterCadComponent, grid: TerrainGrid, coverDepthM: number, invertOffsetM = 0): WaterCadComponent {
+export function applyTerrainToPipe(pipe: WaterCadComponent, grid: TerrainGrid, coverDepthM: number, invertOffsetM = 0, spacingM = 5): WaterCadComponent {
   if(pipe.kind!=='pipe'||pipe.geometry.length<2) throw new Error('Terrain routing requires a pipe with at least two vertices.');
-  if(!finite(coverDepthM)||coverDepthM<0||!finite(invertOffsetM)) throw new Error('Cover depth must be non-negative and invert offset finite.');
+  if(!finite(coverDepthM)||coverDepthM<0||!finite(invertOffsetM)||!finite(spacingM)||spacingM<=0) throw new Error('Cover depth must be non-negative; invert offset and route spacing must be finite, with positive spacing.');
   const od=(pipe.properties.externalDiameterMm??0)/1000;
   if(!(od>0)) throw new Error('Set a verified positive external pipe diameter (OD) before calculating cover depth.');
-  const samples=sampleGroundProfile(grid,pipe.geometry,Math.min(5,Math.max(0.5,grid.cellSizeX,grid.cellSizeY)));
+  const samples=sampleGroundProfile(grid,pipe.geometry,spacingM);
   const geometry=samples.map(point=>{
     const ground=point.groundLevelM;
     if(ground===null) throw new Error('Terrain contains NoData or route is outside the terrain extent at '+point.x+', '+point.y+'.');
