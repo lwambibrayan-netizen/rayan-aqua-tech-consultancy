@@ -289,3 +289,76 @@ export function filletPolylineCorner<T extends CadEditableEntity>(entity:T,corne
   bulges[cornerIndex]=Math.tan(sweep/4);
   return {...entity,points,bulges};
 }
+
+/** Validate entity structure before persistence, exchange or a destructive edit. */
+export function validateCadEntities(entities: CadEditableEntity[]): string[] {
+  const issues: string[] = [];
+  const ids = new Set<string>();
+  entities.forEach((entity, index) => {
+    const label = entity.id || `entity[${index}]`;
+    if (!entity.id || ids.has(entity.id)) issues.push(`${label}: missing or duplicate entity ID.`);
+    ids.add(entity.id);
+    if (!['line','polyline','rect','circle'].includes(entity.type)) issues.push(`${label}: unsupported entity type.`);
+    if (!Array.isArray(entity.points)) { issues.push(`${label}: points must be an array.`); return; }
+    entity.points.forEach((point, pointIndex) => {
+      if (!point || !finite(point.x) || !finite(point.y)) issues.push(`${label}: point ${pointIndex + 1} has non-finite coordinates.`);
+    });
+    if (entity.type === 'line' && entity.points.length !== 2) issues.push(`${label}: a line must have exactly two points.`);
+    if (entity.type === 'rect' && entity.points.length !== 2) issues.push(`${label}: a rectangle must have exactly two corner points.`);
+    if (entity.type === 'polyline' && entity.points.length < 2) issues.push(`${label}: a polyline requires at least two points.`);
+    if (entity.type === 'circle' && (entity.points.length !== 1 || !finite(entity.radius ?? NaN) || (entity.radius ?? 0) <= 0)) {
+      issues.push(`${label}: a circle requires one centre point and a positive finite radius.`);
+    }
+    if (entity.bulges && (entity.type !== 'polyline' || entity.bulges.length !== Math.max(0, entity.points.length - 1) || entity.bulges.some(value => !finite(value)))) {
+      issues.push(`${label}: polyline bulges must be finite and match the segment count.`);
+    }
+  });
+  return issues;
+}
+
+/**
+ * Edit a vertex grip without mutating the source entity.
+ * Circle grip index 0 moves its centre; index 1 changes its radius using the supplied point.
+ */
+export function editEntityGrip<T extends CadEditableEntity>(entity: T, gripIndex: number, point: Point2D): T {
+  assertPoint(point);
+  if (!Number.isInteger(gripIndex) || gripIndex < 0) throw new Error('Grip index must be a non-negative integer.');
+  if (entity.type === 'circle') {
+    if (gripIndex === 0) return { ...entity, points: [clonePoint(point)] };
+    if (gripIndex === 1) {
+      const radius = dist(entity.points[0], point);
+      if (radius <= Number.EPSILON) throw new Error('Circle radius must be greater than zero.');
+      return { ...entity, radius };
+    }
+    throw new Error('Circle grip index must be 0 (centre) or 1 (radius).');
+  }
+  if (gripIndex >= entity.points.length) throw new Error('Grip index is outside the entity vertex range.');
+  const points = entity.points.map((current, index) => index === gripIndex ? clonePoint(point) : clonePoint(current));
+  if (entity.type === 'rect') {
+    const [a,b] = points;
+    return { ...entity, type: 'rect', points: [a,b] } as T;
+  }
+  return { ...entity, points } as T;
+}
+
+/** Scale geometry about a base point; non-uniform scaling of circular arcs is rejected. */
+export function scaleEntities<T extends CadEditableEntity>(
+  entities: T[], basePoint: Point2D, scaleX: number, scaleY = scaleX,
+): T[] {
+  assertPoint(basePoint);
+  if (!finite(scaleX) || !finite(scaleY) || scaleX === 0 || scaleY === 0) {
+    throw new Error('Scale factors must be finite and non-zero.');
+  }
+  return entities.map(entity => {
+    if (entity.bulges?.some(value => Math.abs(value) > 1e-12) && Math.abs(Math.abs(scaleX) - Math.abs(scaleY)) > 1e-10) {
+      throw new Error('Non-uniform scaling of bulged circular arcs is not supported; use uniform scaling to preserve exact geometry.');
+    }
+    const points = entity.points.map(point => ({
+      x: basePoint.x + (point.x - basePoint.x) * scaleX,
+      y: basePoint.y + (point.y - basePoint.y) * scaleY,
+    }));
+    const radius = entity.type === 'circle' ? (entity.radius ?? 0) * Math.abs(scaleX) : entity.radius;
+    return { ...entity, points, ...(radius === undefined ? {} : { radius }) };
+  });
+}
+
