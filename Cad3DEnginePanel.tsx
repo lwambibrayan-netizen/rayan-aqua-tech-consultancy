@@ -494,7 +494,6 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             } else if (dimensionKind === 'radius' || dimensionKind === 'diameter') {
               const g = dimensionKind === 'radius' ? calculateRadiusDimension(next[0],next[1],next[2]) : calculateDiameterDimension(next[0],next[1],next[2]);
               g.centerMark.forEach(line=>pushLine(line.a,line.b)); pushLine(g.leader.a,g.leader.b);
-              if (dimensionKind === 'diameter') pushLine(g.oppositePoint,next[2]);
               labelPoint=g.labelPoint; label=(dimensionKind === 'radius'?'R ':'Ø ')+formatStyledDimension(dimensionKind === 'radius'?g.radius:g.diameter,dimensionStyle);
             } else {
               const offset = ordinateAxis === 'x' ? next[2].y-next[1].y : next[2].x-next[1].x;
