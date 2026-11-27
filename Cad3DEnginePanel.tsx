@@ -27,6 +27,15 @@ const WIDTH = 1000;
 const HEIGHT = 650;
 const SNAP_PIXELS = 16;
 
+function nearestPointOnSegment(point: Point2D, a: Point2D, b: Point2D): Point2D {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (!lengthSquared) return { ...a };
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared));
+  return { x: a.x + t * dx, y: a.y + t * dy };
+}
+
 function exportDxf(shapes: Shape[]) {
   const output = [
     '0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '6', '0', 'ENDSEC',
@@ -179,6 +188,7 @@ function getSnapCandidates(shapes: Shape[], cursor: Point2D): Array<{ point: Poi
       return;
     }
     shape.points.forEach(point => candidates.push({ point, kind: 'ENDPOINT' }));
+    getSegments([shape]).forEach(([a, b]) => candidates.push({ point: nearestPointOnSegment(cursor, a, b), kind: 'NEAREST' }));
     if (shape.type === 'line' || shape.type === 'polyline') {
       for (let i = 0; i < shape.points.length - 1; i++) {
         const a = shape.points[i];
@@ -250,6 +260,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [units, setUnits] = useState('m');
+  const [calibratedMetresPerUnit, setCalibratedMetresPerUnit] = useState<number | null>(
+    Number.isFinite(initialData?.calibratedMetresPerUnit) && initialData.calibratedMetresPerUnit > 0
+      ? initialData.calibratedMetresPerUnit : null
+  );
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [orthoEnabled, setOrthoEnabled] = useState(false);
   const [gridSnapEnabled, setGridSnapEnabled] = useState(false);
@@ -267,6 +281,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
 
   useEffect(() => {
     setHistory(createHistory<Shape[]>(initialData?.shapes || []));
+    setCalibratedMetresPerUnit(Number.isFinite(initialData?.calibratedMetresPerUnit) && initialData.calibratedMetresPerUnit > 0 ? initialData.calibratedMetresPerUnit : null);
+    setViewBox(initialData?.viewport && [initialData.viewport.x, initialData.viewport.y, initialData.viewport.width, initialData.viewport.height].every(Number.isFinite)
+      ? initialData.viewport : { x: 0, y: 0, width: WIDTH, height: HEIGHT });
     setDraft([]);
   }, [initialData]);
 
@@ -467,6 +484,24 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setShapes(rows => rows.map(shape => shape.id === selectedShapeId ? { ...shape, ...patch } : shape));
   }
 
+  function calibrateSelectedLine() {
+    if (!selectedShape || selectedShape.type !== 'line') return;
+    const drawingLength = Math.hypot(selectedShape.points[1].x - selectedShape.points[0].x, selectedShape.points[1].y - selectedShape.points[0].y);
+    if (!Number.isFinite(drawingLength) || drawingLength <= 0) {
+      setMessage('A zero-length line cannot be used for scale calibration.');
+      return;
+    }
+    const entered = window.prompt('Enter the verified real-world length of this selected line in metres. Do not estimate.');
+    if (entered === null) return;
+    const knownLength = Number(entered);
+    if (!Number.isFinite(knownLength) || knownLength <= 0) {
+      setMessage('Calibration cancelled: enter a positive, verified length in metres.');
+      return;
+    }
+    setCalibratedMetresPerUnit(knownLength / drawingLength);
+    setMessage('Drawing calibrated from the selected line. Measurements now use the verified metre scale.');
+  }
+
   function deleteSelectedShape() {
     if (!selectedShape) return;
     if (!window.confirm('Delete the selected CAD entity?')) return;
@@ -482,8 +517,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         shapes,
         units,
         schemaVersion: 1,
-        coordinateSystem: 'legacy-drawing-units',
-        calibratedMetresPerUnit: null,
+        coordinateSystem: calibratedMetresPerUnit ? 'calibrated-local-grid' : 'legacy-unscaled-drawing-units',
+        calibratedMetresPerUnit,
         viewport: viewBox,
         format: 'RayanAqua CAD v3',
         updatedAt: new Date().toISOString(),
@@ -672,14 +707,14 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               height: 'min(62vh, 650px)',
               minHeight: 340,
               backgroundColor: '#fbfdfc',
-              backgroundImage: 'linear-gradient(#e8efec 1px, transparent 1px), linear-gradient(90deg, #e8efec 1px, transparent 1px)',
-              backgroundSize: '25px 25px',
               border: '1px solid #dce5e2',
               borderRadius: 8,
               cursor: panMode ? 'grab' : mode === 'select' ? 'default' : 'crosshair',
               touchAction: 'none',
             }}
           >
+            <defs><pattern id="cad-grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse"><path d={`M ${gridSize} 0 L 0 0 0 ${gridSize}`} fill="none" stroke="#e5ece9" strokeWidth={Math.max(viewBox.width / 1000, 0.2)} /></pattern></defs>
+            <rect x={viewBox.x} y={viewBox.y} width={viewBox.width} height={viewBox.height} fill="url(#cad-grid)" pointerEvents="none" />
             {renderedShapes}
             {draft.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="5" fill="#d59b42" />)}
             {draft.length > 1 && <polyline points={draft.map(point => point.x + ',' + point.y).join(' ')} fill="none" stroke="#d59b42" strokeDasharray="7 5" />}
@@ -714,7 +749,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         <label>Layer <input value={selectedShape.layer} onChange={e=>updateSelected({layer:e.target.value})} /></label>
         {selectedShape.points.map((point,index)=><div key={index} style={{display:'flex',gap:8,flexWrap:'wrap'}}><label>Point {index+1} X <input type="number" step="any" value={point.x} onChange={e=>updateSelected({points:selectedShape.points.map((p,i)=>i===index?{...p,x:Number(e.target.value)}:p)})}/></label><label>Y <input type="number" step="any" value={point.y} onChange={e=>updateSelected({points:selectedShape.points.map((p,i)=>i===index?{...p,y:Number(e.target.value)}:p)})}/></label></div>)}
         {selectedShape.type==='circle' && <label>Radius <input type="number" min="0.001" step="any" value={selectedShape.radius||1} onChange={e=>updateSelected({radius:Number(e.target.value)})}/></label>}
-        {selectedShape.type==='line' && <small>Length: {Math.hypot(selectedShape.points[1].x-selectedShape.points[0].x,selectedShape.points[1].y-selectedShape.points[0].y).toFixed(3)} {units}</small>}
+        {selectedShape.type==='line' && <><small>Length: {calibratedMetresPerUnit
+          ? ((Math.hypot(selectedShape.points[1].x-selectedShape.points[0].x,selectedShape.points[1].y-selectedShape.points[0].y) * calibratedMetresPerUnit) * (units === 'mm' ? 1000 : 1)).toFixed(3) + ' ' + units
+          : Math.hypot(selectedShape.points[1].x-selectedShape.points[0].x,selectedShape.points[1].y-selectedShape.points[0].y).toFixed(3) + ' drawing units (unscaled)'}</small><button className="secondary-button" onClick={calibrateSelectedLine}>Calibrate scale from this line</button></>}
       </div>}
       {message && <div className="alert">{message}</div>}
       <div className="panel" style={{ padding: 14 }}>
