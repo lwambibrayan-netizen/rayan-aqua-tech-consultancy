@@ -1144,7 +1144,16 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const result=hydraulicOverlay?.items.find(entry=>entry.componentId===item.id);
       const colour=result?.colour||'#087e83';
       const resultLabel=result?' '+safe(result.label):'';
-      if(item.kind==='pipe'&&pts.length>1)return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="'+colour+'" stroke-width="0.45"/><text x="'+(pts[0].x+1)+'" y="'+(pts[0].y-1)+'" font-size="2.2" fill="'+colour+'">'+safe(item.properties.tag)+resultLabel+'</text>';
+      if(item.kind==='pipe'&&pts.length>1){
+        let arrow='';
+        if(result?.direction&&result.direction!=='stagnant'){
+          const index=Math.max(0,Math.floor((pts.length-1)/2));let a=pts[index],b=pts[Math.min(index+1,pts.length-1)];
+          if(result.direction==='reverse'){const swap=a;a=b;b=swap;}
+          const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy)||1,ux=dx/length,uy=dy/length,nx=-uy,ny=ux,size=2.5,mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2},tip={x:mid.x+ux*size,y:mid.y+uy*size},base={x:mid.x-ux*size*0.65,y:mid.y-uy*size*0.65};
+          arrow='<polygon points="'+tip.x+','+tip.y+' '+(base.x+nx*size*0.55)+','+(base.y+ny*size*0.55)+' '+(base.x-nx*size*0.55)+','+(base.y-ny*size*0.55)+'" fill="'+colour+'"/>';
+        }
+        return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="'+colour+'" stroke-width="0.45"/>'+arrow+'<text x="'+(pts[0].x+1)+'" y="'+(pts[0].y-1)+'" font-size="2.2" fill="'+colour+'">'+safe(item.properties.tag)+resultLabel+'</text>';
+      }
       return '<circle cx="'+pts[0].x+'" cy="'+pts[0].y+'" r="1.5" fill="none" stroke="'+colour+'" stroke-width="0.35"/><text x="'+(pts[0].x+2)+'" y="'+(pts[0].y-2)+'" font-size="2.5" fill="'+colour+'">'+safe(item.properties.tag)+resultLabel+'</text>';
     }).join('');
     const annotations=drafting.annotations.filter(item=>allowed.has(item.layer)).map(item=>{
