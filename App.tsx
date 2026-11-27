@@ -486,6 +486,9 @@ function App() {
       setSection('GIS workspace');
       return;
     }
+    setPendingCadInp('');
+    setPendingCadIdMap([]);
+    setCadImportToken(0);
     setPendingGisFeatures(featuresToImport);
     setPendingGisMetadata(metadata || null);
     setGisImportToken(value => value + 1);
