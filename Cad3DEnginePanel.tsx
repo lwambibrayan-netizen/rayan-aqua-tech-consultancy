@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
 import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
-import { createDraftingDocument, makeLinearDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
+import { createDraftingDocument, makeAlignedDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
 import { exportDraftingDxf, importDraftingDxf } from './cad-dxf';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
@@ -457,7 +457,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       if (next.length < 2) { setAnnotationDraft(next); setMessage('First point set. Choose the second point.'); return; }
       if (draftTool === 'dimension') {
         try {
-          const item = makeLinearDimension(makeId(), next[0], next[1], dimensionOffset * (calibratedMetresPerUnit || 1), 'DIMENSIONS', dimensionPrecision);
+          const item = makeAlignedDimension(makeId(), next[0], next[1], dimensionOffset * (calibratedMetresPerUnit || 1), 'DIMENSIONS', dimensionPrecision);
           setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
           setMessage('Aligned dimension placed.'); 
         } catch (error) { setMessage(error instanceof Error ? error.message : 'Dimension could not be placed.'); }
