@@ -77,7 +77,13 @@ describe('CAD editing geometry operations', () => {
     expect(offsetPolyline(straight,2).points).toEqual([{x:0,y:2},{x:5,y:2},{x:10,y:2}]);
     const acute:CadEditableEntity={id:'a',type:'polyline',points:[{x:0,y:0},{x:10,y:0},{x:0.1,y:0.1}],layer:'WATER'};
     expect(()=>offsetPolyline(acute,2)).toThrow(/miter exceeds/);
-    expect(()=>offsetPolyline({...straight,points:[{x:0,y:0},{x:5,y:0},{x:0,y:0}]},2)).toThrow(/closed polylines/);
+    const closed:CadEditableEntity={id:'closed',type:'polyline',points:[{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:0,y:10},{x:0,y:0}],layer:'WATER'};
+    const inset=offsetPolyline(closed,1);
+    expect(inset.points).toEqual([{x:1,y:1},{x:9,y:1},{x:9,y:9},{x:1,y:9},{x:1,y:1}]);
+    const expanded=offsetPolyline(closed,1,-1);
+    expect(expanded.points).toEqual([{x:-1,y:-1},{x:11,y:-1},{x:11,y:11},{x:-1,y:11},{x:-1,y:-1}]);
+    expect(()=>offsetPolyline(closed,6)).toThrow(/collapses\/inverts/);
+    expect(()=>offsetPolyline({...straight,points:[{x:0,y:0},{x:5,y:0},{x:0,y:0}]},2)).toThrow(/degenerate|parallel/);
 
   });
   it('chamfers and fillets an internal polyline corner', () => {
