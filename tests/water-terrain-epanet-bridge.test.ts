@@ -179,5 +179,7 @@ PAT1 1 1.2
   expect(overlay.items[0].componentId).toBe('P1');
   expect(overlay.items[0].severity).toBe('critical');
   expect(overlay.timeSeconds).toBe(3600);
+  const flow=buildHydraulicOverlay(document,{timeSeconds:0,nodes:[],links:[{id:'P1',flowLps:-4}]},'flowLps');
+  expect(flow.items[0].direction).toBe('reverse');
  });
 });
