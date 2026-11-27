@@ -997,6 +997,46 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
 
 
       <div className="panel" style={{ padding: 14 }}>
+        <span className="eyebrow muted">PROFESSIONAL DRAFTING</span>
+        <h3 style={{ margin: "5px 0" }}>Dimensions, annotations, layers & drawing sheets</h3>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+          <button className={draftTool === "dimension" ? "primary-button" : "secondary-button"} onClick={() => { setDraftTool("dimension"); setAnnotationDraft([]); setMessage("Select two points to dimension."); }}>Aligned dimension</button>
+          <button className={draftTool === "text" ? "primary-button" : "secondary-button"} onClick={() => { setDraftTool("text"); setMessage("Click the drawing to place text."); }}>Place text</button>
+          <button className={draftTool === "leader" ? "primary-button" : "secondary-button"} onClick={() => { setDraftTool("leader"); setAnnotationDraft([]); setMessage("Click leader arrow point, then text landing point."); }}>Leader</button>
+          {draftTool !== "none" && <button className="secondary-button" onClick={() => { setDraftTool("none"); setAnnotationDraft([]); }}>Cancel annotation</button>}
+          <label>Text / note <input value={annotationText} onChange={e => setAnnotationText(e.target.value)} style={{ width: 180 }}/></label>
+          <label>Dimension offset (m) <input type="number" step="any" value={dimensionOffset} onChange={e => setDimensionOffset(Number(e.target.value))} style={{ width: 75 }}/></label>
+          <label>Precision <select value={dimensionPrecision} onChange={e => setDimensionPrecision(Number(e.target.value))}><option value={0}>0</option><option value={1}>0.0</option><option value={2}>0.00</option><option value={3}>0.000</option><option value={4}>0.0000</option></select></label>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 9, marginTop: 12 }}>
+          <label>Standard <select value={drafting.standard} onChange={e => setDrafting(v => ({ ...v, standard: e.target.value as DraftingDocument["standard"] }))}><option value="ISO">ISO / EN</option><option value="BS">British Standards</option><option value="ANSI">ANSI / ASME</option></select></label>
+          <label>Sheet <select value={drafting.sheet.size} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, size: e.target.value as DraftingDocument["sheet"]["size"] } }))}>{["A0","A1","A2","A3","A4","CUSTOM"].map(x => <option key={x}>{x}</option>)}</select></label>
+          <label>Orientation <select value={drafting.sheet.orientation} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, orientation: e.target.value as "landscape"|"portrait" } }))}><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
+          <label>Plot scale <select value={drafting.sheet.scale} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, scale: e.target.value } }))}>{["1:20","1:25","1:50","1:75","1:100","1:150","1:200","1:250","1:500","1:1000","1:2000"].map(x => <option key={x}>{x}</option>)}</select></label>
+          <label>Units <select value={drafting.sheet.units} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, units: e.target.value as "m"|"mm" } }))}><option value="m">metres</option><option value="mm">millimetres</option></select></label>
+          <label>Drawing number <input value={drafting.sheet.drawingNumber} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, drawingNumber: e.target.value } }))}/></label>
+          <label>Drawing title <input value={drafting.sheet.title} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, title: e.target.value } }))}/></label>
+          <label>Revision <input value={drafting.sheet.revision} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, revision: e.target.value } }))}/></label>
+          <label>Status <select value={drafting.sheet.status} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, status: e.target.value as DraftingDocument["sheet"]["status"] } }))}>{["PRELIMINARY","FOR REVIEW","FOR APPROVAL","FOR CONSTRUCTION","AS BUILT"].map(x => <option key={x}>{x}</option>)}</select></label>
+          <label>Designer <input value={drafting.sheet.designer} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, designer: e.target.value } }))}/></label>
+          <label>Checker <input value={drafting.sheet.checker} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, checker: e.target.value } }))}/></label>
+          <label>Approver <input value={drafting.sheet.approver} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, approver: e.target.value } }))}/></label>
+          <label>Company <input value={drafting.sheet.company} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, company: e.target.value } }))}/></label>
+          <label>Issue date <input type="date" value={drafting.sheet.date} onChange={e => setDrafting(v => ({ ...v, sheet: { ...v.sheet, date: e.target.value } }))}/></label>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+          <button className="secondary-button" onClick={validateDrafting}>Validate drafting</button>
+          <button className="secondary-button" onClick={exportSheetSvg}>Export sheet SVG</button>
+          <span className="muted" style={{ fontSize: 12 }}>{sheetDimensionsMm(drafting.sheet).widthMm} × {sheetDimensionsMm(drafting.sheet).heightMm} mm · {drafting.annotations.length} annotations</span>
+        </div>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+          <input placeholder="New layer name" value={newLayerName} onChange={e => setNewLayerName(e.target.value)} style={{ width: 150 }}/><button className="secondary-button" onClick={addDraftLayer}>Add layer</button>
+          {drafting.layers.map(item => <span key={item.name} style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid #ccd5d2", padding: 4, borderRadius: 5, fontSize: 11 }}><input type="color" value={item.color} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, color: e.target.value } : l) }))} style={{ width: 22, height: 20, padding: 0 }}/><button onClick={() => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, visible: !l.visible } : l) }))}>{item.visible ? "●" : "○"} {item.name}</button><label><input type="checkbox" checked={item.plot} onChange={e => setDrafting(v => ({ ...v, layers: v.layers.map(l => l.name === item.name ? { ...l, plot: e.target.checked } : l) }))}/>Plot</label></span>)}
+        </div>
+        {drafting.annotations.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>{drafting.annotations.map(item => <button key={item.id} className="secondary-button" onClick={() => removeAnnotation(item.id)}>Delete {item.kind} · {item.id.slice(0,6)}</button>)}</div>}
+      </div>
+
+      <div className="panel" style={{ padding: 14 }}>
         <span className="eyebrow muted">WATER ENGINEERING OBJECTS</span>
         <h3 style={{ margin: '5px 0' }}>Network component library</h3>
         <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Choose Place, then click in the drawing. Pipes need two snapped clicks; fittings and equipment need one. A verified CAD scale is required so plan coordinates are stored in metres. Confirm elevations against the project survey datum.</p>
