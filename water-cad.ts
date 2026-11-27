@@ -18,6 +18,7 @@ export type WaterEngineeringProperties = {
   pressureClass?: string;
   designPressureBar?: number;
   roughness?: number;
+  minorLossCoefficient?: number;
   invertInletM?: number;
   invertOutletM?: number;
   coverDepthM?: number;
