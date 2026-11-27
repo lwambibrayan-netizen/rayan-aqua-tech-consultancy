@@ -124,7 +124,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     if(r.values.length<5){warnings.push('Malformed valve at line '+r.line+'.');return;}
     const type=r.values[4].toUpperCase();const map:Record<string,WaterCadComponent['properties']['valveType']>={PRV:'PRV',PSV:'PSV',PBV:'PBV',FCV:'FCV',TCV:'TCV',GPV:'GPV',PCV:'PCV'};
     const rawSetting=num(r.values[5]);const setting=type==='FCV'?flowToM3h(rawSetting)*1000/3600:['PRV','PSV','PBV'].includes(type)?pressureToM(rawSetting):rawSetting;
-    addLink(r.values[0],'valve',r.values[1],r.values[2],diameterToMm(num(r.values[3])),{valveType:map[type]??'control',valveSetting:setting,initialStatus:linkStatuses.get(safe(r.values[0])),description:'Imported EPANET '+type+' valve'});
+    addLink(r.values[0],'valve',r.values[1],r.values[2],diameterToMm(num(r.values[3])),{valveType:map[type]??'control',valveSetting:setting,minorLossCoefficient:num(r.values[6]),initialStatus:linkStatuses.get(safe(r.values[0])),description:'Imported EPANET '+type+' valve'});
     if(!map[type]||type==='GPV'||type==='PCV')warnings.push('Valve '+r.values[0]+' type '+type+' requires a supported curve/engine mapping review before re-export.');
   });
   const referenced=new Set(rows.filter(r=>['PIPES','PUMPS','VALVES'].includes(r.section)).flatMap(r=>r.values.slice(1,3)).map(safe));
