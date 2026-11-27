@@ -228,6 +228,7 @@ export function offsetLine<T extends CadEditableEntity>(line: T, distance: numbe
 /** Offset an open polyline with exact parallel segments and bounded miter joins. */
 export function offsetPolyline<T extends CadEditableEntity>(entity:T,distance:number,side:1|-1=1,miterLimit=10):T {
   if(entity.type!=='polyline'||entity.points.length<2)throw new Error('OFFSET polyline requires an open polyline with at least two vertices.');
+  if(dist(entity.points[0],entity.points[entity.points.length-1])<=1e-9)throw new Error('OFFSET of closed polylines is not supported yet; the drawing geometry was left unchanged.');
   if(entity.bulges?.some(value=>Math.abs(value)>1e-12))throw new Error('OFFSET of curved polylines is not supported yet; the drawing geometry was left unchanged.');
   if(!finite(distance)||distance<0||!finite(miterLimit)||miterLimit<1)throw new Error('OFFSET distance and miter limit must be valid non-negative values.');
   const pts=entity.points;
