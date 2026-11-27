@@ -49,6 +49,7 @@ export type WaterEngineeringProperties = {
   pumpEfficiencyPct?: number;
   pumpSpeedMultiplier?: number;
   pumpSpeedPattern?: string;
+  pumpPowerKw?: number;
   initialStatus?: 'OPEN' | 'CLOSED';
   tankType?: 'ground' | 'elevated' | 'underground';
   tankCapacityM3?: number;
