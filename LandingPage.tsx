@@ -27,7 +27,7 @@ function BrandMark({ size = 44 }: { size?: number }) {
       <path d="M32 4C24 16 12 27 12 39a20 20 0 0 0 40 0C52 27 40 16 32 4Z" fill="#D9F1FF" stroke="#167BB5" strokeWidth="2.5"/>
       <path d="M17 40c7-5 12-5 19 0s12 5 18 0" stroke="#167BB5" strokeWidth="3" strokeLinecap="round"/>
       <path d="M20 46c7-4 12-4 18 0s10 4 15 1" stroke="#0B426D" strokeWidth="2.3" strokeLinecap="round"/>
-      <path d="M27 35V20h12v15M25 20h16M30 20v-5h6v5M33 15V11" stroke="#0B426D" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M21 18h8a6 6 0 0 1 0 12h-8V18Zm8 12 10 10" stroke="#0B426D" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M35 19h5v16M33 19h9M37 35v-5" stroke="#0B426D" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M39 31h8v5h-8M47 33.5h5M49.5 31v5" stroke="#0B426D" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M23 35h-5v5" stroke="#0B426D" strokeWidth="2.2" strokeLinecap="round"/>
       <path d="M29 27h8" stroke="#167BB5" strokeWidth="2" strokeLinecap="round"/>
