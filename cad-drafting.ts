@@ -69,6 +69,7 @@ export function createDraftingDocument(partial?: Partial<DraftingDocument>): Dra
   sheets[activeSheetIndex] = sheet;
   return {
     standard: partial?.standard ?? 'ISO',
+    dimensionStyle: partial?.dimensionStyle ? { ...partial.dimensionStyle, tolerance: { ...partial.dimensionStyle.tolerance } } : undefined,
     revisionHistory: partial?.revisionHistory?.map(item => ({...item})) ?? [],
     layers: partial?.layers?.length ? partial.layers : DEFAULT_DRAFT_LAYERS.map(layer => ({ ...layer })),
     annotations: partial?.annotations ?? [],
