@@ -10,6 +10,42 @@ function pairsOf(source:string): Pair[] {
   for(let i=0;i+1<rows.length;i+=2) pairs.push([rows[i].trim(),rows[i+1].trim()]);
   return pairs;
 }
+
+function normalizeLegacyPolylines(input: Pair[], warnings: string[]): Pair[] {
+  const output: Pair[] = [];
+  for (let i = 0; i < input.length; i++) {
+    const pair = input[i];
+    if (pair[0] !== '0' || pair[1] !== 'POLYLINE') { output.push(pair); continue; }
+    const header: Pair[] = [];
+    const vertices: Pair[][] = [];
+    let vertex: Pair[] | null = null;
+    let closed = false;
+    let layer = '0';
+    let ended = false;
+    for (i++; i < input.length; i++) {
+      const [code, value] = input[i];
+      if (code === '0' && value === 'VERTEX') { if (vertex) vertices.push(vertex); vertex = []; continue; }
+      if (code === '0' && value === 'SEQEND') { if (vertex) vertices.push(vertex); vertex = null; ended = true; break; }
+      if (code === '0') { if (vertex) vertices.push(vertex); vertex = null; i--; break; }
+      if (vertex) vertex.push(input[i]);
+      else header.push(input[i]);
+    }
+    layer = header.find(([code]) => code === '8')?.[1] || '0';
+    closed = ((Number(header.find(([code]) => code === '70')?.[1] || 0)) & 1) === 1;
+    const points: Pair[] = [];
+    for (const values of vertices) {
+      const x = values.find(([code]) => code === '10')?.[1];
+      const y = values.find(([code]) => code === '20')?.[1];
+      const bulge = values.find(([code]) => code === '42')?.[1];
+      if (x !== undefined && y !== undefined) points.push(['10', x], ['20', y], ...(bulge && Number(bulge) !== 0 ? [['42', bulge] as Pair] : []));
+    }
+    if (points.length >= 4) output.push(['0','LWPOLYLINE'], ['8',layer], ['90',String(vertices.length)], ['70',closed?'1':'0'], ...points);
+    else warnings.push('Skipped legacy POLYLINE with fewer than two valid vertices.');
+    if (!ended) warnings.push('Legacy POLYLINE ended without SEQEND; imported available vertices where possible.');
+  }
+  return output;
+}
+
 export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, metresPerDrawingUnit=1):string {
   if(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0) throw new Error('A valid drawing calibration is required for DXF export.');
   const insunits=Math.abs(metresPerDrawingUnit-1)<1e-9?6:Math.abs(metresPerDrawingUnit-0.001)<1e-9?4:0;
@@ -52,10 +88,11 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
 export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDenominator=100):DxfImportResult {
   if(!Number.isFinite(metresPerDrawingUnit)||metresPerDrawingUnit<=0) throw new Error('Drawing calibration must be positive.');
   if(!Number.isFinite(scaleDenominator)||scaleDenominator<=0) throw new Error('Drawing scale denominator must be positive.');
-  const pairs=pairsOf(source);
+  const warnings:string[]=[];
+  const pairs=normalizeLegacyPolylines(pairsOf(source), warnings);
   const start=pairs.findIndex(p=>p[0]==='2'&&p[1]==='ENTITIES');
   if(start<0) throw new Error('DXF ENTITIES section not found.');
-  const shapes:DxfShape[]=[],annotations:DraftAnnotation[]=[],layers=new Set<string>(),warnings:string[]=[];
+  const shapes:DxfShape[]=[],annotations:DraftAnnotation[]=[],layers=new Set<string>();
   let current:{type:string;values:Pair[]}|null=null,seq=0;
   const flush=()=>{
     if(!current)return;
