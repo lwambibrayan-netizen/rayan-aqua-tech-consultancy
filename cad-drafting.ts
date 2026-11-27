@@ -181,7 +181,7 @@ export function validateDraftingDocument(doc: DraftingDocument): string[] {
     if (!item.id || annotationIds.has(item.id)) issues.push('Annotation IDs must be unique and non-empty.');
     annotationIds.add(item.id);
     if (!names.has(item.layer.toUpperCase())) issues.push('Annotation ' + item.id + ' uses an undefined layer.');
-    const points = item.kind === 'text' ? [item.at] : item.kind === 'leader' ? item.points : [item.a, item.b];
+    const points = item.kind === 'text' ? [item.at] : item.kind === 'leader' ? item.points : item.kind === 'radial' ? [item.center] : item.kind === 'angular' ? [item.vertex, item.rayA, item.rayB] : [item.a, item.b];
     if (points.some(point => !Number.isFinite(point.x) || !Number.isFinite(point.y))) issues.push('Annotation ' + item.id + ' contains invalid coordinates.');
     if (item.kind === 'text' && (!item.text.trim() || item.heightMm <= 0)) issues.push('Text annotations require content and a positive paper text height.');
     if (item.kind === 'leader' && (item.points.length < 2 || !item.text.trim() || item.textHeightMm <= 0)) issues.push('Leaders require at least two points, text and a positive text height.');
