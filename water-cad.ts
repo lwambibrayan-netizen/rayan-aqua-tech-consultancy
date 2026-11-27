@@ -29,6 +29,8 @@ export type WaterEngineeringProperties = {
   fittingLengthM?: number;
   fittingRunLengthM?: number;
   fittingBranchLengthM?: number;
+  /** Hydraulic model length in metres, retained separately from plan geometry on EPANET import. */
+  hydraulicLengthM?: number;
   bendAngleDeg?: number;
   bendRadiusM?: number;
   branchDiameterMm?: number;
