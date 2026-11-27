@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createWaterComponent, type WaterCadDocument } from '../water-cad';
 import { sampleTerrainElevation, sampleGroundProfile, applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, type TerrainGrid } from '../water-terrain-engineering';
-import { importEpanetInp } from '../water-epanet-bridge';
+import { importEpanetInp, mergeEpanetRoundTrip } from '../water-epanet-bridge';
 import { exportWaterNetworkToEpanet } from '../water-network-engineering';
 import { buildHydraulicOverlay } from '../water-hydraulic-overlays';
 
@@ -169,6 +169,35 @@ PAT1 1 1.2
   expect(exported).toContain('P1 50 10');
   expect(exported).toContain('J1 1.5 PAT1');
   expect(exported).toContain('J1 0.5');
+ });
+ it('merges an EPANET round trip while preserving CAD fittings, OD and matching surveyed levels',()=>{
+  const basePipe=createWaterComponent('pipe','P1',0,0);
+  basePipe.geometry=[{x:0,y:0,z:100,groundLevelM:101,invertLevelM:99},{x:50,y:10,z:99.5,groundLevelM:100.5,invertLevelM:99.0},{x:100,y:0,z:99,groundLevelM:100,invertLevelM:98.5}];
+  basePipe.fromNodeId='R1';basePipe.toNodeId='J1';basePipe.properties.externalDiameterMm=110;
+  const reservoir=createWaterComponent('reservoir','R1',0,0);
+  const junction=createWaterComponent('junction','J1',100,0);
+  const bend=createWaterComponent('bend','BEND-1',50,10);
+  const base:WaterCadDocument={schemaVersion:1,units:'m',verticalDatum:'AHD',horizontalCrs:'EPSG:32737',horizontalUnits:'m',components:[basePipe,reservoir,junction,bend]};
+  const imported=importEpanetInp(`[JUNCTIONS]
+J1 99 1
+[RESERVOIRS]
+R1 100
+[PIPES]
+P1 R1 J1 125 100 140 0 OPEN
+[VERTICES]
+P1 50 10
+[COORDINATES]
+R1 0 0
+J1 100 0
+[END]`,'AHD');
+  const merged=mergeEpanetRoundTrip(base,imported.document);
+  const pipe=merged.components.find(c=>c.id==='P1')!;
+  expect(merged.components.some(c=>c.id==='BEND-1')).toBe(true);
+  expect(pipe.properties.externalDiameterMm).toBe(110);
+  expect(pipe.properties.internalDiameterMm).toBe(100);
+  expect(pipe.geometry[1].invertLevelM).toBe(99);
+  expect(merged.horizontalCrs).toBe('EPSG:32737');
+  expect(merged.verticalDatum).toBe('AHD');
  });
  it('warns when EPANET coordinates are absent rather than pretending the layout is surveyed',()=>{
   const result=importEpanetInp('[JUNCTIONS]\nJ1 10 1\n[RESERVOIRS]\nR1 20\n[PIPES]\nP1 R1 J1 50 100 130 0 OPEN\n[END]');
