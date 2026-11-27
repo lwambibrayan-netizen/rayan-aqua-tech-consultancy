@@ -152,6 +152,13 @@ export function validateWaterCad(document: WaterCadDocument): WaterCadIssue[] {
     if (!c.id || ids.has(c.id)) add('error', 'DUPLICATE_ID', 'Component IDs must be unique and non-empty.');
     ids.add(c.id);
     if (!c.geometry.length || c.geometry.some(point => !finite(point.x) || !finite(point.y) || (point.z !== undefined && !finite(point.z)) || (point.groundLevelM !== undefined && !finite(point.groundLevelM)) || (point.invertLevelM !== undefined && !finite(point.invertLevelM)))) add('error', 'INVALID_GEOMETRY', 'Component coordinates must be finite.');
+    const portIds = new Set<string>();
+    for (const port of c.customPorts || []) {
+      if (!port.id.trim() || portIds.has(port.id)) add('error', 'INVALID_CUSTOM_PORT_ID', 'Custom port IDs must be unique and non-empty.');
+      portIds.add(port.id);
+      if (!finite(port.point.x) || !finite(port.point.y) || (port.point.z !== undefined && !finite(port.point.z))) add('error', 'INVALID_CUSTOM_PORT_GEOMETRY', 'Custom port coordinates must be finite.');
+      if (port.diameterMm !== undefined && !positive(port.diameterMm)) add('error', 'INVALID_CUSTOM_PORT_DIAMETER', 'Custom port diameter must be positive.');
+    }
     if (c.kind === 'pipe') {
       const length = componentPlanLength(c);
       if (length <= 0) add('error', 'ZERO_LENGTH_PIPE', 'Pipe must have a positive plan length.');
