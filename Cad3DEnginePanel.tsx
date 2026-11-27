@@ -13,7 +13,7 @@ import { synchronizeLayerTemplate, validateLayerStandard, validatePlotConfigurat
 import { auditEngineeringDrawing, type EngineeringDrawingAudit } from './cad-engineering-verification';
 import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringBlock, type BlockInsert } from './cad-object-library';
 import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
-import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension } from './cad-dimension-geometry';
+import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension, calculateBaselineDimensions, calculateChainDimensions } from './cad-dimension-geometry';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
@@ -329,7 +329,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [annotationText, setAnnotationText] = useState('');
   const [dimensionOffset, setDimensionOffset] = useState(2);
   const [dimensionPrecision, setDimensionPrecision] = useState(3);
-  const [dimensionKind, setDimensionKind] = useState<'aligned' | 'linear' | 'angular' | 'radius' | 'diameter' | 'ordinate'>('aligned');
+  const [dimensionKind, setDimensionKind] = useState<'aligned' | 'linear' | 'angular' | 'radius' | 'diameter' | 'ordinate' | 'baseline' | 'chain'>('aligned');
   const [ordinateAxis, setOrdinateAxis] = useState<'x' | 'y'>('x');
   const [dimensionStyle, setDimensionStyle] = useState<DimensionStyle>(() => initialData?.drafting?.dimensionStyle || DIMENSION_STYLES.ISO);
   const [layerTemplate, setLayerTemplate] = useState<LayerStandard>('WATER_UTILITY');
@@ -473,7 +473,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         setMessage('Text annotation placed.'); return;
       }
       const next = [...annotationDraft, metres];
-      const requiredPoints = draftTool === 'dimension' && ['angular','radius','diameter','ordinate'].includes(dimensionKind) ? 3 : 2;
+      const requiredPoints = draftTool === 'dimension' && ['angular','radius','diameter','ordinate'].includes(dimensionKind) ? 3 : draftTool === 'dimension' && ['baseline','chain'].includes(dimensionKind) ? 4 : 2;
       if (next.length < requiredPoints) { setAnnotationDraft(next); setMessage('Point ' + next.length + ' set. Choose point ' + (next.length + 1) + ' of ' + requiredPoints + '.'); return; }
       if (draftTool === 'dimension') {
         try {
@@ -495,11 +495,37 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               const g = dimensionKind === 'radius' ? calculateRadiusDimension(next[0],next[1],next[2]) : calculateDiameterDimension(next[0],next[1],next[2]);
               g.centerMark.forEach(line=>pushLine(line.a,line.b)); pushLine(g.leader.a,g.leader.b);
               labelPoint=g.labelPoint; label=(dimensionKind === 'radius'?'R ':'Ø ')+formatStyledDimension(dimensionKind === 'radius'?g.radius:g.diameter,dimensionStyle);
-            } else {
+            } else if (dimensionKind === 'ordinate') {
               const offset = ordinateAxis === 'x' ? next[2].y-next[1].y : next[2].x-next[1].x;
               const g = calculateOrdinateDimension(next[0],next[1],ordinateAxis,offset);
               pushLine(g.originExtension.a,g.originExtension.b); pushLine(g.featureExtension.a,g.featureExtension.b); pushLine(g.dimensionLine.a,g.dimensionLine.b);
               labelPoint=g.labelPoint; label=formatStyledDimension(g.value,dimensionStyle);
+            } else if (dimensionKind === 'baseline') {
+              const offset = ordinateAxis === 'x' ? next[3].y-next[2].y : next[3].x-next[2].x;
+              const dimensions = calculateBaselineDimensions(next[0],next.slice(1,3),offset,ordinateAxis);
+              const notes: DraftAnnotation[] = [];
+              dimensions.forEach((g,index) => {
+                pushLine(g.originExtension.a,g.originExtension.b); pushLine(g.featureExtension.a,g.featureExtension.b); pushLine(g.dimensionLine.a,g.dimensionLine.b);
+                notes.push({id:makeId(),kind:'text',layer:'DIMENSIONS',at:g.labelPoint,text:formatStyledDimension(g.value,dimensionStyle),heightMm:dimensionStyle.textHeightMm,rotationDeg:0});
+              });
+              setShapes(current => [...current,...graphics]); setDrafting(current => ({...current,annotations:[...current.annotations,...notes]}));
+              setMessage('Baseline dimensions placed. Geometry is editable linework and text, not associative.');
+              setDraftTool('none'); setAnnotationDraft([]); return;
+            } else {
+              const basePoints = next.slice(0,3), first=basePoints[0], second=basePoints[1];
+              const dx=second.x-first.x,dy=second.y-first.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len;
+              const offset=(next[3].x-first.x)*nx+(next[3].y-first.y)*ny;
+              const lines=calculateChainDimensions(basePoints,offset);
+              lines.forEach((line,index) => {
+                pushLine(basePoints[index],line.a); pushLine(basePoints[index+1],line.b); pushLine(line.a,line.b);
+                const midpoint={x:(line.a.x+line.b.x)/2,y:(line.a.y+line.b.y)/2};
+                const value=Math.hypot(basePoints[index+1].x-basePoints[index].x,basePoints[index+1].y-basePoints[index].y);
+                const note: DraftAnnotation={id:makeId(),kind:'text',layer:'DIMENSIONS',at:midpoint,text:formatStyledDimension(value,dimensionStyle),heightMm:dimensionStyle.textHeightMm,rotationDeg:0};
+                setDrafting(current=>({...current,annotations:[...current.annotations,note]}));
+              });
+              setShapes(current => [...current,...graphics]);
+              setMessage('Chain dimensions placed. Geometry is editable linework and text, not associative.');
+              setDraftTool('none'); setAnnotationDraft([]); return;
             }
             setShapes(current => [...current,...graphics]);
             const note: DraftAnnotation = {id,kind:'text',layer:'DIMENSIONS',at:labelPoint,text:label,heightMm:dimensionStyle.textHeightMm,rotationDeg:0};
@@ -1263,6 +1289,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <button className={draftTool === "dimension" && dimensionKind === "aligned" ? "primary-button" : "secondary-button"} onClick={() => { setDimensionKind("aligned"); setDraftTool("dimension"); setAnnotationDraft([]); setMessage("Select two points for an aligned dimension."); }}>Aligned dimension</button>
           <button className={draftTool === "dimension" && dimensionKind === "linear" ? "primary-button" : "secondary-button"} onClick={() => { setDimensionKind("linear"); setDraftTool("dimension"); setAnnotationDraft([]); setMessage("Select two points for a horizontal/vertical linear dimension."); }}>Linear dimension</button>
           {(['angular','radius','diameter','ordinate'] as const).map(kind => <button key={kind} className={draftTool === 'dimension' && dimensionKind === kind ? 'primary-button' : 'secondary-button'} onClick={() => { setDimensionKind(kind); setDraftTool('dimension'); setAnnotationDraft([]); setMessage(kind === 'angular' ? 'Select vertex, first ray point and second ray point.' : kind === 'ordinate' ? 'Select datum origin, feature point and offset direction point.' : 'Select circle centre, circle edge and leader landing point.'); }}>{kind[0].toUpperCase()+kind.slice(1)} dimension</button>)}
+          {(['baseline','chain'] as const).map(kind => <button key={kind} className={draftTool === 'dimension' && dimensionKind === kind ? 'primary-button' : 'secondary-button'} onClick={() => { setDimensionKind(kind); setDraftTool('dimension'); setAnnotationDraft([]); setMessage(kind === 'baseline' ? 'Select datum origin, two feature points, then offset direction.' : 'Select three chain vertices, then offset direction.'); }}>{kind[0].toUpperCase()+kind.slice(1)} dimension</button>)}
           <button className={draftTool === "text" ? "primary-button" : "secondary-button"} onClick={() => { setDraftTool("text"); setMessage("Click the drawing to place text."); }}>Place text</button>
           <button className={draftTool === "leader" ? "primary-button" : "secondary-button"} onClick={() => { setDraftTool("leader"); setAnnotationDraft([]); setMessage("Click leader arrow point, then text landing point."); }}>Leader</button>
           {draftTool !== "none" && <button className="secondary-button" onClick={() => { setDraftTool("none"); setAnnotationDraft([]); }}>Cancel annotation</button>}
