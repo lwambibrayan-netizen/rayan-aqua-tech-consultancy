@@ -341,7 +341,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   nodes.filter(n => n.kind === 'tank').forEach(n => {
     const p = n.properties;
     const level = p.tankOperatingLevelM ?? 1;
-    lines.push([safeId(n.id), fmt(n.properties.hydraulicElevationM ?? n.geometry[0]?.z ?? 0), fmt(level), '0', fmt(p.tankMinLevelM ?? 0), fmt(p.tankMaxLevelM ?? Math.max(level + 1, level * 1.5)), fmt(p.tankDiameterM ?? 1), fmt(p.tankMinVolumeM3 ?? 0)].join(' '));
+    lines.push([safeId(n.id), fmt(n.properties.hydraulicElevationM ?? n.geometry[0]?.z ?? 0), fmt(level), fmt(p.tankMinLevelM ?? 0), fmt(p.tankMaxLevelM ?? Math.max(level + 1, level * 1.5)), fmt(p.tankDiameterM ?? 1), fmt(p.tankMinVolumeM3 ?? 0)].join(' '));
   });
   lines.push('', '[PIPES]', ';ID Node1 Node2 Length_m Diameter_mm Roughness MinorLoss Status');
   for (const p of pipes) {
