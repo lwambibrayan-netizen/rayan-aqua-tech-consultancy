@@ -20,7 +20,14 @@ export type WaterEngineeringProperties = {
   roughness?: number;
   invertInletM?: number;
   invertOutletM?: number;
-  coverDepthM?: number;\n  groundStartM?: number;\n  groundEndM?: number;\n  externalDiameterMm?: number;\n  rotationDeg?: number;\n  fittingLengthM?: number;\n  fittingRunLengthM?: number;\n  fittingBranchLengthM?: number;
+  coverDepthM?: number;
+  groundStartM?: number;
+  groundEndM?: number;
+  externalDiameterMm?: number;
+  rotationDeg?: number;
+  fittingLengthM?: number;
+  fittingRunLengthM?: number;
+  fittingBranchLengthM?: number;
   bendAngleDeg?: number;
   bendRadiusM?: number;
   branchDiameterMm?: number;
