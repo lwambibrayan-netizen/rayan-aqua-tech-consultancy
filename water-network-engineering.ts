@@ -333,7 +333,7 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   const pumps = document.components.filter(c => c.kind === 'pump');
   const valves = document.components.filter(c => c.kind === 'valve');
   const lines: string[] = ['[TITLE]', 'RayanAqua Water CAD export', '', '[JUNCTIONS]', ';ID Elevation_m BaseDemand_LPS Pattern'];
-  nodes.filter(n => n.kind === 'junction').forEach(n => lines.push([safeId(n.id), fmt(n.properties.hydraulicElevationM ?? n.geometry[0]?.z ?? 0), fmt((n.properties.flowM3h ?? 0) * 1000 / 3600), ''].join(' ')));
+  nodes.filter(n => n.kind === 'junction').forEach(n => lines.push([safeId(n.id), fmt(n.properties.hydraulicElevationM ?? n.geometry[0]?.z ?? 0), fmt((n.properties.flowM3h ?? 0) * 1000 / 3600), n.properties.demandPatternId ? safeId(n.properties.demandPatternId) : ''].join(' ')));
   hydraulic.syntheticNodes.forEach(n => lines.push([n.id, fmt(n.elevationM), '0', ''].join(' ')));
   lines.push('', '[RESERVOIRS]', ';ID Head_m Pattern');
   nodes.filter(n => n.kind === 'source' || n.kind === 'reservoir').forEach(n => lines.push([safeId(n.id), fmt(n.properties.hydraulicHeadM ?? n.properties.tankOperatingLevelM ?? n.geometry[0]?.z ?? 0), ''].join(' ')));
@@ -382,6 +382,18 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   const unsupported = document.components.filter(c => ['bend', 'tee', 'reducer', 'chamber', 'hydrant', 'meter', 'air-valve', 'washout'].includes(c.kind));
   if (unsupported.length) warnings.push('EPANET does not model physical ' + [...new Set(unsupported.map(c => c.kind))].join(', ') + ' as standalone hydraulic elements; preserve them in CAD/GIS and model hydraulic losses through suitable pipe minor-loss values or supported links.');
   if (document.components.some(c => c.kind === 'junction') && !document.components.some(c => c.kind === 'source' || c.kind === 'reservoir' || c.kind === 'tank')) warnings.push('No fixed-head source, reservoir or tank is defined; the hydraulic model may be unsolvable.');
+  lines.push('', '[PATTERNS]', ';ID Multiplier');
+  (document.epanetPatterns??[]).forEach(pattern=>{
+    if(!pattern.id||!pattern.multipliers.length) return;
+    for(let i=0;i<pattern.multipliers.length;i+=6) lines.push([safeId(pattern.id),...pattern.multipliers.slice(i,i+6).map(fmt)].join(' '));
+  });
+  const definedPatterns=new Set((document.epanetPatterns??[]).map(pattern=>safeId(pattern.id)));
+  document.components.forEach(component=>{
+    const demandPattern=component.properties.demandPatternId;
+    const speedPattern=component.properties.pumpSpeedPattern;
+    if(demandPattern&&!definedPatterns.has(safeId(demandPattern))) warnings.push('Node '+component.id+' references missing demand pattern '+demandPattern+'.');
+    if(speedPattern&&!definedPatterns.has(safeId(speedPattern))) warnings.push('Pump '+component.id+' references missing speed pattern '+speedPattern+'.');
+  });
   lines.push('', '[CURVES]', ';CurveID Flow_LPS Head_m');
   pumps.filter(p => { const [a, b] = linkEnds(p); return a && b && nodeIds.has(a) && nodeIds.has(b) && (p.properties.pumpCurvePoints?.length || (p.properties.pumpDutyFlowM3h && p.properties.pumpDutyHeadM)); }).forEach(p => {
     const points=p.properties.pumpCurvePoints?.length ? p.properties.pumpCurvePoints : [{flowM3h:p.properties.pumpDutyFlowM3h??0,headM:p.properties.pumpDutyHeadM??0}];
