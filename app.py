@@ -75,6 +75,28 @@ def sample(ds,x,y):
  a=ds.GetRasterBand(1).ReadAsArray(col,row,1,1)
  if a is None:return None
  z=float(a[0,0]); return z if math.isfinite(z) and z>-9990 else None
+def terrain_grid(path,max_dimension=64):
+ if not isinstance(max_dimension,int) or max_dimension<16 or max_dimension>96:raise ValueError("Terrain grid maxDimension must be an integer from 16 to 96.")
+ source=gdal.Open(path)
+ if source is None:raise RuntimeError("Terrain DEM could not be opened for CAD surface export.")
+ width,height=source.RasterXSize,source.RasterYSize
+ scale=max(1.0,max(width,height)/max_dimension)
+ out_width=max(2,min(max_dimension,int(round(width/scale))))
+ out_height=max(2,min(max_dimension,int(round(height/scale))))
+ sampled=gdal.Warp("",source,format="MEM",width=out_width,height=out_height,resampleAlg="bilinear",outputType=gdal.GDT_Float32,dstNodata=-9999)
+ if sampled is None:raise RuntimeError("GDAL could not resample the terrain DEM for CAD.")
+ band=sampled.GetRasterBand(1); values=band.ReadAsArray().astype("float64"); nodata=band.GetNoDataValue()
+ valid=np.isfinite(values)
+ if nodata is not None:valid &= values!=nodata
+ values=np.where(valid,values,np.nan)[::-1,:]
+ gt=sampled.GetGeoTransform()
+ if gt[1]<=0 or gt[5]>=0:raise RuntimeError("Terrain grid requires a north-up projected DEM with positive X and negative Y pixel spacing.")
+ elevations=[None if not math.isfinite(float(v)) else round(float(v),3) for v in values.reshape(-1)]
+ if sum(v is not None for v in elevations)<4:raise RuntimeError("Terrain DEM has fewer than four valid elevation samples.")
+ grid={"width":out_width,"height":out_height,"originX":round(float(gt[0]+gt[1]*0.5),3),"originY":round(float(gt[3]+gt[5]*(out_height-0.5)),3),"cellSizeX":round(float(gt[1]),3),"cellSizeY":round(float(-gt[5]),3),"elevationsM":elevations,"crs":"EPSG:"+str(sampled.GetProjectionRef() and osr.SpatialReference(wkt=sampled.GetProjection()).GetAttrValue("AUTHORITY",1) or ""),"verticalDatum":"EGM2008 (Copernicus DEM)"}
+ sampled=None; source=None
+ if grid["crs"]=="EPSG:":raise RuntimeError("Terrain DEM projection authority could not be identified.")
+ return grid
 def profile(ds,coords,spacing):
  if not isinstance(coords,list) or len(coords)<2 or len(coords)>20000:raise ValueError("Each route needs at least two coordinate vertices.")
  if spacing<5 or spacing>500:raise ValueError("Profile spacing must be between 5 m and 500 m.")
@@ -280,7 +302,14 @@ class Handler(BaseHTTPRequestHandler):
    b=json.loads(self.rfile.read(size)); user=str(b.get("userId","")); project=str(b.get("projectId",""))
    if not user or not project:return send(self,400,{"error":"Authenticated user and project IDs are required."})
    folder=outdir(user,project); op=urlparse(self.path).path.rstrip("/")
-   if op.endswith("/terrain/least-cost"):
+   if op.endswith("/terrain/grid"):
+    w,s,e,n=check_bbox(b.get("bbox",{})); bb={"west":w,"south":s,"east":e,"north":n}
+    dem,res,epsg=dem_for(bb,folder); grid=terrain_grid(dem,int(b.get("maxDimension",64)))
+    grid["crs"]="EPSG:"+str(epsg)
+    payload={"grid":grid,"dem":{"source":"Copernicus DEM GLO-"+str(res),"resolution_m":res,"type":"Digital Surface Model","crs":"EPSG:"+str(epsg),"bbox":bb}}
+    output=persist_output(folder,"terrain-grid",payload,metadata={"crs":grid["crs"],"width":grid["width"],"height":grid["height"]})
+    send(self,200,{**payload,"output":output})
+   elif op.endswith("/terrain/least-cost"):
     result=least_cost_route(b,folder); dem={"source":result["dem_source"],"resolution_m":result["dem_resolution_m"]}
     output=persist_output(folder,"least-cost",{"route":result,"dem":dem})
     send(self,200,{"route":result,"dem":dem,"output":output})
