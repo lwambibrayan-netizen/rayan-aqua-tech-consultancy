@@ -23,24 +23,33 @@ export function moveEntities<T extends CadEditableEntity>(entities: T[], delta: 
 export function copyEntities<T extends CadEditableEntity>(entities: T[], delta: Point2D, makeEntityId: () => string = newId): T[] {
   return moveEntities(entities, delta).map(e => ({ ...e, id: makeEntityId() }));
 }
+function transformedPoints<T extends CadEditableEntity>(entity: T, transform: (p: Point2D) => Point2D): T {
+  if (entity.type === 'rect') {
+    const [a, b] = entity.points;
+    const corners = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }].map(transform);
+    const closed = [...corners, clonePoint(corners[0])];
+    return { ...entity, type: 'polyline', points: closed } as T;
+  }
+  return { ...entity, points: entity.points.map(transform) };
+}
 export function rotateEntities<T extends CadEditableEntity>(entities: T[], pivot: Point2D, degrees: number): T[] {
   assertPoint(pivot);
   if (!finite(degrees)) throw new Error('Rotation angle must be finite.');
   const a = degrees * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
-  return entities.map(e => ({ ...e, points: e.points.map(p => {
+  return entities.map(e => transformedPoints(e, p => {
     const x = p.x - pivot.x, y = p.y - pivot.y;
     return { x: pivot.x + x * c - y * s, y: pivot.y + x * s + y * c };
-  }) }));
+  }));
 }
 export function mirrorEntities<T extends CadEditableEntity>(entities: T[], axisStart: Point2D, axisEnd: Point2D): T[] {
   assertPoint(axisStart); assertPoint(axisEnd);
   const dx = axisEnd.x - axisStart.x, dy = axisEnd.y - axisStart.y, d2 = dx * dx + dy * dy;
   if (d2 <= Number.EPSILON) throw new Error('Mirror axis must have non-zero length.');
-  return entities.map(e => ({ ...e, points: e.points.map(p => {
+  return entities.map(e => transformedPoints(e, p => {
     const t = ((p.x - axisStart.x) * dx + (p.y - axisStart.y) * dy) / d2;
     const q = { x: axisStart.x + t * dx, y: axisStart.y + t * dy };
     return { x: 2 * q.x - p.x, y: 2 * q.y - p.y };
-  }) }));
+  }));
 }
 export function stretchEntities<T extends CadEditableEntity>(entities: T[], window: CadWindow, delta: Point2D): T[] {
   assertPoint(delta);
