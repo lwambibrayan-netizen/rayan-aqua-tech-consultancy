@@ -11,7 +11,7 @@ import { exportDraftingDxf, importDraftingDxf, type DxfShape } from './cad-dxf';
 import { DIMENSION_STYLES, formatStyledDimension, validateDimensionStyle, appendDrawingRevision, type DimensionStyle } from './cad-dimension-standards';
 import { synchronizeLayerTemplate, validateLayerStandard, validatePlotConfiguration, type LayerStandard } from './cad-layer-standards';
 import { auditEngineeringDrawing, type EngineeringDrawingAudit } from './cad-engineering-verification';
-import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringBlock, type BlockInsert } from './cad-object-library';
+import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringBlock, instantiateEngineeringPorts, type BlockInsert } from './cad-object-library';
 import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
 import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension, calculateBaselineDimensions, calculateChainDimensions } from './cad-dimension-geometry';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
@@ -839,6 +839,18 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         const id = block.name + '-' + makeId();
         const component = createWaterComponent(block.waterKind, id, atMetres.x, atMetres.y);
         component.properties = { ...component.properties, ...block.defaultProperties, rotationDeg: libraryRotationDeg };
+        const transformedPorts = instantiateEngineeringPorts(insert, block);
+        if (transformedPorts.length) {
+          component.customPorts = transformedPorts.map((port,index) => ({
+            id: port.id,
+            point: { x: port.point.x / 1000, y: port.point.y / 1000 },
+            role: block.waterKind === 'tee' ? (index === 2 ? 'branch' : 'run')
+              : ['tank','reservoir','chamber','hydrant'].includes(block.waterKind || '') ? 'node'
+              : /branch|drain/i.test(port.id) ? 'branch'
+              : index === 0 ? 'inlet' : 'outlet',
+            diameterMm: port.nominalDiameterMm ?? Number(block.defaultProperties.nominalDiameterMm ?? component.properties.nominalDiameterMm) || undefined,
+          }));
+        }
         setWaterCad(current => ({ ...current, components: [...current.components, component] }));
         setSelectedWaterId(id);
       }
