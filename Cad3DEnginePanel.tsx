@@ -1052,7 +1052,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   function downloadEpanetInput() {
     const result = exportWaterNetworkToEpanet(waterCad);
     downloadWaterFile('rayanaqua-network.inp', result.input, 'text/plain');
-    setMessage(result.warnings.length ? 'EPANET INP exported with ' + result.warnings.length + ' warning(s): ' + result.warnings.join(' ') : 'EPANET INP exported. Validate and run it in EPANET before design use.');
+    setMessage(result.warnings.length ? 'EPANET INP exported with ' + result.warnings.length + ' warning(s): ' + result.warnings.join(' ') : 'EPANET INP exported. You can run the bundled OWA-EPANET engine here or validate the file in desktop EPANET.');
   }
 
   function validateWaterTopology() {
