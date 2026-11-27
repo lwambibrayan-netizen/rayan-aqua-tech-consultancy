@@ -902,7 +902,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setDrafting(current => ({ ...current, annotations: current.annotations.filter(item => item.id !== id) }));
   }
   function exportSheetSvg(printToPdf = false, sheetOverride?: DraftingDocument['sheet'], batch = false): string | void {
-    const sheet = sheetOverride || sheet;
+    const sheet = sheetOverride || drafting.sheet;
     const { widthMm, heightMm } = sheetDimensionsMm(sheet);
     const denominator = Number(sheet.scale.split(':')[1]) || 100;
     const metresPerUnit = calibratedMetresPerUnit || 1;
