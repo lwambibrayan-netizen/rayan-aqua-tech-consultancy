@@ -131,9 +131,17 @@ test('engineer opens a project, verifies precision drafting, saves and opens 3D'
   await expect(page.locator('.aquacad-shell .aquacad-ribbon-content').getByRole('button', { name: /Fetch DEM from GIS/ })).toBeVisible();
   await ribbon.getByRole('tab', { name: 'Home' }).click();
 
+  const cadCanvas = page.getByRole('application', { name: /AquaCAD drawing canvas/ });
+  await ribbonContent.getByRole('button', { name: 'Polyline' }).click();
+  await cadCanvas.click({ position: { x: 260, y: 200 } });
+  await cadCanvas.click({ position: { x: 300, y: 200 } });
+  await expect(ribbonContent.getByRole('button', { name: 'Finish Polyline' })).toBeVisible();
+  await cadCanvas.click({ position: { x: 300, y: 240 } });
+  await ribbonContent.getByRole('button', { name: 'Finish Polyline' }).click();
+  await expect(page.getByText(/Polyline finished/).first()).toBeVisible();
+
   await ribbonContent.getByRole('button', { name: 'Circle' }).click();
   await ribbonContent.getByLabel('Circle method').selectOption('center-radius');
-  const cadCanvas = page.getByRole('application', { name: /AquaCAD drawing canvas/ });
   await cadCanvas.click({ position: { x: 120, y: 120 } });
   await cadCanvas.click({ position: { x: 160, y: 120 } });
   await expect(page.getByText(/Circle created using center-radius/).first()).toBeVisible();
