@@ -87,6 +87,26 @@ export function componentPlanLength(component: WaterCadComponent): number {
   for (let i = 1; i < component.geometry.length; i++) length += distance2d(component.geometry[i - 1], component.geometry[i]);
   return length;
 }
+export function component3dLength(component: WaterCadComponent): number {
+  if (component.kind !== 'pipe' || component.geometry.length < 2) return 0;
+  let length = 0;
+  for (let i = 1; i < component.geometry.length; i++) {
+    const a = component.geometry[i - 1], b = component.geometry[i];
+    const dz = (b.z ?? 0) - (a.z ?? 0);
+    length += Math.hypot(b.x - a.x, b.y - a.y, dz);
+  }
+  return length;
+}
+export function connectPipeEndpoints(document: WaterCadDocument, pipeId: string, fromNodeId: string, toNodeId: string): WaterCadDocument {
+  const pipe = document.components.find(item => item.id === pipeId && item.kind === 'pipe');
+  const from = document.components.find(item => item.id === fromNodeId);
+  const to = document.components.find(item => item.id === toNodeId);
+  const allowed = new Set<WaterComponentKind>(['junction','source','tank','reservoir']);
+  if (!pipe || !from || !to) throw new Error('Select an existing pipe and two existing network nodes.');
+  if (!allowed.has(from.kind) || !allowed.has(to.kind)) throw new Error('Pipe endpoints must connect to junctions, sources, tanks or reservoirs.');
+  if (from.id === to.id) throw new Error('A pipe must connect two different nodes.');
+  return { ...document, components: document.components.map(item => item.id === pipeId ? { ...item, fromNodeId, toNodeId } : item) };
+}
 export function pipeSlopePercent(component: WaterCadComponent): number | null {
   const length = componentPlanLength(component);
   const a = component.properties.invertInletM, b = component.properties.invertOutletM;
