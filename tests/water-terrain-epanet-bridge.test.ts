@@ -84,6 +84,8 @@ PU1 R1 J1 HEAD PC1
 [CURVES]
 PC1 0 50
 PC1 5 40
+[STATUS]
+PU1 CLOSED
 [COORDINATES]
 R1 0 0
 J1 10 0
@@ -136,6 +138,8 @@ J1 10 0
   expect(result.document.components.find(c=>c.id==='J1')?.properties.demandPatternId).toBe('PAT1');
   expect(result.document.components.find(c=>c.id==='PU1')?.properties.pumpSpeedPattern).toBe('PAT1');
   expect(result.document.components.find(c=>c.id==='PU1')?.properties.pumpSpeedMultiplier).toBeCloseTo(1.1);
+  expect(result.document.components.find(c=>c.id==='PU1')?.properties.initialStatus).toBe('CLOSED');
+  expect(exportWaterNetworkToEpanet(result.document).input).toContain('PU1 CLOSED');
   expect(exportWaterNetworkToEpanet(result.document).input).toContain('SPEED 1.1 PATTERN PAT1');
  });
  it('round-trips pipe vertices, additional demands, emitters, solver options and simulation times',()=>{
