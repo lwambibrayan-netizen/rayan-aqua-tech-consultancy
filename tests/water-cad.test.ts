@@ -36,6 +36,20 @@ describe('water engineering CAD domain model', () => {
     expect(issues.some(x => x.code === 'PIPE_BORE_REQUIRED' && x.severity === 'error')).toBe(true);
     expect(issues.some(x => x.code === 'TANK_CAPACITY')).toBe(true);
   });
+  it('validates persisted engineering symbol connection ports', () => {
+    const valve = createWaterComponent('valve', 'V-1', 0, 0);
+    valve.customPorts = [
+      { id: 'inlet', point: { x: -0.1, y: 0 }, role: 'inlet', diameterMm: 110 },
+      { id: 'outlet', point: { x: 0.1, y: 0 }, role: 'outlet', diameterMm: 110 },
+    ];
+    const valid: WaterCadDocument = { schemaVersion: 1, units: 'm', verticalDatum: 'test', components: [valve] };
+    expect(validateWaterCad(valid)).toEqual([]);
+    valve.customPorts[1] = { ...valve.customPorts[1], id: 'inlet', point: { x: Number.NaN, y: 0 }, diameterMm: 0 };
+    const issues = validateWaterCad(valid);
+    expect(issues.some(issue => issue.code === 'INVALID_CUSTOM_PORT_ID')).toBe(true);
+    expect(issues.some(issue => issue.code === 'INVALID_CUSTOM_PORT_GEOMETRY')).toBe(true);
+    expect(issues.some(issue => issue.code === 'INVALID_CUSTOM_PORT_DIAMETER')).toBe(true);
+  });
   it('calculates 3D pipe length and connects only valid network nodes', () => {
     const pipe = createWaterComponent('pipe', 'P-1', 0, 0);
     pipe.geometry = [{ x: 0, y: 0, z: 0 }, { x: 3, y: 4, z: 12 }];
