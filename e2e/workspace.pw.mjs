@@ -112,6 +112,11 @@ test('PyQGIS service exposes a healthy processor and passing self-test', async (
   const result = await selftest.json();
   expect(result.status).toBe('passed');
   expect(result.profile_valid_samples).toBeGreaterThanOrEqual(2);
+  expect(result.cad_grid_width).toBeGreaterThan(1);
+  expect(result.cad_grid_height).toBeGreaterThan(1);
+  expect(result.cad_grid_valid_samples).toBeGreaterThanOrEqual(4);
+  expect(result.cad_grid_crs).toMatch(/^EPSG:\\d+$/);
+  expect(result.cad_grid_vertical_datum).toContain('Copernicus DEM');
   expect(result.contour_features).toBeGreaterThan(0);
 });
 
@@ -125,4 +130,12 @@ test('engineer opens the GIS workspace and sees terrain-to-CAD tools', async ({ 
   await expect(page.getByRole('button', { name: /Pipeline ground profile/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Check PyQGIS \/ DEM coverage/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Send DEM surface to CAD \/ 3D/ })).toBeVisible();
+});
+
+test('PyQGIS DEM-to-CAD endpoint is registered and requires authentication', async ({ request }) => {
+  const base = 'https://rayanaqua-pyqgis-processing-api-production.up.railway.app';
+  const response = await request.post(base + '/terrain/grid', {
+    data: { userId: 'e2e-user', projectId: 'e2e-project', bbox: { west: 38.5, south: -3.4, east: 38.51, north: -3.39 }, maxDimension: 32 },
+  });
+  expect(response.status()).toBe(401);
 });
