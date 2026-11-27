@@ -649,7 +649,6 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         setShapes(current => [...current, ...imported.shapes]);
         setDrafting(current => {
           const known = new Set(current.layers.map(item => item.name.toUpperCase()));
-          const importedByName = new Map(imported.layers.map(item => [item.name.toUpperCase(), item]));
           const added = imported.layers.filter(item => !known.has(item.name.toUpperCase()));
           return { ...current, layers: [...current.layers, ...added], annotations: [...current.annotations, ...imported.annotations] };
         });
