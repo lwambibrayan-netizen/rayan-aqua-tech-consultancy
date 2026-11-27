@@ -117,7 +117,7 @@ test('engineer opens a project, verifies precision drafting, saves and opens 3D'
   await arcMethod.selectOption('center-start-angle');
   await expect(ribbonContent.getByLabel('Sweep °')).toHaveValue('90');
   await ribbon.getByRole('tab', { name: 'Modify' }).click();
-  await expect(ribbonContent.getByRole('button', { name: 'Trim' })).toHaveAttribute('title', /Shift-select a straight cutting edge/);
+  await expect(ribbonContent.getByRole('button', { name: 'Trim' })).toHaveAttribute('title', /cutting edge first, then Shift-select the target/);
   await ribbon.getByRole('tab', { name: 'Home' }).click();
   await expect(drawingArea.getByRole('button', { name: /Line/ })).toHaveCount(0);
   await ribbon.getByRole('tab', { name: 'Drafting' }).click();
