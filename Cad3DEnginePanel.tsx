@@ -315,6 +315,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [history, setHistory] = useState(() => createHistory<Shape[]>(initialData?.shapes || []));
   const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
   const [selectedWaterId, setSelectedWaterId] = useState('');
+  const [activeWaterTool, setActiveWaterTool] = useState<WaterComponentKind | null>(null);
+  const [waterDraft, setWaterDraft] = useState<Point2D[]>([]);
   const shapes = history.present;
   function setShapes(next: Shape[] | ((current: Shape[]) => Shape[])) {
     setHistory(current => pushHistory(current, typeof next === 'function' ? next(current.present) : next));
@@ -362,6 +364,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setHistory(createHistory<Shape[]>(initialData?.shapes || []));
     setWaterCad(initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
     setSelectedWaterId('');
+    setActiveWaterTool(null);
+    setWaterDraft([]);
     setCalibratedMetresPerUnit(Number.isFinite(initialData?.calibratedMetresPerUnit) && initialData.calibratedMetresPerUnit > 0 ? initialData.calibratedMetresPerUnit : null);
     setViewBox(initialData?.viewport && [initialData.viewport.x, initialData.viewport.y, initialData.viewport.width, initialData.viewport.height].every(Number.isFinite)
       ? initialData.viewport : { x: 0, y: 0, width: WIDTH, height: HEIGHT });
@@ -424,6 +428,16 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   function handleCanvasClick(event: React.MouseEvent<SVGSVGElement>) {
     if (suppressSelectionClick.current) { suppressSelectionClick.current=false; return; }
     if (panRef.current || panMode) return;
+    if (activeWaterTool) {
+      const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
+      const resolved = resolveDraftPoint(event.currentTarget, raw);
+      if (activeWaterTool === 'pipe') {
+        if (!waterDraft.length) { setWaterDraft([resolved.point]); setMessage('Pipe start snapped/set. Click the pipe end point.'); return; }
+        if (Math.hypot(resolved.point.x-waterDraft[0].x,resolved.point.y-waterDraft[0].y) < 0.01) { setMessage('Pipe length must be greater than zero. Choose a different end point.'); return; }
+        commitWaterPlacement('pipe',[waterDraft[0],resolved.point]); return;
+      }
+      commitWaterPlacement(activeWaterTool,[resolved.point]); return;
+    }
     if (mode === 'select') {
       setLastSelectionWindow(null);
       const target = (event.target as SVGElement).closest('[data-shape-id]') as SVGElement | null;
@@ -576,13 +590,27 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
 
   const selectedWaterComponent = waterCad.components.find(component => component.id === selectedWaterId) || null;
   function addWaterComponent(kind: WaterComponentKind) {
+    if (!calibratedMetresPerUnit || calibratedMetresPerUnit <= 0) {
+      setMessage('Calibrate the CAD drawing from a verified known length before placing water-engineering objects in metre coordinates.');
+      return;
+    }
+    setActiveWaterTool(kind);
+    setWaterDraft([]);
+    setMode('select');
+    setMessage(kind === 'pipe' ? 'Click the pipe start and end points. Object snapping is active.' : 'Click the placement point for the ' + kind + '. Object snapping is active.');
+  }
+  function commitWaterPlacement(kind: WaterComponentKind, points: Point2D[]) {
     const serial = waterCad.components.filter(item => item.kind === kind).length + 1;
     const prefix: Record<WaterComponentKind,string> = { pipe:'P', bend:'B', tee:'T', reducer:'RED', valve:'V', pump:'PU', tank:'TK', chamber:'CH', hydrant:'HYD', meter:'M', 'air-valve':'AV', washout:'WO', reservoir:'RES', source:'SRC', junction:'J' };
     const id = prefix[kind] + '-' + String(serial).padStart(3,'0');
-    const component = createWaterComponent(kind, id, 0, 0);
+    const metres = points.map(point => ({ x: point.x * calibratedMetresPerUnit!, y: point.y * calibratedMetresPerUnit! }));
+    const component = createWaterComponent(kind, id, metres[0].x, metres[0].y);
+    component.geometry = kind === 'pipe' ? metres : [{ ...metres[0] }];
     setWaterCad(current => ({ ...current, components: [...current.components, component] }));
     setSelectedWaterId(id);
-    setMessage(kind.toUpperCase() + ' component added to the water engineering schedule. Set its surveyed coordinates, levels and properties before design use.');
+    setActiveWaterTool(null);
+    setWaterDraft([]);
+    setMessage(id + ' placed using calibrated drawing scale. Confirm surveyed elevations and engineering properties.');
   }
   function updateWaterProperties(patch: Partial<WaterCadComponent['properties']>) {
     if (!selectedWaterId) return;
@@ -756,6 +784,19 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   })() : '';
   const layerNames = Array.from(new Set(shapes.map(shape => shape.layer || '0'))).sort();
   const visibleShapes = shapes.filter(shape => !hiddenLayers.includes(shape.layer || '0'));
+  const renderedWaterComponents = waterCad.components.map(component => {
+    const pts = component.geometry.map(point => ({ x: point.x / (calibratedMetresPerUnit || 1), y: point.y / (calibratedMetresPerUnit || 1) }));
+    const p = pts[0] || {x:0,y:0};
+    const selected = selectedWaterId === component.id;
+    const stroke = selected ? '#d04d3f' : '#087e83';
+    const sw = Math.max(viewBox.width / 700, 1.2);
+    if (component.kind === 'pipe' && pts.length > 1) return <g key={component.id} data-water-id={component.id}><polyline points={pts.map(q=>q.x+','+q.y).join(' ')} fill="none" stroke={stroke} strokeWidth={sw*3} /><text x={p.x+5} y={p.y-6} fontSize={Math.max(viewBox.width/90,8)} fill={stroke}>{component.properties.tag}</text></g>;
+    if (component.kind === 'tank' || component.kind === 'reservoir') return <g key={component.id} data-water-id={component.id}><circle cx={p.x} cy={p.y} r={12*sw} fill="#e4f4f2" stroke={stroke} strokeWidth={sw*2}/><text x={p.x+14*sw} y={p.y} fontSize={Math.max(viewBox.width/90,8)} fill={stroke}>{component.properties.tag}</text></g>;
+    if (component.kind === 'pump') return <g key={component.id} data-water-id={component.id}><path d={`M ${p.x-10*sw} ${p.y-9*sw} L ${p.x+10*sw} ${p.y} L ${p.x-10*sw} ${p.y+9*sw} Z`} fill="#e4f4f2" stroke={stroke} strokeWidth={sw*2}/><text x={p.x+14*sw} y={p.y} fontSize={Math.max(viewBox.width/90,8)} fill={stroke}>{component.properties.tag}</text></g>;
+    const symbol = component.kind === 'valve' ? <path d={`M ${p.x-9*sw} ${p.y-8*sw} L ${p.x} ${p.y} L ${p.x-9*sw} ${p.y+8*sw} M ${p.x+9*sw} ${p.y-8*sw} L ${p.x} ${p.y} L ${p.x+9*sw} ${p.y+8*sw}`} /> : component.kind === 'tee' ? <path d={`M ${p.x} ${p.y-10*sw} V ${p.y+10*sw} M ${p.x-10*sw} ${p.y} H ${p.x+10*sw}`} /> : component.kind === 'bend' ? <path d={`M ${p.x-10*sw} ${p.y} Q ${p.x-10*sw} ${p.y-10*sw} ${p.x} ${p.y-10*sw} H ${p.x+10*sw}`} /> : <rect x={p.x-8*sw} y={p.y-8*sw} width={16*sw} height={16*sw} />;
+    return <g key={component.id} data-water-id={component.id} fill="none" stroke={stroke} strokeWidth={sw*2}>{symbol}<text x={p.x+13*sw} y={p.y} fontSize={Math.max(viewBox.width/90,8)} fill={stroke} stroke="none">{component.properties.tag}</text></g>;
+  });
+
   const renderedShapes = visibleShapes.map(shape => {
     const color = shape.layer === 'WATER_NETWORK' ? '#167b78' : '#c08c3c';
     if (shape.type === 'circle') {
@@ -805,9 +846,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       <div className="panel" style={{ padding: 14 }}>
         <span className="eyebrow muted">WATER ENGINEERING OBJECTS</span>
         <h3 style={{ margin: '5px 0' }}>Network component library</h3>
-        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Add editable engineering records for pipes, fittings, equipment and structures. Coordinates and elevations must be verified against the project survey datum.</p>
+        <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>Choose Place, then click in the drawing. Pipes need two snapped clicks; fittings and equipment need one. A verified CAD scale is required so plan coordinates are stored in metres. Confirm elevations against the project survey datum.</p>
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-          {(['pipe','bend','tee','reducer','valve','pump','tank','chamber','hydrant','meter','air-valve','washout','reservoir','source','junction'] as WaterComponentKind[]).map(kind => <button key={kind} className="secondary-button" onClick={() => addWaterComponent(kind)}>+ {kind}</button>)}
+          {(['pipe','bend','tee','reducer','valve','pump','tank','chamber','hydrant','meter','air-valve','washout','reservoir','source','junction'] as WaterComponentKind[]).map(kind => <button key={kind} className={activeWaterTool===kind?'primary-button':'secondary-button'} onClick={() => addWaterComponent(kind)}>Place {kind}</button>)}
+          {activeWaterTool && <button className="secondary-button" onClick={()=>{setActiveWaterTool(null);setWaterDraft([]);setMessage('Water component placement cancelled.');}}>Cancel placement</button>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) minmax(180px, 2fr)', gap: 10, marginTop: 12 }}>
           <label style={{ fontSize: 12 }}>Component register
@@ -971,6 +1013,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <defs><pattern id="cad-grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse"><path d={`M ${gridSize} 0 L 0 0 0 ${gridSize}`} fill="none" stroke="#e5ece9" strokeWidth={Math.max(viewBox.width / 1000, 0.2)} /></pattern></defs>
             <rect x={viewBox.x} y={viewBox.y} width={viewBox.width} height={viewBox.height} fill="url(#cad-grid)" pointerEvents="none" />
             {renderedShapes}
+            {renderedWaterComponents}
+            {waterDraft.length>0 && <polyline points={waterDraft.map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#d59b42" strokeWidth="3" strokeDasharray="6 4" pointerEvents="none"/>}
             {selectionBox && <rect x={Math.min(selectionBox.start.x,selectionBox.end.x)} y={Math.min(selectionBox.start.y,selectionBox.end.y)} width={Math.abs(selectionBox.end.x-selectionBox.start.x)} height={Math.abs(selectionBox.end.y-selectionBox.start.y)} fill={selectionBox.end.x<selectionBox.start.x?'rgba(30,130,190,.12)':'rgba(20,150,110,.12)'} stroke={selectionBox.end.x<selectionBox.start.x?'#2684c7':'#15966e'} strokeDasharray="6 4" pointerEvents="none" />}
             {previewShapes && previewShapes.map(shape => shape.type==='circle' ? <circle key={'preview-'+shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius||12} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/> : shape.type==='polyline' ? <path key={'preview-'+shape.id} d={polylineSvgPath(shape)} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/> : <polyline key={'preview-'+shape.id} points={(shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]]:shape.points).map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>)}
             {draft.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="5" fill="#d59b42" />)}
