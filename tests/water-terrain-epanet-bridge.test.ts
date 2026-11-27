@@ -58,6 +58,7 @@ J2 180 0
   expect(result.document.components.find(c=>c.id==='J1')?.properties.hydraulicElevationM).toBe(100);
   expect(p.properties.hydraulicLengthM).toBe(125);
   expect(p.properties.internalDiameterMm).toBe(150);
+  expect(p.properties.externalDiameterMm).toBeUndefined();
   expect(p.geometry[1].x).toBe(100);
   expect(result.warnings.some(w=>w.includes('no guaranteed CRS'))).toBe(true);
  });
