@@ -93,9 +93,9 @@ def terrain_grid(path,max_dimension=64):
  if gt[1]<=0 or gt[5]>=0:raise RuntimeError("Terrain grid requires a north-up projected DEM with positive X and negative Y pixel spacing.")
  elevations=[None if not math.isfinite(float(v)) else round(float(v),3) for v in values.reshape(-1)]
  if sum(v is not None for v in elevations)<4:raise RuntimeError("Terrain DEM has fewer than four valid elevation samples.")
- grid={"width":out_width,"height":out_height,"originX":round(float(gt[0]+gt[1]*0.5),3),"originY":round(float(gt[3]+gt[5]*(out_height-0.5)),3),"cellSizeX":round(float(gt[1]),3),"cellSizeY":round(float(-gt[5]),3),"elevationsM":elevations,"crs":"EPSG:"+str(sampled.GetProjectionRef() and osr.SpatialReference(wkt=sampled.GetProjection()).GetAttrValue("AUTHORITY",1) or ""),"verticalDatum":"EGM2008 (Copernicus DEM)"}
+ grid={"width":out_width,"height":out_height,"originX":round(float(gt[0]+gt[1]*0.5),3),"originY":round(float(gt[3]+gt[5]*(out_height-0.5)),3),"cellSizeX":round(float(gt[1]),3),"cellSizeY":round(float(-gt[5]),3),"elevationsM":elevations,"crs":"UNASSIGNED","verticalDatum":"EGM2008 (Copernicus DEM)"}
  sampled=None; source=None
- if grid["crs"]=="EPSG:":raise RuntimeError("Terrain DEM projection authority could not be identified.")
+ if grid["crs"]=="UNASSIGNED":raise RuntimeError("Terrain DEM CRS must be assigned by the processing operation.")
  return grid
 def profile(ds,coords,spacing):
  if not isinstance(coords,list) or len(coords)<2 or len(coords)>20000:raise ValueError("Each route needs at least two coordinate vertices.")
