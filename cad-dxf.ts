@@ -188,6 +188,8 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit?:number, s
   const metresByInsunits:Record<number,number>={1:0.0254,2:0.3048,3:1609.344,4:0.001,5:0.01,6:1,7:1000,8:1e-6,9:0.0000254,10:0.9144,11:1e-10,12:1e-9,13:1e-6,14:0.1,15:10,16:100,17:1e9};
   const detectedMetresPerDrawingUnit=metresPerDrawingUnit??metresByInsunits[declaredUnits]??null;
   const effectiveMetresPerDrawingUnit=detectedMetresPerDrawingUnit??1;
+  const fileMetresPerUnit=metresByInsunits[declaredUnits];
+  if(metresPerDrawingUnit!==undefined&&fileMetresPerUnit&&Math.abs(metresPerDrawingUnit-fileMetresPerUnit)>Math.max(1e-12,fileMetresPerUnit*1e-6))warnings.push('DXF $INSUNITS metadata conflicts with the active project calibration; the project calibration was used for imported annotations.');
   if(detectedMetresPerDrawingUnit===null)warnings.push('DXF does not declare a recognized $INSUNITS value; annotations are interpreted using a temporary 1 metre per drawing unit assumption. Calibrate the drawing before engineering measurements.');
   const pairs=expandBlockInserts(normalizeLegacyPolylines(rawPairs, warnings), warnings);
   const importedLayers:DraftLayer[]=[];
