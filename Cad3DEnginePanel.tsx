@@ -10,6 +10,8 @@ import { createDraftingDocument, makeAlignedDimension, makeLinearDimension, meas
 import { exportDraftingDxf, importDraftingDxf, type DxfShape } from './cad-dxf';
 import { DIMENSION_STYLES, formatStyledDimension, validateDimensionStyle, appendDrawingRevision, type DimensionStyle } from './cad-dimension-standards';
 import { mergeLayerTemplate, validatePlotConfiguration, type LayerStandard } from './cad-layer-standards';
+import { auditEngineeringDrawing, type EngineeringDrawingAudit } from './cad-engineering-verification';
+import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringBlock, type BlockInsert } from './cad-object-library';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
@@ -330,6 +332,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [layerTemplate, setLayerTemplate] = useState<LayerStandard>('WATER_UTILITY');
   const [revisionDraft, setRevisionDraft] = useState({ revision: '', date: new Date().toISOString().slice(0,10), description: '', drawnBy: '', checkedBy: '', approvedBy: '', status: 'FOR REVIEW' as const });
   const [newLayerName, setNewLayerName] = useState('');
+  const [libraryBlockName, setLibraryBlockName] = useState(ENGINEERING_BLOCK_LIBRARY[0].name);
+  const [engineeringAudit, setEngineeringAudit] = useState<EngineeringDrawingAudit | null>(null);
   const [selectedWaterId, setSelectedWaterId] = useState('');
   const [activeWaterTool, setActiveWaterTool] = useState<WaterComponentKind | null>(null);
   const [waterDraft, setWaterDraft] = useState<Point2D[]>([]);
