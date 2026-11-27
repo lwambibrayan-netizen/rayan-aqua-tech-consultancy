@@ -72,3 +72,21 @@ export function circleFromCenterDiameter(center: CadPoint, diameterPoint: CadPoi
   if (!validPoint(center) || !validPoint(diameterPoint) || radius <= 1e-9) throw new Error('Circle diameter must be greater than zero.');
   return {id,type:'circle',points:[{...center}],radius,layer};
 }
+
+export function ellipseFromAxisEndpoints(firstAxisStart: CadPoint, firstAxisEnd: CadPoint, minorAxisPoint: CadPoint, id: string, layer: string, segments=64): CadPolyline {
+  if (![firstAxisStart,firstAxisEnd,minorAxisPoint].every(validPoint) || !Number.isInteger(segments) || segments < 16 || segments > 512) {
+    throw new Error('Ellipse axis points or segment count are invalid.');
+  }
+  const center={x:(firstAxisStart.x+firstAxisEnd.x)/2,y:(firstAxisStart.y+firstAxisEnd.y)/2};
+  const dx=firstAxisEnd.x-firstAxisStart.x,dy=firstAxisEnd.y-firstAxisStart.y,majorRadius=Math.hypot(dx,dy)/2;
+  if (majorRadius <= 1e-9) throw new Error('Ellipse major axis must be greater than zero.');
+  const ux=dx/(2*majorRadius),uy=dy/(2*majorRadius),vx=-uy,vy=ux;
+  const minorRadius=Math.abs((minorAxisPoint.x-center.x)*vx+(minorAxisPoint.y-center.y)*vy);
+  if (minorRadius <= 1e-9 || minorRadius > majorRadius+1e-9) throw new Error('Ellipse minor radius must be greater than zero and no larger than its major radius.');
+  const points=Array.from({length:segments+1},(_,i)=>{
+    const angle=2*Math.PI*i/segments;
+    return {x:center.x+majorRadius*ux*Math.cos(angle)+minorRadius*vx*Math.sin(angle),y:center.y+majorRadius*uy*Math.cos(angle)+minorRadius*vy*Math.sin(angle)};
+  });
+  points[points.length-1]={...points[0]};
+  return {id,type:'polyline',points,bulges:Array(segments+1).fill(0),layer};
+}
