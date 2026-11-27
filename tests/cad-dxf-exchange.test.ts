@@ -101,6 +101,21 @@ describe('structured DXF exchange', () => {
     expect(imported.shapes[1].points[0]).toEqual(imported.shapes[1].points[4]);
   });
 
+  it('exports referenced DXF linetype table records for every supported layer style', () => {
+    const doc = createDraftingDocument();
+    doc.layers = doc.layers.map((layer,index) => ({ ...layer, lineType: (['CONTINUOUS','DASHED','CENTER','HIDDEN','PHANTOM'] as const)[index % 5] }));
+    const dxf = exportDraftingDxf([], doc, 1);
+    expect(dxf).toContain('2\\nLTYPE');
+    for (const name of ['CONTINUOUS','DASHED','CENTER','HIDDEN','PHANTOM']) {
+      expect(dxf).toContain('2\\n' + name);
+    }
+    expect(dxf).toContain('2\\nLAYER');
+    expect(dxf).toContain('6\\nDASHED');
+    expect(dxf).toContain('6\\nCENTER');
+    expect(dxf).toContain('6\\nHIDDEN');
+    expect(dxf).toContain('6\\nPHANTOM');
+  });
+
   it('exports paper-scaled dimension text and arrow linework from the selected dimension style', () => {
     const doc = createDraftingDocument();
     doc.dimensionStyle = { name:'TEST', textHeightMm:3, arrowSizeMm:2, extensionOffsetMm:1, extensionBeyondMm:1.5, textGapMm:1, precision:2, decimalSeparator:'.', zeroSuppress:'trailing', unit:'m', prefix:'', suffix:'', tolerance:{mode:'none',upper:0,lower:0} };
