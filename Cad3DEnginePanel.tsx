@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
 import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
+import { createDraftingDocument, makeLinearDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
@@ -315,6 +316,13 @@ function findSnap(svg: SVGSVGElement, cursor: Point2D, shapes: Shape[], enabled:
 export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures = [], onSave }: Props) {
   const [history, setHistory] = useState(() => createHistory<Shape[]>(initialData?.shapes || []));
   const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
+  const [drafting, setDrafting] = useState<DraftingDocument>(() => createDraftingDocument(initialData?.drafting));
+  const [draftTool, setDraftTool] = useState<'none' | 'dimension' | 'text' | 'leader'>('none');
+  const [annotationDraft, setAnnotationDraft] = useState<Point2D[]>([]);
+  const [annotationText, setAnnotationText] = useState('');
+  const [dimensionOffset, setDimensionOffset] = useState(2);
+  const [dimensionPrecision, setDimensionPrecision] = useState(3);
+  const [newLayerName, setNewLayerName] = useState('');
   const [selectedWaterId, setSelectedWaterId] = useState('');
   const [activeWaterTool, setActiveWaterTool] = useState<WaterComponentKind | null>(null);
   const [waterDraft, setWaterDraft] = useState<Point2D[]>([]);
@@ -366,6 +374,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   useEffect(() => {
     setHistory(createHistory<Shape[]>(initialData?.shapes || []));
     setWaterCad(initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
+    setDrafting(createDraftingDocument(initialData?.drafting));
+    setDraftTool('none');
+    setAnnotationDraft([]);
     setSelectedWaterId('');
     setActiveWaterTool(null);
     setWaterDraft([]);
@@ -431,6 +442,31 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   function handleCanvasClick(event: React.MouseEvent<SVGSVGElement>) {
     if (suppressSelectionClick.current) { suppressSelectionClick.current=false; return; }
     if (panRef.current || panMode) return;
+    if (draftTool !== 'none') {
+      const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
+      const point = resolveDraftPoint(event.currentTarget, raw).point;
+      const metres = { x: point.x * (calibratedMetresPerUnit || 1), y: point.y * (calibratedMetresPerUnit || 1) };
+      if (draftTool === 'text') {
+        const item: DraftAnnotation = { id: makeId(), kind: 'text', layer: 'TEXT', at: metres, text: annotationText || 'Note', heightMm: 2.5, rotationDeg: 0 };
+        setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
+        setDraftTool('none'); setAnnotationDraft([]);
+        setMessage('Text annotation placed.'); return;
+      }
+      const next = [...annotationDraft, metres];
+      if (next.length < 2) { setAnnotationDraft(next); setMessage('First point set. Choose the second point.'); return; }
+      if (draftTool === 'dimension') {
+        try {
+          const item = makeLinearDimension(makeId(), next[0], next[1], dimensionOffset * (calibratedMetresPerUnit || 1), 'DIMENSIONS', dimensionPrecision);
+          setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
+          setMessage('Aligned dimension placed.'); 
+        } catch (error) { setMessage(error instanceof Error ? error.message : 'Dimension could not be placed.'); }
+      } else {
+        const item: DraftAnnotation = { id: makeId(), kind: 'leader', layer: 'ANNOTATION', points: next, text: annotationText || 'Note', textHeightMm: 2.5 };
+        setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
+        setMessage('Leader annotation placed.');
+      }
+      setDraftTool('none'); setAnnotationDraft([]); return;
+    }
     if (activeWaterTool) {
       const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
       const resolved = resolveDraftPoint(event.currentTarget, raw);
@@ -689,6 +725,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       await onSave({
         shapes,
         waterCad,
+        drafting,
         units,
         schemaVersion: 1,
         coordinateSystem: calibratedMetresPerUnit ? 'calibrated-local-grid' : 'legacy-unscaled-drawing-units',
@@ -697,7 +734,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         format: 'RayanAqua CAD v3',
         updatedAt: new Date().toISOString(),
       });
-      setMessage('Drawing saved to this project. It will be available when you sign in again.');
+      setMessage('Drawing, water network and drafting annotations saved to this project.');
     } catch (error) {
       setMessage(error instanceof Error ? 'Save failed: ' + error.message : 'Drawing could not be saved. Please retry.');
     } finally {
@@ -731,6 +768,38 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const rows = buildPreliminaryBoq(waterCad);
     const csv = ['Code,Description,Unit,Quantity,Material,Nominal diameter (mm)', ...rows.map(row => [row.code, '"' + row.description.replace(/"/g, '""') + '"', row.unit, row.quantity.toFixed(3), row.material || '', row.nominalDiameterMm || ''].join(','))].join('\n');
     downloadWaterFile('rayanaqua-preliminary-boq.csv', csv, 'text/csv');
+  }
+
+  function addDraftLayer() {
+    const name = newLayerName.trim().toUpperCase().replace(/\\s+/g, '_');
+    if (!name) return;
+    if (drafting.layers.some(item => item.name.toUpperCase() === name)) { setMessage('That layer already exists.'); return; }
+    setDrafting(current => ({ ...current, layers: [...current.layers, { name, color: '#555555', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true }] }));
+    setNewLayerName('');
+  }
+  function validateDrafting() {
+    const issues = validateDraftingDocument(drafting);
+    setMessage(issues.length ? 'Drafting check: ' + issues.join(' ') : 'Drafting standards check passed. Check the drawing visually before issue.');
+  }
+  function removeAnnotation(id: string) {
+    setDrafting(current => ({ ...current, annotations: current.annotations.filter(item => item.id !== id) }));
+  }
+  function exportSheetSvg() {
+    const { widthMm, heightMm } = sheetDimensionsMm(drafting.sheet);
+    const scale = Number(drafting.sheet.scale.split(':')[1]) || 100;
+    const modelWidth = widthMm * scale / 1000 / (calibratedMetresPerUnit || 1);
+    const modelHeight = heightMm * scale / 1000 / (calibratedMetresPerUnit || 1);
+    const visible = drafting.layers.filter(item => item.visible && item.plot);
+    const allowed = new Set(visible.map(item => item.name));
+    const drawing = shapes.filter(shape => allowed.has(shape.layer || '0')).map(shape => {
+      if (shape.type === 'line') return '<line x1="'+shape.points[0].x+'" y1="'+shape.points[0].y+'" x2="'+shape.points[1].x+'" y2="'+shape.points[1].y+'" stroke="'+(drafting.layers.find(x=>x.name===shape.layer)?.color||'#222')+'"/>';
+      if (shape.type === 'circle') return '<circle cx="'+shape.points[0].x+'" cy="'+shape.points[0].y+'" r="'+(shape.radius||1)+'" fill="none" stroke="'+(drafting.layers.find(x=>x.name===shape.layer)?.color||'#222')+'"/>';
+      const pts = shape.type === 'rect' ? [shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]] : shape.points;
+      return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="'+(drafting.layers.find(x=>x.name===shape.layer)?.color||'#222')+'"/>';
+    }).join('');
+    const title = [drafting.sheet.company,drafting.sheet.title,drafting.sheet.drawingNumber,'REV '+drafting.sheet.revision,drafting.sheet.status,drafting.sheet.designer,drafting.sheet.checker,drafting.sheet.date].filter(Boolean).join(' | ');
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+widthMm+'mm" height="'+heightMm+'mm" viewBox="0 0 '+modelWidth+' '+modelHeight+'"><rect x="0" y="0" width="'+modelWidth+'" height="'+modelHeight+'" fill="white" stroke="black" stroke-width="'+(modelWidth/500)+'"/><g transform="translate(0 '+modelHeight+') scale(1 -1)">'+drawing+'</g><text x="'+(modelWidth*.04)+'" y="'+(modelHeight*.96)+'" font-size="'+(modelHeight*.012)+'">'+title.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</text></svg>';
+    downloadWaterFile((drafting.sheet.drawingNumber||'drawing')+'.svg',svg,'image/svg+xml');
   }
 
   function downloadDxf() {
