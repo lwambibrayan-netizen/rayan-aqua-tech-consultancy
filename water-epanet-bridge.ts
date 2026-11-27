@@ -40,7 +40,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   bySection('JUNCTIONS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed junction at line '+r.line+'.');return;}addNode(r.values[0],'junction',headToM(num(r.values[1])),{flow:flowToM3h(num(r.values[2]))});});
   bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',headToM(num(r.values[1])),{head:headToM(num(r.values[1]))});});
   bySection('TANKS').forEach(r=>{if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}addNode(r.values[0],'tank',headToM(num(r.values[1])),{level:headToM(num(r.values[2])),diameter:usUnits?num(r.values[5])*0.3048:num(r.values[5])});
-  bySection('TANKS').forEach(r=>{const tank=nodes.get(safe(r.values[0]));if(tank){tank.properties.tankMinLevelM=headToM(num(r.values[3]));tank.properties.tankMaxLevelM=headToM(num(r.values[4]));tank.properties.tankMinVolumeM3=usUnits?num(r.values[6])*1233.48184:num(r.values[6]);}});});
+  bySection('TANKS').forEach(r=>{const tank=nodes.get(safe(r.values[0]));if(tank){tank.properties.tankMinLevelM=headToM(num(r.values[3]));tank.properties.tankMaxLevelM=headToM(num(r.values[4]));tank.properties.tankMinVolumeM3=usUnits?num(r.values[6])*0.0283168466:num(r.values[6]);}});});
   const components=[...nodes.values()];
   const addLink=(idRaw:string,kind:WaterComponentKind,fromRaw:string,toRaw:string,diameterMm:number,props:Partial<WaterCadComponent['properties']>={})=>{
     const from=nodes.get(safe(fromRaw)),to=nodes.get(safe(toRaw));
@@ -77,7 +77,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
       description:'Imported from EPANET pump link',
       epanetPumpCurveId:curveId,
       pumpCurvePoints:points,
-      pumpPowerKw:powerIndex>=0?num(r.values[powerIndex+1]):undefined,
+      pumpPowerKw:powerIndex>=0?num(r.values[powerIndex+1])*(usUnits?0.745699872:1):undefined,
       pumpSpeedMultiplier:speedIndex>=0?num(r.values[speedIndex+1],1):undefined,
       pumpSpeedPattern:patternIndex>=0?r.values[patternIndex+1]:undefined,
       pumpDutyFlowM3h:points?.length===1?points[0].flowM3h:undefined,
