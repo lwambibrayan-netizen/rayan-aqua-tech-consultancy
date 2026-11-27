@@ -158,7 +158,7 @@ export function segmentIntersection(
   const within = (p: Point2D, q: Point2D) =>
     x >= Math.min(p.x, q.x) - tolerance && x <= Math.max(p.x, q.x) + tolerance &&
     y >= Math.min(p.y, q.y) - tolerance && y <= Math.max(p.y, q.y) + tolerance;
-  return within(a, b) && within(c, d) ? { x, y } : null;
+  return within(a, b) && within(c, d) ? { x: x === 0 ? 0 : x, y: y === 0 ? 0 : y } : null;
 }
 
 
