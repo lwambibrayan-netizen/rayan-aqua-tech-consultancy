@@ -231,6 +231,7 @@ J1 100 0
   const merged=mergeEpanetRoundTrip(base,imported.document);
   const pipe=merged.components.find(c=>c.id==='P1')!;
   expect(merged.components.some(c=>c.id==='BEND-1')).toBe(true);
+  expect(merged.connections).toHaveLength(2);
   expect(pipe.properties.externalDiameterMm).toBe(110);
   expect(pipe.properties.internalDiameterMm).toBe(100);
   expect(pipe.geometry[1].invertLevelM).toBe(99);
