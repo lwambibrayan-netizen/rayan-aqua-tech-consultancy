@@ -1,6 +1,6 @@
-import type { DraftAnnotation, DraftingDocument } from './cad-drafting';
+import type { DraftAnnotation, DraftingDocument, DraftLayer } from './cad-drafting';
 export type DxfShape = { id: string; type: 'line'|'polyline'|'rect'|'circle'; points: {x:number;y:number}[]; radius?: number; bulges?: number[]; layer: string };
-export type DxfImportResult = { shapes: DxfShape[]; annotations: DraftAnnotation[]; layerNames: string[]; warnings: string[] };
+export type DxfImportResult = { shapes: DxfShape[]; annotations: DraftAnnotation[]; layerNames: string[]; layers: DraftLayer[]; warnings: string[] };
 type Pair = [string,string];
 const fmt = (n:number) => Number.isFinite(n) ? String(Number(n.toPrecision(12))) : '0';
 const entity = (kind:string, values:(string|number)[]) => ['0',kind,...values.map(String)];
@@ -138,7 +138,7 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
   const out:string[]=['0','SECTION','2','HEADER','9','$ACADVER','1','AC1015','9','$INSUNITS','70',String(insunits),'9','$MEASUREMENT','70','1','0','ENDSEC','0','SECTION','2','TABLES','0','TABLE','2','LTYPE','70',String(lineTypes.length)];
   for(const item of lineTypes) out.push('0','LTYPE','2',item.name,'70','0','3',item.description,'72','65','73',String(item.pattern.length),'40',fmt(item.pattern.reduce((sum,value)=>sum+Math.abs(value),0)),...item.pattern.flatMap(value=>['49',fmt(value),'74','0']));
   out.push('0','ENDTAB','0','TABLE','2','LAYER','70',String(exportLayers.length));
-  for(const layer of exportLayers) out.push('0','LAYER','2',layer.name,'70',layer.locked?'4':'0','62',layer.visible? '7':'-7','420',String(parseInt(layer.color.slice(1),16)),'6',layer.lineType,'370',String(Math.round(layer.lineWeightMm*100)));
+  for(const layer of exportLayers) out.push('0','LAYER','2',layer.name,'70',layer.locked?'4':'0','62',layer.visible? '7':'-7','420',String(parseInt(layer.color.slice(1),16)),'6',layer.lineType,'370',String(Math.round(layer.lineWeightMm*100)),'290',layer.plot?'1':'0');
   out.push('0','ENDTAB','0','ENDSEC','0','SECTION','2','ENTITIES');
   for(const shape of shapes){
     const layer=shape.layer||'0';
@@ -181,6 +181,26 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
   if(!Number.isFinite(scaleDenominator)||scaleDenominator<=0) throw new Error('Drawing scale denominator must be positive.');
   const warnings:string[]=[];
   const pairs=expandBlockInserts(normalizeLegacyPolylines(pairsOf(source), warnings), warnings);
+  const importedLayers:DraftLayer[]=[];
+  const indexedColors:Record<number,string>={1:'#ff0000',2:'#ffff00',3:'#00ff00',4:'#00ffff',5:'#0000ff',6:'#ff00ff',7:'#222222'};
+  const supportedLineTypes=new Set(['CONTINUOUS','DASHED','CENTER','HIDDEN','PHANTOM']);
+  for(let i=0;i<pairs.length;i++){
+    if(pairs[i][0]!=='0'||pairs[i][1]!=='LAYER')continue;
+    const values:Pair[]=[];
+    for(let j=i+1;j<pairs.length&&pairs[j][0]!=='0';j++)values.push(pairs[j]);
+    const get=(code:string)=>values.find(pair=>pair[0]===code)?.[1];
+    const name=get('2')||'0';
+    const trueColor=Number(get('420'));
+    const colorIndex=Math.abs(Number(get('62')||7));
+    const color=Number.isFinite(trueColor)&&get('420')!==undefined?'#'+Math.max(0,trueColor).toString(16).padStart(6,'0').slice(-6):(indexedColors[colorIndex]||'#666666');
+    const requestedLineType=(get('6')||'CONTINUOUS').toUpperCase();
+    const lineType=supportedLineTypes.has(requestedLineType)?requestedLineType as DraftLayer['lineType']:'CONTINUOUS';
+    if(lineType!==requestedLineType)warnings.push('Layer '+name+' uses unsupported DXF linetype '+requestedLineType+'; imported as CONTINUOUS.');
+    const rawWeight=Number(get('370')||18);
+    const lineWeightMm=rawWeight>=0?Math.min(2.11,Math.max(0.05,rawWeight/100)):0.18;
+    const flags=Number(get('70')||0);
+    importedLayers.push({name,color,lineType,lineWeightMm,visible:Number(get('62')||7)>=0,locked:(flags&4)!==0,plot:get('290')===undefined?true:get('290')!=='0'});
+  }
   const start=pairs.findIndex(p=>p[0]==='2'&&p[1]==='ENTITIES');
   if(start<0) throw new Error('DXF ENTITIES section not found.');
   const shapes:DxfShape[]=[],annotations:DraftAnnotation[]=[],layers=new Set<string>();
@@ -252,5 +272,7 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
   }
   flush();
   if(!shapes.length&&!annotations.length)throw new Error('No supported LINE, CIRCLE, ARC, LWPOLYLINE, TEXT or MTEXT entities found.');
-  return {shapes,annotations,layerNames:[...layers],warnings};
+  const importedByName=new Set(importedLayers.map(layer=>layer.name.toUpperCase()));
+  for(const name of layers)if(!importedByName.has(name.toUpperCase()))importedLayers.push({name,color:'#666666',lineType:'CONTINUOUS',lineWeightMm:0.18,visible:true,locked:false,plot:true});
+  return {shapes,annotations,layerNames:[...layers],layers:importedLayers,warnings};
 }
