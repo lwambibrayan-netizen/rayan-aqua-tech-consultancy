@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createWaterComponent } from '../water-cad';
 import {
-  buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq,
+  buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildWaterQuantities,
   buildReducerCentreline, buildTeeCentreline, connectWaterPorts,
   exportWaterNetworkToEpanet, getWaterPorts, type NetworkDocument,
 } from '../water-network-engineering';
@@ -77,6 +77,22 @@ describe('water network engineering', () => {
     expect(boq.find(q => q.code === 'PIPE')?.quantity).toBe(20);
     expect(boq.find(q => q.code === 'VALVE')?.quantity).toBe(1);
     expect(boq.find(q => q.code === 'EXCAVATION')?.quantity).toBeCloseTo(14.4);
+  });
+
+  it('keeps fitting schedule quantities separated by engineering type and size', () => {
+    const bend = createWaterComponent('bend', 'B-1', 0, 0);
+    bend.properties.bendAngleDeg = 45;
+    const tee = createWaterComponent('tee', 'T-1', 0, 0);
+    tee.properties.branchDiameterMm = 63;
+    const gate = createWaterComponent('valve', 'V-1', 0, 0);
+    const prv = createWaterComponent('valve', 'V-2', 0, 0);
+    prv.properties.valveType = 'PRV';
+    const document: WaterCadDocument = { schemaVersion: 1, units: 'm', verticalDatum: 'test', components: [bend, tee, gate, prv] };
+    const schedule = buildWaterQuantities(document);
+    expect(schedule.some(line => line.code.includes('45DEG'))).toBe(true);
+    expect(schedule.some(line => line.code.includes('BR63'))).toBe(true);
+    expect(schedule.some(line => line.code.includes('VALVE_GATE'))).toBe(true);
+    expect(schedule.some(line => line.code.includes('VALVE_PRV'))).toBe(true);
   });
 
   it('exports valid network primitives and reports missing or unsupported items', () => {
