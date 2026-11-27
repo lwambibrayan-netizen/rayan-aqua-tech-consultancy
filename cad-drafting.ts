@@ -84,10 +84,11 @@ export function findAssociativeAnchor(point: DraftPoint, entities: Array<{ id: s
   let best: { ref: DraftAnchorReference; distance: number } | undefined;
   for (const entity of entities) {
     if (!['line', 'polyline'].includes(entity.type)) continue;
-    entity.points.forEach((candidate, pointIndex) => {
+    for (let pointIndex = 0; pointIndex < entity.points.length; pointIndex++) {
+      const candidate = entity.points[pointIndex];
       const distance = Math.hypot(candidate.x * metresPerDrawingUnit - point.x, candidate.y * metresPerDrawingUnit - point.y);
       if (distance <= toleranceM && (!best || distance < best.distance)) best = { ref: { entityId: entity.id, pointIndex }, distance };
-    });
+    }
   }
   return best?.ref;
 }
