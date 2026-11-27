@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDraftingDocument } from '../cad-drafting';
 import { exportDraftingDxf, importDraftingDxf } from '../cad-dxf';
+import { getEngineeringBlock, instantiateEngineeringBlock } from '../cad-object-library';
 
 describe('structured DXF exchange', () => {
   it('writes drawing units, layer table, linework and annotations', () => {
@@ -11,6 +12,22 @@ describe('structured DXF exchange', () => {
     expect(dxf).toContain('WATER_NETWORK');
     expect(dxf).toContain('PIPE DN110');
     expect(dxf).toContain('LWPOLYLINE');
+  });
+  it('round-trips parametric water library symbols as editable DXF primitives and layers', () => {
+    const block = getEngineeringBlock('GATE_VALVE');
+    const primitives = instantiateEngineeringBlock({ blockName: block.name, at: { x: 5000, y: 7000 }, rotationDeg: 30, scaleX: 1, scaleY: 1, layer: 'WATER_VALVE', properties: { ...block.defaultProperties } });
+    const shapes = primitives.map((primitive, index) => {
+      if (primitive.kind === 'line') return { id: 'B' + index, type: 'line' as const, points: [primitive.a, primitive.b], layer: primitive.layer };
+      if (primitive.kind === 'circle') return { id: 'B' + index, type: 'circle' as const, points: [primitive.center], radius: primitive.radius, layer: primitive.layer };
+      return { id: 'B' + index, type: 'polyline' as const, points: primitive.points, layer: primitive.layer };
+    });
+    const dxf = exportDraftingDxf(shapes, createDraftingDocument(), 1);
+    const imported = importDraftingDxf(dxf, 1, 100);
+    expect(imported.shapes).toHaveLength(shapes.length);
+    expect(imported.layerNames).toContain('WATER_VALVE');
+    expect(imported.shapes.some(shape => shape.type === 'circle')).toBe(true);
+    expect(imported.shapes.some(shape => shape.type === 'line')).toBe(true);
+    expect(imported.shapes.some(shape => shape.type === 'polyline')).toBe(true);
   });
   it('imports line, arc, polyline and text entities with layer names', () => {
     const source = ['0','SECTION','2','ENTITIES',
