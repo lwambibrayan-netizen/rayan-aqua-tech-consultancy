@@ -185,7 +185,7 @@ describe('CAD editing geometry operations', () => {
     const extendedStart=extendPolylineSegment(quarterArc,extendStart,0,0);
     expect(extendedStart.points[0].x).toBeCloseTo(Math.sqrt(0.75),8);
     expect(extendedStart.points[0].y).toBeCloseTo(-0.5,8);
-    expect(extendedStart.bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/3),8);
+    expect(extendedStart.bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/6),8);
   });
 
   it('edits vertex and circle grips without mutating source geometry', () => {
