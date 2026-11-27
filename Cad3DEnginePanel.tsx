@@ -1618,7 +1618,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
 
       <div className="aquacad-ribbon">
         <div className="aquacad-ribbon-tabs" role="tablist" aria-label="AquaCAD ribbon">
-          {(['Home','Insert','Annotate','Water Network','3D Modeling','Analyze','View','Output','Manage'] as const).map(tab => <button key={tab} role="tab" aria-selected={ribbonTab===tab} className={ribbonTab===tab?'active':''} onClick={()=>setRibbonTab(tab)}>{tab}</button>)}
+          {(['Home','Modify','Insert','Annotate','Water Network','3D Modeling','Analyze','View','Output','Manage'] as const).map(tab => <button key={tab} role="tab" aria-selected={ribbonTab===tab} className={ribbonTab===tab?'active':''} onClick={()=>setRibbonTab(tab)}>{tab}</button>)}
         </div>
         <div className="aquacad-ribbon-content">
           <input ref={fileRef} type="file" accept=".dxf,.json" hidden onChange={event => importFile(event.target.files?.[0])} />
@@ -1647,6 +1647,46 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
                 <button onClick={()=>fileRef.current?.click()}><i>⇩</i><span>Open / Import</span></button>
                 <button onClick={downloadDxf}><i>DXF</i><span>Export DXF</span></button>
               </div></div>
+            </>}
+            {ribbonTab==='Modify' && <>
+              <div className="aquacad-ribbon-group"><strong>Transform</strong>
+                <div className="aquacad-tool-grid">
+                  <label>Distance <input type="number" step="any" value={commandDistance} onChange={e=>setCommandDistance(Number(e.target.value))} style={{width:76}}/></label>
+                  <label>Angle ° <input type="number" step="any" value={commandAngle} onChange={e=>setCommandAngle(Number(e.target.value))} style={{width:68}}/></label>
+                  <label>Scale × <input type="number" min="0.001" step="any" value={scaleFactor} onChange={e=>setScaleFactor(Number(e.target.value))} style={{width:68}}/></label>
+                  <button disabled={!selectedShapes.length} onClick={()=>{try{const pivot=selectedShapes[0].points[0];previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?moveEntities([x],{x:commandDistance,y:commandDistance})[0]:x),'MOVE');}catch(e){setMessage(e instanceof Error?e.message:'Move failed.')}}}><i>↔</i><span>Move</span></button>
+                  <button disabled={!selectedShapes.length} onClick={()=>{try{previewDrawing([...shapes,...copyEntities(selectedShapes,{x:commandDistance,y:commandDistance})],'COPY');}catch(e){setMessage(e instanceof Error?e.message:'Copy failed.')}}}><i>▣</i><span>Copy</span></button>
+                  <button disabled={!selectedShapes.length} onClick={()=>{try{const pivot=selectedShapes[0].points[0];previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?rotateEntities([x],pivot,commandAngle)[0]:x),'ROTATE');}catch(e){setMessage(e instanceof Error?e.message:'Rotate failed.')}}}><i>⟳</i><span>Rotate</span></button>
+                  <button disabled={!selectedShapes.length} onClick={()=>{try{const a=selectedShapes[0].points[0],b={x:a.x,y:a.y+1};previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?mirrorEntities([x],a,b)[0]:x),'MIRROR');}catch(e){setMessage(e instanceof Error?e.message:'Mirror failed.')}}}><i>⇋</i><span>Mirror</span></button>
+                  <button disabled={!selectedShapes.length||!Number.isFinite(scaleFactor)||scaleFactor<=0} onClick={()=>{try{const base=selectedShapes[0].points[0];const scaled=scaleEntities(selectedShapes,base,scaleFactor);const byId=new Map(scaled.map(item=>[item.id,item]));previewDrawing(shapes.map(x=>byId.get(x.id)||x),'SCALE');}catch(e){setMessage(e instanceof Error?e.message:'Scale failed.')}}}><i>⤢</i><span>Scale</span></button>
+                  <button disabled={!selectedShapes.length} onClick={()=>{try{previewDrawing([...shapes,...rectangularArray(selectedShapes,arrayRows,arrayColumns,arraySpacing,arraySpacing)],'ARRAY');}catch(e){setMessage(e instanceof Error?e.message:'Array failed.')}}}><i>▦</i><span>Rectangular Array</span></button>
+                  <label>Rows <input type="number" min="1" value={arrayRows} onChange={e=>setArrayRows(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
+                  <label>Columns <input type="number" min="1" value={arrayColumns} onChange={e=>setArrayColumns(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
+                </div>
+              </div>
+              <div className="aquacad-ribbon-group"><strong>Geometry Editing</strong>
+                <div className="aquacad-tool-grid">
+                  <label>Segment # <input type="number" min="0" value={segmentIndex} onChange={e=>setSegmentIndex(Math.max(0,Math.floor(Number(e.target.value)||0)))} style={{width:54}}/></label>
+                  <label>Endpoint <select value={commandEndpoint} onChange={e=>setCommandEndpoint(Number(e.target.value) as 0|1)}><option value={0}>Start</option><option value={1}>End</option></select></label>
+                  <label>Corner # <input type="number" min="1" value={cornerIndex} onChange={e=>setCornerIndex(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
+                  <button disabled={selectedShapes.length!==2||!selectedShapes.some(x=>x.id===selectedShapeId&&['line','polyline'].includes(x.type))||!selectedShapes.some(x=>x.id!==selectedShapeId&&x.type==='line')} onClick={()=>{try{const target=selectedShapes.find(item=>item.id===selectedShapeId)!;const cutter=selectedShapes.find(item=>item.id!==selectedShapeId)!;const pick=target.type==='polyline'?target.points[Math.min(segmentIndex+(commandEndpoint===0?0:1),target.points.length-1)]:target.points[commandEndpoint];previewDrawing(shapes.map(x=>x.id===selectedShapeId?(x.type==='line'?trimLine(x,cutter,pick):trimPolylineSegment(x,cutter,pick,segmentIndex)):x),'TRIM');}catch(e){setMessage(e instanceof Error?e.message:'Trim failed.')}}}><i>✂</i><span>Trim</span></button>
+                  <button disabled={selectedShapes.length!==2||!selectedShapes.some(x=>x.id===selectedShapeId&&['line','polyline'].includes(x.type))||!selectedShapes.some(x=>x.id!==selectedShapeId&&x.type==='line')} onClick={()=>{try{const target=selectedShapes.find(item=>item.id===selectedShapeId)!;const boundary=selectedShapes.find(item=>item.id!==selectedShapeId)!;previewDrawing(shapes.map(x=>x.id===selectedShapeId?(x.type==='line'?extendLine(x,boundary,commandEndpoint):extendPolylineSegment(x,boundary,commandEndpoint,segmentIndex)):x),'EXTEND');}catch(e){setMessage(e instanceof Error?e.message:'Extend failed.')}}}><i>↗</i><span>Extend</span></button>
+                  <button disabled={selectedShapes.length!==1||selectedShapes[0].type!=='polyline'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapes[0].id?chamferPolylineCorner(x,cornerIndex,commandDistance):x),'CHAMFER');}catch(e){setMessage(e instanceof Error?e.message:'Chamfer failed.')}}}><i>⌜</i><span>Chamfer</span></button>
+                  <button disabled={selectedShapes.length!==1||selectedShapes[0].type!=='polyline'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapes[0].id?filletPolylineCorner(x,cornerIndex,commandDistance):x),'FILLET');}catch(e){setMessage(e instanceof Error?e.message:'Fillet failed.')}}}><i>⌒</i><span>Fillet</span></button>
+                  <button disabled={selectedShapes.length!==1||!['line','polyline'].includes(selectedShapes[0].type)} onClick={()=>{try{const entity=selectedShapes[0];previewDrawing([...shapes,entity.type==='line'?offsetLine(entity,commandDistance,offsetSide):offsetPolyline(entity,commandDistance,offsetSide)],'OFFSET');}catch(e){setMessage(e instanceof Error?e.message:'Offset failed.')}}}><i>⇉</i><span>Offset</span></button>
+                  <button onClick={()=>setOffsetSide(value=>value===1?-1:1)}><i>⇄</i><span>Offset: {offsetSide===1?'Left':'Right'}</span></button>
+                  <button disabled={!selectedShapes.length||!lastSelectionWindow} onClick={()=>{try{previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?stretchEntities([x],lastSelectionWindow!,{x:commandDistance,y:0})[0]:x),'STRETCH');}catch(e){setMessage(e instanceof Error?e.message:'Stretch failed.')}}}><i>↔</i><span>Stretch</span></button>
+                </div>
+              </div>
+              <div className="aquacad-ribbon-group"><strong>Grip & Preview</strong>
+                <div className="aquacad-tool-grid">
+                  <label>Grip index <input type="number" min="0" step="1" value={gripIndex} onChange={e=>setGripIndex(Math.max(0,Math.floor(Number(e.target.value)||0)))} style={{width:52}}/></label>
+                  <button disabled={selectedShapes.length!==1||!cursorPoint||!Number.isFinite(cursorPoint.x)||!Number.isFinite(cursorPoint.y)} onClick={()=>{try{const target=selectedShapes[0];previewDrawing(shapes.map(x=>x.id===target.id?editEntityGrip(x,gripIndex,cursorPoint!):x),'GRIP EDIT');}catch(e){setMessage(e instanceof Error?e.message:'Grip edit failed.')}}}><i>✥</i><span>Move Grip</span></button>
+                  <button className="primary" disabled={!previewShapes} onClick={commitPreview}><i>✓</i><span>Apply Preview</span></button>
+                  <button disabled={!previewShapes} onClick={()=>{setPreviewShapes(null);setMessage('Preview cancelled.')}}><i>×</i><span>Cancel Preview</span></button>
+                  <button disabled={!selectedShapeIds.length} onClick={deleteSelectedShape}><i>⌫</i><span>Erase Selection</span></button>
+                </div>
+              </div>
             </>}
             {ribbonTab==='Insert' && <>
               <div className="aquacad-ribbon-group"><strong>Blocks & References</strong><div className="aquacad-tool-grid">
