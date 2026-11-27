@@ -168,9 +168,9 @@ export function validateWaterCad(document: WaterCadDocument): WaterCadIssue[] {
       if (finite(p.groundEndM) && finite(p.invertOutletM) && positive(outsideDiameter) && p.groundEndM - p.invertOutletM - outsideDiameter / 1000 < 0) add('warning', 'NEGATIVE_COVER', 'Pipe crown is above ground at the outlet; verify survey levels and vertical datum.');
       if (p.material === 'HDPE' && p.pressureClass && !/^PN\\d+(?:\\.\\d+)?$/i.test(p.pressureClass)) add('warning', 'PRESSURE_CLASS_FORMAT', 'HDPE pressure class should use a PN designation such as PN16.');
     }
-    if (c.kind === 'bend' && (!positive(p.nominalDiameterMm) || !finite(p.bendAngleDeg) || p.bendAngleDeg <= 0 || p.bendAngleDeg >= 180)) add('error', 'BEND_PROPERTIES', 'Bend needs a positive diameter and an angle between 0° and 180°.');
-    if (c.kind === 'tee' && (!positive(p.nominalDiameterMm) || !positive(p.branchDiameterMm))) add('error', 'TEE_DIAMETERS', 'Tee needs run and branch diameters.');
-    if (c.kind === 'reducer' && (!positive(p.nominalDiameterMm) || !positive(p.outletDiameterMm) || p.outletDiameterMm === p.nominalDiameterMm)) add('error', 'REDUCER_DIAMETERS', 'Reducer needs two different positive end diameters.');
+    if (c.kind === 'bend' && (!positive(p.nominalDiameterMm) || !finite(p.bendAngleDeg) || p.bendAngleDeg <= 0 || p.bendAngleDeg >= 180 || !positive(p.bendRadiusM))) add('error', 'BEND_PROPERTIES', 'Bend needs a positive diameter and an angle between 0° and 180°.');
+    if (c.kind === 'tee' && (!positive(p.nominalDiameterMm) || !positive(p.branchDiameterMm) || !positive(p.fittingRunLengthM) || !positive(p.fittingBranchLengthM))) add('error', 'TEE_DIAMETERS', 'Tee needs run and branch diameters.');
+    if (c.kind === 'reducer' && (!positive(p.nominalDiameterMm) || !positive(p.outletDiameterMm) || p.outletDiameterMm === p.nominalDiameterMm || !positive(p.fittingLengthM))) add('error', 'REDUCER_DIAMETERS', 'Reducer needs two different positive end diameters.');
     if (c.kind === 'valve' && !p.valveType) add('error', 'VALVE_TYPE', 'Select a valve type.');
     if (c.kind === 'pump' && (!positive(p.pumpDutyFlowM3h) || !positive(p.pumpDutyHeadM))) add('error', 'PUMP_DUTY', 'Pump duty flow and head must be positive.');
     if ((c.kind === 'tank' || c.kind === 'reservoir') && !positive(p.tankCapacityM3)) add('error', 'TANK_CAPACITY', 'Tank/reservoir capacity must be positive.');
