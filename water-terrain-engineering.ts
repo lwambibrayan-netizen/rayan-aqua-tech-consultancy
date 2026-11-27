@@ -75,7 +75,7 @@ export function applyTerrainToPipe(pipe: WaterCadComponent, grid: TerrainGrid, c
     return {x:point.x,y:point.y,groundLevelM:ground,invertLevelM:invert,z:invert+od/2};
   });
   const start=geometry[0], end=geometry[geometry.length-1];
-  return {...pipe,geometry,properties:{...pipe.properties,groundStartM:start.groundLevelM,groundEndM:end.groundLevelM,invertInletM:start.invertLevelM,invertOutletM:end.invertLevelM,coverDepthM,hydraulicLengthM:undefined}};
+  return {...pipe,geometry,properties:{...pipe.properties,groundStartM:start.groundLevelM,groundEndM:end.groundLevelM,invertInletM:start.invertLevelM,invertOutletM:end.invertLevelM,coverDepthM,hydraulicLengthM:component3dLength({...pipe,geometry})}};
 }
 /** Builds a sampled ground/invert/crown/cover profile from the actual terrain surface. */
 export function buildTerrainAwarePipeProfile(pipe:WaterCadComponent,grid:TerrainGrid,spacingM=5):ProfilePoint[] {
