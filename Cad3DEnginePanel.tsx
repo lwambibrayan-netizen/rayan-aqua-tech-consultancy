@@ -866,7 +866,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const pts=shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]]:shape.points;
       return '<polyline points="'+pts.map(p=>{const q=mapPoint(p);return q.x+','+q.y;}).join(' ')+'" fill="none" stroke="'+color+'" stroke-width="'+weight+'"/>';
     }).join('');
-    const water = waterCad.components.filter(item=>allowed.has(item.kind==='pipe'?'WATER_PIPE':'WATER_FITTING')).map(item=>{
+    const water = waterCad.components.filter(item=>allowed.has(waterLayerName(item.kind))).map(item=>{
       const pts=item.geometry.map(p=>mapPoint({x:p.x/metresPerUnit,y:p.y/metresPerUnit}));
       if(!pts.length)return '';
       if(item.kind==='pipe'&&pts.length>1)return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="#087e83" stroke-width="0.35"/>';
@@ -906,7 +906,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const waterDrawing: DxfShape[] = waterCad.components.flatMap((component, index): DxfShape[] => {
       const toDrawingPoints = (points: {x:number;y:number}[]) => points.map(point => ({ x: point.x / metresPerUnit, y: point.y / metresPerUnit }));
       if (component.kind === 'pipe') return [{ id: 'W-' + component.id, type: 'polyline' as const, points: toDrawingPoints(component.geometry), layer: 'WATER_PIPE' }];
-      if (component.kind === 'bend') return [{ id: 'W-' + component.id, type: 'polyline' as const, points: toDrawingPoints(buildBendCentreline(component, 24)), layer: 'WATER_FITTING' }];
+      if (component.kind === 'bend') return [{ id: 'W-' + component.id, type: 'polyline' as const, points: toDrawingPoints(buildBendCentreline(component, 24)), layer: waterLayerName(component.kind) }];
       if (component.kind === 'reducer') return [{ id: 'W-' + component.id, type: 'polyline' as const, points: toDrawingPoints(buildReducerCentreline(component)), layer: 'WATER_FITTING' }];
       if (component.kind === 'tee') return buildTeeCentreline(component).map((points, branch) => ({ id: 'W-' + component.id + '-' + branch, type: 'polyline' as const, points: toDrawingPoints(points), layer: 'WATER_FITTING' }));
       return [{ id: 'W-' + component.id + '-' + index, type: 'circle' as const, points: toDrawingPoints(component.geometry.slice(0, 1)), radius: 0.15 / metresPerUnit, layer: 'WATER_FITTING' }];
@@ -1010,9 +1010,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     }
     return (selectedShape.type === 'line' ? 'Length: ' : 'Total path length: ') + formatLength(total);
   })() : '';
+  const waterLayerName = (kind: WaterComponentKind) => kind === 'pipe' ? 'WATER_PIPE' : kind === 'valve' ? 'WATER_VALVE' : kind === 'chamber' ? 'WATER_CHAMBER' : ['tank','reservoir','source'].includes(kind) ? 'WATER_STRUCTURE' : 'WATER_FITTING';
   const layerNames = Array.from(new Set([...drafting.layers.map(item => item.name), ...shapes.map(shape => shape.layer || '0')])).sort();
   const visibleShapes = shapes.filter(shape => !hiddenLayers.includes(shape.layer || '0') && drafting.layers.find(item => item.name === (shape.layer || '0'))?.visible !== false);
-  const renderedWaterComponents = waterCad.components.map(component => {
+  const renderedWaterComponents = waterCad.components.filter(component => drafting.layers.find(item => item.name === waterLayerName(component.kind))?.visible !== false && !hiddenLayers.includes(waterLayerName(component.kind))).map(component => {
     const pts = component.geometry.map(point => ({ x: point.x / (calibratedMetresPerUnit || 1), y: point.y / (calibratedMetresPerUnit || 1) }));
     const p = pts[0] || {x:0,y:0};
     const selected = selectedWaterId === component.id;
