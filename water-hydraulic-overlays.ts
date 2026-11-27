@@ -18,6 +18,6 @@ export function buildHydraulicOverlay(document:WaterCadDocument,results:Hydrauli
   return {componentId:item.id,value,label:value===null?'No result':value.toFixed(2),colour,severity,...(metric==='flowLps'&&value!==null?{direction:value>0?'forward':value<0?'reverse':'stagnant'}:{})};
  });
  const values=items.flatMap(item=>item.value===null?[]:[item.value]);
- return {metric,timeSeconds:results.timeSeconds,items,min:values.length?Math.min(...values):null,max:values.length?Math.max(...values):null};
+ return {metric,timeSeconds:results.timeSeconds,items,min:values.length?values.reduce((a,b)=>Math.min(a,b),Infinity):null,max:values.length?values.reduce((a,b)=>Math.max(a,b),-Infinity):null};
 }
 export function hydraulicValueForComponent(overlay:HydraulicOverlay,component:WaterCadComponent):HydraulicOverlayItem|undefined{return overlay.items.find(item=>item.componentId===component.id);}
