@@ -92,7 +92,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     const length=lengthToM(num(r.values[3]));const diameter=diameterToMm(num(r.values[4]));
     if(!(length>0)||!(diameter>0)){warnings.push('Pipe '+r.values[0]+' has invalid length or diameter and was skipped.');return;}
     const checkValve=(r.values[7]??'OPEN').toUpperCase()==='CV';
-    addLink(r.values[0],checkValve?'valve':'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),initialStatus:checkValve?linkStatuses.get(safe(r.values[0])):((r.values[7]??linkStatuses.get(safe(r.values[0]))??'OPEN').toUpperCase()==='CLOSED'?'CLOSED':'OPEN'),valveType:checkValve?'check':undefined,description:'Imported from EPANET'},vertices.get(safe(r.values[0]))??[]);
+    addLink(r.values[0],checkValve?'valve':'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),initialStatus:checkValve?linkStatuses.get(safe(r.values[0])):((linkStatuses.get(safe(r.values[0]))??r.values[7]??'OPEN').toUpperCase()==='CLOSED'?'CLOSED':'OPEN'),valveType:checkValve?'check':undefined,description:'Imported from EPANET'},vertices.get(safe(r.values[0]))??[]);
   });
   const pumpCurves=new Map<string,Array<{flowM3h:number;headM:number}>>();
   bySection('CURVES').forEach(r=>{if(r.values.length>=3){const id=safe(r.values[0]);const points=pumpCurves.get(id)??[];points.push({flowM3h:flowToM3h(num(r.values[1])),headM:headToM(num(r.values[2]))});pumpCurves.set(id,points);}});
