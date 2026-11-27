@@ -42,8 +42,16 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   };
   bySection('JUNCTIONS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed junction at line '+r.line+'.');return;}addNode(r.values[0],'junction',headToM(num(r.values[1])),{flow:flowToM3h(num(r.values[2])),demandPatternId:r.values[3]});});
   bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',headToM(num(r.values[1])),{head:headToM(num(r.values[1]))});});
-  bySection('TANKS').forEach(r=>{if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}addNode(r.values[0],'tank',headToM(num(r.values[1])),{level:headToM(num(r.values[2])),diameter:usUnits?num(r.values[5])*0.3048:num(r.values[5])});
-  bySection('TANKS').forEach(r=>{const tank=nodes.get(safe(r.values[0]));if(tank){tank.properties.tankMinLevelM=headToM(num(r.values[3]));tank.properties.tankMaxLevelM=headToM(num(r.values[4]));tank.properties.tankMinVolumeM3=usUnits?num(r.values[6])*0.0283168466:num(r.values[6]);}});});
+  bySection('TANKS').forEach(r=>{
+    if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}
+    addNode(r.values[0],'tank',headToM(num(r.values[1])),{level:headToM(num(r.values[2])),diameter:usUnits?num(r.values[5])*0.3048:num(r.values[5])});
+    const tank=nodes.get(safe(r.values[0]));
+    if(tank){
+      tank.properties.tankMinLevelM=headToM(num(r.values[3]));
+      tank.properties.tankMaxLevelM=headToM(num(r.values[4]));
+      tank.properties.tankMinVolumeM3=usUnits?num(r.values[6])*0.0283168466:num(r.values[6]);
+    }
+  });
   const components=[...nodes.values()];
   const addLink=(idRaw:string,kind:WaterComponentKind,fromRaw:string,toRaw:string,diameterMm:number,props:Partial<WaterCadComponent['properties']>={})=>{
     const from=nodes.get(safe(fromRaw)),to=nodes.get(safe(toRaw));
