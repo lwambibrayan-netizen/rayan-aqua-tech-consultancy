@@ -40,6 +40,16 @@ export function sampleTerrainElevation(grid: TerrainGrid, x: number, y: number):
   return values.reduce<number>((sum,value,index)=>sum+(value ?? 0)*weights[index],0);
 }
 function segmentLength(a: WaterPoint, b: WaterPoint): number { return Math.hypot(b.x-a.x,b.y-a.y); }
+/** Returns a non-persisted pipe centreline elevation from real terrain and specified crown cover. */
+export function samplePipeCentrelineElevation(pipe:WaterCadComponent,point:WaterPoint,grid:TerrainGrid,fallbackCoverM=1.2):number|null {
+  if(pipe.kind!=='pipe') throw new Error('Terrain centreline sampling requires a pipe component.');
+  if(!finite(fallbackCoverM)||fallbackCoverM<0) throw new Error('Fallback crown cover must be a non-negative finite value.');
+  const ground=sampleTerrainElevation(grid,point.x,point.y);
+  const outsideDiameterM=(pipe.properties.externalDiameterMm??pipe.properties.internalDiameterMm??pipe.properties.nominalDiameterMm??0)/1000;
+  if(ground===null||!(outsideDiameterM>0)) return null;
+  const cover=finite(pipe.properties.coverDepthM)?pipe.properties.coverDepthM:fallbackCoverM;
+  return ground-cover-outsideDiameterM/2;
+}
 export function sampleGroundProfile(grid: TerrainGrid, route: WaterPoint[], spacingM = 5): GroundProfileSample[] {
   validateTerrain(grid);
   if (route.length < 2 || !finite(spacingM) || spacingM <= 0) throw new Error('Ground profile needs at least two route points and positive sample spacing.');
