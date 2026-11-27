@@ -22,7 +22,11 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   bySection('COORDINATES').forEach(r=>{if(r.values.length>=3)coordinates.set(safe(r.values[0]),{x:num(r.values[1]),y:num(r.values[2])});});
   const unitLine=bySection('OPTIONS').find(r=>r.values[0]?.toUpperCase()==='UNITS');
   const flowUnit=(unitLine?.values[1]??'LPS').toUpperCase();
-  const flowToM3h=(value:number)=>flowUnit==='LPS'?value*3.6:flowUnit==='GPM'?value*0.2271247:flowUnit==='CFS'?value*101.940647:flowUnit==='CMS'?value*3600:flowUnit==='MGD'?value*157.72549:value*3.6;
+  const usUnits=['CFS','GPM','MGD','IMGD','AFD'].includes(flowUnit);
+  const flowToM3h=(value:number)=>flowUnit==='LPS'?value*3.6:flowUnit==='LPM'?value*0.06:flowUnit==='MLD'?value*41.6666667:flowUnit==='CMH'?value:flowUnit==='CMD'?value/24:flowUnit==='GPM'?value*0.2271247:flowUnit==='CFS'?value*101.940647:flowUnit==='CMS'?value*3600:flowUnit==='MGD'?value*157.72549:flowUnit==='IMGD'?value*189.4204:flowUnit==='AFD'?value*51.395:value*3.6;
+  const lengthToM=(value:number)=>usUnits?value*0.3048:value;
+  const diameterToMm=(value:number)=>usUnits?value*25.4:value;
+  const headToM=(value:number)=>usUnits?value*0.3048:value;
   const nodes=new Map<string,WaterCadComponent>();
   const addNode=(idRaw:string,kind:WaterComponentKind,elevation:number,extra?:{flow?:number;level?:number;diameter?:number;head?:number})=>{
     const id=safe(idRaw); if(nodes.has(id)){warnings.push('Duplicate node '+id+' at import line; duplicate skipped.');return;}
@@ -33,9 +37,10 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     if(extra?.diameter!==undefined)c.properties.tankDiameterM=extra.diameter;
     nodes.set(id,c);
   };
-  bySection('JUNCTIONS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed junction at line '+r.line+'.');return;}addNode(r.values[0],'junction',num(r.values[1]),{flow:flowToM3h(num(r.values[2]))});});
-  bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',num(r.values[1]),{head:num(r.values[1])});});
-  bySection('TANKS').forEach(r=>{if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}addNode(r.values[0],'tank',num(r.values[1]),{level:num(r.values[2]),diameter:num(r.values[5])});});
+  bySection('JUNCTIONS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed junction at line '+r.line+'.');return;}addNode(r.values[0],'junction',headToM(num(r.values[1])),{flow:flowToM3h(num(r.values[2]))});});
+  bySection('RESERVOIRS').forEach(r=>{if(r.values.length<2){warnings.push('Malformed reservoir at line '+r.line+'.');return;}addNode(r.values[0],'reservoir',headToM(num(r.values[1])),{head:headToM(num(r.values[1]))});});
+  bySection('TANKS').forEach(r=>{if(r.values.length<6){warnings.push('Malformed tank at line '+r.line+'.');return;}addNode(r.values[0],'tank',headToM(num(r.values[1])),{level:headToM(num(r.values[2])),diameter:usUnits?num(r.values[5])*0.3048:num(r.values[5])});
+  bySection('TANKS').forEach(r=>{const tank=nodes.get(safe(r.values[0]));if(tank){tank.properties.tankMinLevelM=headToM(num(r.values[3]));tank.properties.tankMaxLevelM=headToM(num(r.values[4]));tank.properties.tankMinVolumeM3=usUnits?num(r.values[6])*1233.48184:num(r.values[6]);}});});
   const components=[...nodes.values()];
   const addLink=(idRaw:string,kind:WaterComponentKind,fromRaw:string,toRaw:string,diameterMm:number,props:Partial<WaterCadComponent['properties']>={})=>{
     const from=nodes.get(safe(fromRaw)),to=nodes.get(safe(toRaw));
@@ -53,33 +58,39 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   };
   bySection('PIPES').forEach(r=>{
     if(r.values.length<6){warnings.push('Malformed pipe at line '+r.line+'.');return;}
-    const length=num(r.values[3]);const diameter=num(r.values[4]);
+    const length=lengthToM(num(r.values[3]));const diameter=diameterToMm(num(r.values[4]));
     if(!(length>0)||!(diameter>0)){warnings.push('Pipe '+r.values[0]+' has invalid length or diameter and was skipped.');return;}
     const checkValve=(r.values[7]??'OPEN').toUpperCase()==='CV';
-    addLink(r.values[0],checkValve?'valve':'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),valveType:checkValve?'check':undefined,description:'Imported from EPANET'});
+    addLink(r.values[0],checkValve?'valve':'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),initialStatus:checkValve?undefined:((r.values[7]??'OPEN').toUpperCase()==='CLOSED'?'CLOSED':'OPEN'),valveType:checkValve?'check':undefined,description:'Imported from EPANET'});
   });
   const pumpCurves=new Map<string,Array<{flowM3h:number;headM:number}>>();
-  bySection('CURVES').forEach(r=>{if(r.values.length>=3){const id=safe(r.values[0]);const points=pumpCurves.get(id)??[];points.push({flowM3h:flowToM3h(num(r.values[1])),headM:num(r.values[2])});pumpCurves.set(id,points);}});
+  bySection('CURVES').forEach(r=>{if(r.values.length>=3){const id=safe(r.values[0]);const points=pumpCurves.get(id)??[];points.push({flowM3h:flowToM3h(num(r.values[1])),headM:headToM(num(r.values[2]))});pumpCurves.set(id,points);}});
   bySection('PUMPS').forEach(r=>{
     if(r.values.length<3){warnings.push('Malformed pump at line '+r.line+'.');return;}
     const headIndex=r.values.findIndex(value=>value.toUpperCase()==='HEAD');
+    const powerIndex=r.values.findIndex(value=>value.toUpperCase()==='POWER');
+    const speedIndex=r.values.findIndex(value=>value.toUpperCase()==='SPEED');
+    const patternIndex=r.values.findIndex(value=>value.toUpperCase()==='PATTERN');
     const curveId=headIndex>=0?r.values[headIndex+1]:undefined;
     const points=curveId?pumpCurves.get(safe(curveId)):undefined;
     addLink(r.values[0],'pump',r.values[1],r.values[2],0,{
       description:'Imported from EPANET pump link',
       epanetPumpCurveId:curveId,
       pumpCurvePoints:points,
+      pumpPowerKw:powerIndex>=0?num(r.values[powerIndex+1]):undefined,
+      pumpSpeedMultiplier:speedIndex>=0?num(r.values[speedIndex+1],1):undefined,
+      pumpSpeedPattern:patternIndex>=0?r.values[patternIndex+1]:undefined,
       pumpDutyFlowM3h:points?.length===1?points[0].flowM3h:undefined,
       pumpDutyHeadM:points?.length===1?points[0].headM:undefined
     });
     if(curveId&&!points?.length)warnings.push('Pump '+r.values[0]+' references missing curve '+curveId+'; add or repair its pump curve before simulation.');
-    if(!curveId)warnings.push('Pump '+r.values[0]+' uses a non-HEAD or unsupported pump definition; manual pump model review is required.');
+    if(!curveId&&powerIndex<0)warnings.push('Pump '+r.values[0]+' uses a non-HEAD/POWER or unsupported pump definition; manual pump model review is required.');
   });
   bySection('VALVES').forEach(r=>{
     if(r.values.length<5){warnings.push('Malformed valve at line '+r.line+'.');return;}
     const type=r.values[4].toUpperCase();const map:Record<string,WaterCadComponent['properties']['valveType']>={PRV:'PRV',PSV:'PSV',PBV:'PBV',FCV:'FCV',TCV:'TCV',GPV:'GPV',PCV:'PCV'};
-    const rawSetting=num(r.values[5]);const setting=type==='FCV'?flowToM3h(rawSetting)*1000/3600:['PRV','PSV','PBV'].includes(type)&&flowUnit!=='LPS'?rawSetting*0.70307:rawSetting;
-    addLink(r.values[0],'valve',r.values[1],r.values[2],num(r.values[3]),{valveType:map[type]??'control',valveSetting:setting,description:'Imported EPANET '+type+' valve'});
+    const rawSetting=num(r.values[5]);const setting=type==='FCV'?flowToM3h(rawSetting)*1000/3600:['PRV','PSV','PBV'].includes(type)?headToM(rawSetting):rawSetting;
+    addLink(r.values[0],'valve',r.values[1],r.values[2],diameterToMm(num(r.values[3])),{valveType:map[type]??'control',valveSetting:setting,description:'Imported EPANET '+type+' valve'});
     if(!map[type]||type==='GPV'||type==='PCV')warnings.push('Valve '+r.values[0]+' type '+type+' requires a supported curve/engine mapping review before re-export.');
   });
   const referenced=new Set(rows.filter(r=>['PIPES','PUMPS','VALVES'].includes(r.section)).flatMap(r=>r.values.slice(1,3)).map(safe));
