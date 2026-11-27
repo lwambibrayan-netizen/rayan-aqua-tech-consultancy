@@ -1140,8 +1140,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const water = waterCad.components.filter(item=>allowed.has(waterLayerName(item.kind))).map(item=>{
       const pts=item.geometry.map(p=>mapPoint({x:p.x/metresPerUnit,y:p.y/metresPerUnit}));
       if(!pts.length)return '';
-      if(item.kind==='pipe'&&pts.length>1)return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="#087e83" stroke-width="0.35"/>';
-      return '<circle cx="'+pts[0].x+'" cy="'+pts[0].y+'" r="1.5" fill="none" stroke="#087e83" stroke-width="0.35"/><text x="'+(pts[0].x+2)+'" y="'+(pts[0].y-2)+'" font-size="2.5">'+safe(item.properties.tag)+'</text>';
+      const result=hydraulicOverlay?.items.find(entry=>entry.componentId===item.id);
+      const colour=result?.colour||'#087e83';
+      const resultLabel=result?' '+safe(result.label):'';
+      if(item.kind==='pipe'&&pts.length>1)return '<polyline points="'+pts.map(p=>p.x+','+p.y).join(' ')+'" fill="none" stroke="'+colour+'" stroke-width="0.45"/><text x="'+(pts[0].x+1)+'" y="'+(pts[0].y-1)+'" font-size="2.2" fill="'+colour+'">'+safe(item.properties.tag)+resultLabel+'</text>';
+      return '<circle cx="'+pts[0].x+'" cy="'+pts[0].y+'" r="1.5" fill="none" stroke="'+colour+'" stroke-width="0.35"/><text x="'+(pts[0].x+2)+'" y="'+(pts[0].y-2)+'" font-size="2.5" fill="'+colour+'">'+safe(item.properties.tag)+resultLabel+'</text>';
     }).join('');
     const annotations=drafting.annotations.filter(item=>allowed.has(item.layer)).map(item=>{
       const color=layer(item.layer)?.color||'#222222';
@@ -1165,10 +1168,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const scaleBar=sheet.showScaleBar===false?'':'<g transform="translate(18 '+(heightMm-18)+')"><rect x="0" y="0" width="'+(scaleBarLengthMm/2)+'" height="2" fill="black"/><rect x="'+(scaleBarLengthMm/2)+'" y="0" width="'+(scaleBarLengthMm/2)+'" height="2" fill="white" stroke="black" stroke-width="0.25"/><text x="'+(scaleBarLengthMm/2)+'" y="-2" text-anchor="middle" font-size="2.5">'+scaleBarModelM.toFixed(2)+' m</text><text x="'+(scaleBarLengthMm/2)+'" y="6" text-anchor="middle" font-size="2">GRAPHIC SCALE</text></g>';
     const legendItems=drafting.layers.filter(item=>item.visible&&item.plot&&item.name!=='0').slice(0,10).map((item,i)=>'<line x1="15" y1="'+(25+i*4)+'" x2="24" y2="'+(25+i*4)+'" stroke="'+item.color+'" stroke-width="'+Math.max(0.25,item.lineWeightMm)+'"/><text x="27" y="'+(26+i*4)+'" font-size="2.4">'+safe(item.name)+'</text>').join('');
     const legend=legendItems?'<text x="15" y="22" font-size="2.8" font-weight="bold">LEGEND</text>'+legendItems:'';
+    const hydraulicLegend=hydraulicOverlay?'<g><text x="'+(widthMm-88)+'" y="18" font-size="2.6" font-weight="bold">HYDRAULIC '+safe(hydraulicOverlay.metric.toUpperCase())+' · t='+hydraulicOverlay.timeSeconds+' s</text><line x1="'+(widthMm-88)+'" y1="23" x2="'+(widthMm-82)+'" y2="23" stroke="#15936d" stroke-width="1"/><text x="'+(widthMm-80)+'" y="24" font-size="2.2">Within limits</text><line x1="'+(widthMm-88)+'" y1="28" x2="'+(widthMm-82)+'" y2="28" stroke="#8a8f98" stroke-width="1"/><text x="'+(widthMm-80)+'" y="29" font-size="2.2">No result</text><line x1="'+(widthMm-88)+'" y1="33" x2="'+(widthMm-82)+'" y2="33" stroke="#d43b35" stroke-width="1"/><text x="'+(widthMm-80)+'" y="34" font-size="2.2">Outside limits</text></g>':'';
     const viewportClip = viewport ? '<defs><clipPath id="ra-model-viewport"><rect x="'+viewport.xMm+'" y="'+viewport.yMm+'" width="'+viewport.widthMm+'" height="'+viewport.heightMm+'"/></clipPath></defs>' : '';
     const viewportFrame = viewport ? '<rect x="'+viewport.xMm+'" y="'+viewport.yMm+'" width="'+viewport.widthMm+'" height="'+viewport.heightMm+'" fill="none" stroke="#333333" stroke-width="0.25"/>' : '';
     const drawingGroup = viewport ? '<g clip-path="url(#ra-model-viewport)">'+drawing+water+annotations+'</g>' : '<g>'+drawing+water+annotations+'</g>';
-    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+widthMm+'mm" height="'+heightMm+'mm" viewBox="0 0 '+widthMm+' '+heightMm+'"><rect width="100%" height="100%" fill="white"/>'+border+titleBlock+viewportClip+drawingGroup+viewportFrame+'<g>'+keyPlan+northArrow+legend+revisionTable+notes+scaleBar+'</g></svg>';
+    const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+widthMm+'mm" height="'+heightMm+'mm" viewBox="0 0 '+widthMm+' '+heightMm+'"><rect width="100%" height="100%" fill="white"/>'+border+titleBlock+viewportClip+drawingGroup+viewportFrame+'<g>'+keyPlan+northArrow+legend+hydraulicLegend+revisionTable+notes+scaleBar+'</g></svg>';
     if (batch) return svg;
     downloadWaterFile((sheet.drawingNumber||'drawing')+'.svg',svg,'image/svg+xml');
     if (printToPdf) { const printWindow = window.open('', '_blank'); if (printWindow) { printWindow.document.open(); printWindow.document.write('<!doctype html><html><head><title>'+safe(sheet.drawingNumber)+'</title><style>@page{size:'+widthMm+'mm '+heightMm+'mm;margin:0}html,body{margin:0;padding:0}svg{display:block;width:100%;height:auto}</style></head><body>'+svg+'</body></html>'); printWindow.onload = () => printWindow.print(); printWindow.document.close(); } else setMessage('Print window was blocked. Allow pop-ups for this app, then retry Print / Save as PDF.'); }
