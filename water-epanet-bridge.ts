@@ -177,7 +177,13 @@ export function mergeEpanetRoundTrip(base:WaterCadDocument,imported:WaterCadDocu
       usedPorts.add(linkPort.id);usedPorts.add(nodePort.id);
     });
   }
-  const matchedNetwork=imported.components.some(component=>original.has(component.id));
+  const importedNodes=imported.components.filter(component=>['junction','source','tank','reservoir'].includes(component.kind));
+  const matchedNodes=importedNodes.filter(component=>original.has(component.id));
+  const matchedNetwork=matchedNodes.length>0&&matchedNodes.every(component=>{
+    const prior=original.get(component.id);
+    const a=prior?.geometry[0],b=component.geometry[0];
+    return !!a&&!!b&&Math.hypot(a.x-b.x,a.y-b.y)<0.001;
+  });
   return {
     ...base,...imported,components,connections,
     horizontalCrs:matchedNetwork&&base.horizontalCrs?base.horizontalCrs:imported.horizontalCrs,
