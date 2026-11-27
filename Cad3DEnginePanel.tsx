@@ -1004,7 +1004,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (waterCad.horizontalUnits !== 'm' || waterCad.horizontalCrs !== terrainGrid.crs || waterCad.verticalDatum !== terrainGrid.verticalDatum) { setMessage('Terrain routing blocked: project CRS ('+(waterCad.horizontalCrs||'unset')+', '+(waterCad.horizontalUnits||'unknown')+') must match terrain CRS ('+terrainGrid.crs+') and vertical datum ('+terrainGrid.verticalDatum+') in metres. Reproject/vertically transform the data first; do not relabel coordinates.'); return; }
     if (!selected || selected.kind !== 'pipe') { setMessage('Select a pipe in the component register first.'); return; }
     try {
-      const updated = applyTerrainToPipe(selected, terrainGrid, terrainCoverM);
+      const updated = applyTerrainToPipe(selected, terrainGrid, terrainCoverM, 0, terrainProfileSpacingM);
       setWaterCad(current => ({ ...current, components: current.components.map(component => component.id === updated.id ? updated : component) }));
       const profile = sampleGroundProfile(terrainGrid, updated.geometry, terrainProfileSpacingM);
       setMessage('Terrain route applied to ' + updated.id + ': ' + profile.length + ' profile samples. Review cover and invert levels, then save.');
