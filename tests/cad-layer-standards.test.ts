@@ -3,6 +3,17 @@ import { DEFAULT_DRAFT_LAYERS, createDraftingDocument, sheetDimensionsMm, valida
 import { LAYER_STANDARD_TEMPLATES, mergeLayerTemplate, synchronizeLayerTemplate, validateLayerStandard, validatePlotConfiguration } from '../cad-layer-standards';
 
 describe('professional drawing standards', () => {
+  it('defaults model-space drafting and annotation layers to white and migrates legacy default ink', () => {
+    for (const name of ['0','DIMENSIONS','TEXT','BOUNDARY','ANNOTATION']) {
+      expect(DEFAULT_DRAFT_LAYERS.find(layer=>layer.name===name)?.color).toBe('#ffffff');
+    }
+    const legacy=DEFAULT_DRAFT_LAYERS.map(layer=>['0','DIMENSIONS','TEXT','BOUNDARY','ANNOTATION'].includes(layer.name)?{...layer,color:'#202020'}:layer);
+    const migrated=createDraftingDocument({layers:legacy});
+    for (const name of ['0','DIMENSIONS','TEXT','BOUNDARY','ANNOTATION']) {
+      expect(migrated.layers.find(layer=>layer.name===name)?.color).toBe('#ffffff');
+    }
+  });
+
   it('adds water utility layers without replacing user layers', () => {
     const result = mergeLayerTemplate(DEFAULT_DRAFT_LAYERS, 'WATER_UTILITY');
     expect(result.layers.some(layer => layer.name === 'WATER_PIPE')).toBe(true);
