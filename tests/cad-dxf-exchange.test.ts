@@ -24,9 +24,9 @@ describe('structured DXF exchange', () => {
     expect(imported.shapes.map(s => s.type)).toEqual(['line','polyline','polyline']);
     expect(imported.shapes[1].bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/8));
     expect(imported.annotations[0].kind).toBe('text');
-    expect(imported.annotations[0].heightMm).toBeCloseTo(2.5);
+    if (imported.annotations[0].kind === 'text') expect(imported.annotations[0].heightMm).toBeCloseTo(2.5);
     expect(imported.annotations[1].kind).toBe('aligned');
-    expect(imported.annotations[1].offsetM).toBeCloseTo(2);
+    if (imported.annotations[1].kind === 'aligned' || imported.annotations[1].kind === 'linear') expect(imported.annotations[1].offsetM).toBeCloseTo(2);
     expect(imported.layerNames).toEqual(['PIPE','FITTING','BOUNDARY','TEXT','DIMENSIONS']);
   });
 });
