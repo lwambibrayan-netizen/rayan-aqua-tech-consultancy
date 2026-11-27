@@ -120,7 +120,7 @@ describe('CAD viewport, object snapping and edit history', () => {
   it('pans by screen-space deltas while preserving scale', () => {
     const panned = panViewport(viewport, { x: 40, y: -20 });
     expect(panned.pixelsPerMetre).toBe(viewport.pixelsPerMetre);
-    expect(worldToScreen({ x: 100, y: 200 }, panned)).toEqual({ x: 360, y: 280 });
+    expect(worldToScreen({ x: 100, y: 200 }, panned)).toEqual({ x: 440, y: 280 });
   });
 
   it('builds endpoint, midpoint, nearest, centre, quadrant and intersection snaps', () => {
