@@ -358,6 +358,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     if (suppressSelectionClick.current) { suppressSelectionClick.current=false; return; }
     if (panRef.current || panMode) return;
     if (mode === 'select') {
+      setLastSelectionWindow(null);
       const target = (event.target as SVGElement).closest('[data-shape-id]') as SVGElement | null;
       const id = target?.getAttribute('data-shape-id') || '';
       if (event.shiftKey && id) {
@@ -731,8 +732,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <label>Cols <input type="number" min="1" value={arrayColumns} onChange={e=>setArrayColumns(Math.max(1,Number(e.target.value)||1))} style={{width:48}}/></label>
             <button className="secondary-button" disabled={!selectedShapes.length||!lastSelectionWindow} onClick={()=>{try{previewDrawing(shapes.map(x=>selectedShapeIds.includes(x.id)?stretchEntities([x],lastSelectionWindow!,{x:commandDistance,y:0})[0]:x),'STRETCH');}catch(e){setMessage(e instanceof Error?e.message:'STRETCH failed.');}}}>Stretch</button>
             <button className="secondary-button" disabled={selectedShapes.length!==1||selectedShapes[0].type!=='line'} onClick={()=>{previewDrawing([...shapes,...selectedShapes.map(x=>offsetLine(x,commandDistance))],'OFFSET');}}>Offset</button>
-            <button className="secondary-button" disabled={selectedShapes.length!==2||selectedShapes[0].type!=='line'||selectedShapes[1].type!=='line'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapes[0].id?trimLine(x,selectedShapes[1],x.points[commandEndpoint]):x),'TRIM');}catch(e){setMessage(e instanceof Error?e.message:'TRIM failed.');}}}>Trim</button>
-            <button className="secondary-button" disabled={selectedShapes.length!==2||selectedShapes[0].type!=='line'||selectedShapes[1].type!=='line'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapes[0].id?extendLine(x,selectedShapes[1],commandEndpoint):x),'EXTEND');}catch(e){setMessage(e instanceof Error?e.message:'EXTEND failed.');}}}>Extend</button>
+            <button className="secondary-button" disabled={selectedShapes.length!==2||selectedShapes[0].type!=='line'||selectedShapes[1].type!=='line'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapeId?trimLine(x,selectedShapes.find(item=>item.id!==selectedShapeId)!,x.points[commandEndpoint]):x),'TRIM');}catch(e){setMessage(e instanceof Error?e.message:'TRIM failed.');}}}>Trim</button>
+            <button className="secondary-button" disabled={selectedShapes.length!==2||selectedShapes[0].type!=='line'||selectedShapes[1].type!=='line'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapeId?extendLine(x,selectedShapes.find(item=>item.id!==selectedShapeId)!,commandEndpoint):x),'EXTEND');}catch(e){setMessage(e instanceof Error?e.message:'EXTEND failed.');}}}>Extend</button>
             <button className="secondary-button" disabled={selectedShapes.length!==1||selectedShapes[0].type!=='polyline'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapes[0].id?chamferPolylineCorner(x,cornerIndex,commandDistance):x),'CHAMFER');}catch(e){setMessage(e instanceof Error?e.message:'CHAMFER failed.');}}}>Chamfer</button>
             <button className="secondary-button" disabled={selectedShapes.length!==1||selectedShapes[0].type!=='polyline'} onClick={()=>{try{previewDrawing(shapes.map(x=>x.id===selectedShapes[0].id?filletPolylineCorner(x,cornerIndex,commandDistance):x),'FILLET');}catch(e){setMessage(e instanceof Error?e.message:'FILLET failed.');}}}>Fillet</button>
             <button className="primary-button" disabled={!previewShapes} onClick={commitPreview}>Apply preview</button>
