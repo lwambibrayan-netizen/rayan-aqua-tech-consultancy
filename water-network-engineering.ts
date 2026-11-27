@@ -27,7 +27,8 @@ export type QuantityLine = {
   material?: string;
   nominalDiameterMm?: number;
 };
-export type EpanetExport = { input: string; warnings: string[] };
+export type EpanetIdMap = { epanetId: string; cadId: string; kind: 'node' | 'link' };
+export type EpanetExport = { input: string; warnings: string[]; idMap: EpanetIdMap[] };
 
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 const unit = (v: WaterPoint): WaterPoint => {
@@ -331,6 +332,12 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   const nodes = document.components.filter(c => ['junction', 'source', 'tank', 'reservoir'].includes(c.kind));
   const hydraulic = resolveHydraulicNodes(document);
   const nodeIds = new Set([...nodes.map(n => safeId(n.id)), ...hydraulic.syntheticNodes.map(n => n.id)]);
+  const idMap:EpanetIdMap[]=[
+    ...nodes.map(node=>({epanetId:safeId(node.id),cadId:node.id,kind:'node' as const})),
+    ...document.components.filter(component=>['pipe','pump','valve'].includes(component.kind)).map(link=>({epanetId:safeId(link.id),cadId:link.id,kind:'link' as const}))
+  ];
+  const safeIds=idMap.map(item=>item.epanetId);
+  if(new Set(safeIds).size!==safeIds.length)warnings.push('EPANET ID collision: two or more CAD IDs become identical after EPANET-safe normalization. Rename conflicting CAD objects before simulation/export.');
   const linkEnds = (component: WaterCadComponent) => { const ports = getWaterPorts(component); return [hydraulic.portNodeIds.get(ports[0]?.id ?? '') ?? '', hydraulic.portNodeIds.get(ports[1]?.id ?? '') ?? '']; };
   const pipes = document.components.filter(c => c.kind === 'pipe');
   const pumps = document.components.filter(c => c.kind === 'pump');
@@ -422,5 +429,5 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   lines.push('', '[VERTICES]', ';LinkID X Y');
   pipes.forEach(pipe=>pipe.geometry.slice(1,-1).forEach(point=>lines.push([safeId(pipe.id),fmt(point.x),fmt(point.y)].join(' '))));
   lines.push('', '[END]');
-  return { input: lines.join('\n') + '\n', warnings };
+  return { input: lines.join('\n') + '\n', warnings, idMap };
 }
