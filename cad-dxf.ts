@@ -197,7 +197,7 @@ export function importDraftingDxf(source:string, metresPerDrawingUnit=1, scaleDe
     const lineType=supportedLineTypes.has(requestedLineType)?requestedLineType as DraftLayer['lineType']:'CONTINUOUS';
     if(lineType!==requestedLineType)warnings.push('Layer '+name+' uses unsupported DXF linetype '+requestedLineType+'; imported as CONTINUOUS.');
     const rawWeight=Number(get('370')||18);
-    const lineWeightMm=rawWeight>=0?Math.min(2.11,Math.max(0.05,rawWeight/100)):0.18;
+    const lineWeightMm=rawWeight>=0?Math.min(2.11,Math.max(0,rawWeight/100)):0.18;
     const flags=Number(get('70')||0);
     importedLayers.push({name,color,lineType,lineWeightMm,visible:Number(get('62')||7)>=0,locked:(flags&4)!==0,plot:get('290')===undefined?true:get('290')!=='0'});
   }
