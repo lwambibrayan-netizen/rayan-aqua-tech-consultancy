@@ -92,7 +92,7 @@ test('engineer opens a project, uses visible CAD navigation, saves and opens 3D'
   await expect(pan).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Zoom Extents' }).click();
 
-  await page.getByRole('button', { name: 'Save drawing' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).first().click();
   await expect(page.getByText(/Saved to Voi Water Supply E2E/)).toBeVisible();
 
   await page.getByRole('tab', { name: '3D Modeling' }).click();
@@ -113,4 +113,16 @@ test('PyQGIS service exposes a healthy processor and passing self-test', async (
   expect(result.status).toBe('passed');
   expect(result.profile_valid_samples).toBeGreaterThanOrEqual(2);
   expect(result.contour_features).toBeGreaterThan(0);
+});
+
+test('engineer opens the GIS workspace and sees terrain-to-CAD tools', async ({ page }) => {
+  await prepareWorkspace(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: /Projects/ }).first().click();
+  await page.getByRole('button', { name: /Voi Water Supply E2E/ }).click();
+  await page.getByRole('button', { name: 'GIS workspace', exact: true }).click();
+
+  await expect(page.getByRole('button', { name: /Pipeline ground profile/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Check PyQGIS \/ DEM coverage/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Send DEM surface to CAD \/ 3D/ })).toBeVisible();
 });
