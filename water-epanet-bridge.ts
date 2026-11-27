@@ -150,13 +150,13 @@ export function mergeEpanetRoundTrip(base:WaterCadDocument,imported:WaterCadDocu
     const properties={...prior.properties};
     for(const key of propertyKeys[component.kind]??[]) {
       const value=component.properties[key];
-      if(value!==undefined)(properties as Record<string,unknown>)[key]=value;
+      if(value!==undefined)(properties as unknown as Record<string,unknown>)[key]=value;
     }
     const geometry=component.geometry.map(point=>{
       const match=prior.geometry.find(old=>Math.abs(old.x-point.x)<1e-6&&Math.abs(old.y-point.y)<1e-6);
       return match?{...match,...point}:point;
     });
-    return {...prior,...component,geometry,properties,customPorts:component.customPorts??prior.customPorts,layer:component.layer??prior.layer};
+    return {...prior,...component,geometry,properties,customPorts:component.customPorts??prior.customPorts};
   });
   const preservedCadOnly=base.components.filter(component=>!importedIds.has(component.id)&&!hydraulicKinds.has(component.kind));
   const components=[...mergedImported,...preservedCadOnly];
