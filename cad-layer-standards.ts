@@ -53,3 +53,43 @@ export function validatePlotConfiguration(layers: DraftLayer[]): string[] {
   }
   return issues;
 }
+
+
+/** Applies the selected drafting profile to matching standard layers.
+ * User visibility, lock and plot choices are preserved; colour, linetype and lineweight
+ * are synchronized to the selected profile so standards are more than a name-only setting.
+ */
+export function synchronizeLayerTemplate(existing: DraftLayer[], standard: LayerStandard): { layers: DraftLayer[]; added: string[]; updated: string[] } {
+  const template = LAYER_STANDARD_TEMPLATES[standard];
+  const byName = new Map(existing.map(layer => [layer.name.trim().toUpperCase(), layer]));
+  const added: string[] = [];
+  const updated: string[] = [];
+  const layers = existing.map(layer => {
+    const target = template.find(item => item.name.toUpperCase() === layer.name.trim().toUpperCase());
+    if (!target) return { ...layer };
+    const changed = layer.color !== target.color || layer.lineType !== target.lineType || layer.lineWeightMm !== target.lineWeightMm;
+    if (changed) updated.push(layer.name);
+    return { ...layer, color: target.color, lineType: target.lineType, lineWeightMm: target.lineWeightMm };
+  });
+  const known = new Set(byName.keys());
+  for (const target of template) {
+    if (known.has(target.name.toUpperCase())) continue;
+    layers.push({ ...target });
+    added.push(target.name);
+  }
+  return { layers, added, updated };
+}
+
+/** Reports missing or non-conforming layers for the selected profile. */
+export function validateLayerStandard(layers: DraftLayer[], standard: LayerStandard): string[] {
+  const issues: string[] = [];
+  const byName = new Map(layers.map(layer => [layer.name.trim().toUpperCase(), layer]));
+  for (const target of LAYER_STANDARD_TEMPLATES[standard]) {
+    const actual = byName.get(target.name.toUpperCase());
+    if (!actual) { issues.push('Missing ' + standard + ' standard layer: ' + target.name + '.'); continue; }
+    if (actual.color.toLowerCase() !== target.color.toLowerCase()) issues.push(target.name + ' colour does not match the ' + standard + ' profile.');
+    if (actual.lineType !== target.lineType) issues.push(target.name + ' linetype does not match the ' + standard + ' profile.');
+    if (Math.abs(actual.lineWeightMm - target.lineWeightMm) > 0.001) issues.push(target.name + ' lineweight does not match the ' + standard + ' profile.');
+  }
+  return issues;
+}
