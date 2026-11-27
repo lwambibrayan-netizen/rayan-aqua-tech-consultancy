@@ -1,0 +1,95 @@
+import type { WaterCadComponent, WaterCadDocument, WaterPoint } from './water-cad';
+
+export type TerrainGrid = {
+  width: number;
+  height: number;
+  originX: number;
+  originY: number;
+  cellSizeX: number;
+  cellSizeY: number;
+  /** Row-major elevations in metres; null represents NoData. */
+  elevationsM: Array<number | null>;
+  crs: string;
+  verticalDatum: string;
+};
+export type GroundProfileSample = { chainageM: number; x: number; y: number; groundLevelM: number | null };
+export type TerrainIssue = { componentId: string; severity: 'error' | 'warning'; code: string; message: string };
+
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+function validateTerrain(grid: TerrainGrid): void {
+  if (!Number.isInteger(grid.width) || !Number.isInteger(grid.height) || grid.width < 2 || grid.height < 2 ||
+      !finite(grid.originX) || !finite(grid.originY) || !finite(grid.cellSizeX) || !finite(grid.cellSizeY) ||
+      grid.cellSizeX <= 0 || grid.cellSizeY <= 0 || grid.elevationsM.length !== grid.width * grid.height) {
+    throw new Error('Terrain grid needs at least 2 × 2 cells, positive cell sizes and exactly width × height elevations.');
+  }
+  if (grid.elevationsM.some(value => value !== null && !finite(value))) throw new Error('Terrain elevations must be finite metres or null NoData.');
+}
+export function sampleTerrainElevation(grid: TerrainGrid, x: number, y: number): number | null {
+  validateTerrain(grid);
+  if (!finite(x) || !finite(y)) throw new Error('Terrain sample coordinates must be finite.');
+  const gx = (x - grid.originX) / grid.cellSizeX;
+  const gy = (y - grid.originY) / grid.cellSizeY;
+  if (gx < 0 || gy < 0 || gx > grid.width - 1 || gy > grid.height - 1) return null;
+  const x0 = Math.min(Math.floor(gx), grid.width - 2), y0 = Math.min(Math.floor(gy), grid.height - 2);
+  const tx = gx - x0, ty = gy - y0;
+  const at = (col: number, row: number) => grid.elevationsM[row * grid.width + col];
+  const values = [at(x0,y0), at(x0+1,y0), at(x0,y0+1), at(x0+1,y0+1)];
+  if (values.some(value => value === null)) return null;
+  const [a,b,c,d] = values as number[];
+  return a * (1-tx) * (1-ty) + b * tx * (1-ty) + c * (1-tx) * ty + d * tx * ty;
+}
+function segmentLength(a: WaterPoint, b: WaterPoint): number { return Math.hypot(b.x-a.x,b.y-a.y); }
+export function sampleGroundProfile(grid: TerrainGrid, route: WaterPoint[], spacingM = 5): GroundProfileSample[] {
+  validateTerrain(grid);
+  if (route.length < 2 || !finite(spacingM) || spacingM <= 0) throw new Error('Ground profile needs at least two route points and positive sample spacing.');
+  const result: GroundProfileSample[] = [];
+  let chainage = 0;
+  for (let i=1;i<route.length;i++) {
+    const a=route[i-1], b=route[i], length=segmentLength(a,b);
+    if (!finite(a.x)||!finite(a.y)||!finite(b.x)||!finite(b.y)||length<=0) throw new Error('Route vertices must be finite and consecutive vertices must be distinct.');
+    const count=Math.max(1,Math.ceil(length/spacingM));
+    for(let j=0;j<count;j++) {
+      if(i>1 && j===0) continue;
+      const t=j/count, x=a.x+(b.x-a.x)*t, y=a.y+(b.y-a.y)*t;
+      result.push({chainageM:chainage+length*t,x,y,groundLevelM:sampleTerrainElevation(grid,x,y)});
+    }
+    chainage+=length;
+  }
+  const last=route[route.length-1];
+  result.push({chainageM:chainage,x:last.x,y:last.y,groundLevelM:sampleTerrainElevation(grid,last.x,last.y)});
+  return result;
+}
+/** Applies sampled ground and a specified crown cover to every pipe vertex.
+ * The pipe invert and centreline are derived independently from ground level. */
+export function applyTerrainToPipe(pipe: WaterCadComponent, grid: TerrainGrid, coverDepthM: number, invertOffsetM = 0): WaterCadComponent {
+  if(pipe.kind!=='pipe'||pipe.geometry.length<2) throw new Error('Terrain routing requires a pipe with at least two vertices.');
+  if(!finite(coverDepthM)||coverDepthM<0||!finite(invertOffsetM)) throw new Error('Cover depth must be non-negative and invert offset finite.');
+  const od=(pipe.properties.externalDiameterMm??pipe.properties.nominalDiameterMm??0)/1000;
+  if(!(od>0)) throw new Error('Set a positive external or nominal pipe diameter before terrain routing.');
+  const geometry=pipe.geometry.map(point=>{
+    const ground=sampleTerrainElevation(grid,point.x,point.y);
+    if(ground===null) throw new Error('Terrain contains NoData or route is outside the terrain extent at '+point.x+', '+point.y+'.');
+    const invert=ground-coverDepthM-od+invertOffsetM;
+    return {...point,groundLevelM:ground,invertLevelM:invert,z:invert+od/2};
+  });
+  const start=geometry[0], end=geometry[geometry.length-1];
+  return {...pipe,geometry,properties:{...pipe.properties,groundStartM:start.groundLevelM,groundEndM:end.groundLevelM,invertInletM:start.invertLevelM,invertOutletM:end.invertLevelM,coverDepthM}};
+}
+export function buildTerrainIssues(document: WaterCadDocument, minimumCoverM = 0.9, maximumCoverM = 3): TerrainIssue[] {
+  if(!finite(minimumCoverM)||!finite(maximumCoverM)||minimumCoverM<0||maximumCoverM<=minimumCoverM) throw new Error('Terrain cover limits are invalid.');
+  const issues:TerrainIssue[]=[];
+  for(const pipe of document.components.filter(c=>c.kind==='pipe')) {
+    const od=(pipe.properties.externalDiameterMm??pipe.properties.nominalDiameterMm??0)/1000;
+    pipe.geometry.forEach((point,index)=>{
+      if(!finite(point.groundLevelM)||!finite(point.invertLevelM)||!(od>0)) {
+        issues.push({componentId:pipe.id,severity:'warning',code:'TERRAIN_LEVELS_MISSING',message:'Pipe vertex '+(index+1)+' needs surveyed ground, invert and a valid outside diameter.'});
+        return;
+      }
+      const cover=point.groundLevelM-(point.invertLevelM+od);
+      if(cover<0) issues.push({componentId:pipe.id,severity:'error',code:'PIPE_ABOVE_GROUND',message:'Pipe crown is '+Math.abs(cover).toFixed(2)+' m above ground at vertex '+(index+1)+'.'});
+      else if(cover<minimumCoverM) issues.push({componentId:pipe.id,severity:'warning',code:'INSUFFICIENT_COVER',message:'Pipe cover '+cover.toFixed(2)+' m is below '+minimumCoverM.toFixed(2)+' m at vertex '+(index+1)+'.'});
+      else if(cover>maximumCoverM) issues.push({componentId:pipe.id,severity:'warning',code:'EXCESSIVE_COVER',message:'Pipe cover '+cover.toFixed(2)+' m exceeds '+maximumCoverM.toFixed(2)+' m at vertex '+(index+1)+'.'});
+    });
+  }
+  return issues;
+}
