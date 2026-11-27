@@ -153,6 +153,7 @@ test('engineer opens a project, verifies precision drafting, saves and opens 3D'
   await ribbonContent.getByRole('button', { name: 'Radius' }).click();
   await expect(page.locator('.aquacad-shell .alert').first()).toContainText(/Circle selected: click the label position/);
   await cadCanvas.click({ position: { x: 190, y: 145 } });
+  console.log('CAD radial-dimension status:', await page.locator('.aquacad-shell .alert').first().innerText());
   await expect(page.locator('.aquacad-shell .alert').first()).toContainText(/Radius dimension placed/);
   await ribbonContent.getByRole('button', { name: 'Diameter' }).click();
   await cadCanvas.click({ position: { x: 195, y: 160 } });
