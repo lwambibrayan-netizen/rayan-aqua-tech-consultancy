@@ -336,6 +336,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [revisionDraft, setRevisionDraft] = useState({ revision: '', date: new Date().toISOString().slice(0,10), description: '', drawnBy: '', checkedBy: '', approvedBy: '', status: 'FOR REVIEW' as const });
   const [newLayerName, setNewLayerName] = useState('');
   const [libraryBlockName, setLibraryBlockName] = useState(ENGINEERING_BLOCK_LIBRARY[0].name);
+  const [libraryRotationDeg, setLibraryRotationDeg] = useState(0);
+  const [libraryPlacementActive, setLibraryPlacementActive] = useState(false);
   const [engineeringAudit, setEngineeringAudit] = useState<EngineeringDrawingAudit | null>(null);
   const [paperLayouts, setPaperLayouts] = useState<PaperLayout[]>(() => initialData?.paperLayouts || []);
   const [selectedWaterId, setSelectedWaterId] = useState('');
@@ -539,6 +541,12 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         setMessage('Leader annotation placed.');
       }
       setDraftTool('none'); setAnnotationDraft([]); return;
+    }
+    if (libraryPlacementActive) {
+      const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
+      const resolved = resolveDraftPoint(event.currentTarget, raw);
+      insertEngineeringBlock(resolved.point);
+      return;
     }
     if (activeWaterTool) {
       const raw = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
@@ -804,14 +812,14 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setMessage('Selected CAD entity deleted.');
   }
 
-  function insertEngineeringBlock() {
+  function insertEngineeringBlock(atDrawingPoint?: Point2D) {
     if (!calibratedMetresPerUnit) { setMessage('Calibrate the drawing from a verified real length before inserting engineering objects at true scale.'); return; }
     try {
       const block = getEngineeringBlock(libraryBlockName);
-      const centre = { x: viewBox.x + viewBox.width / 2, y: viewBox.y + viewBox.height / 2 };
-      const atMetres = { x: centre.x * calibratedMetresPerUnit, y: centre.y * calibratedMetresPerUnit };
+      const placement = atDrawingPoint || { x: viewBox.x + viewBox.width / 2, y: viewBox.y + viewBox.height / 2 };
+      const atMetres = { x: placement.x * calibratedMetresPerUnit, y: placement.y * calibratedMetresPerUnit };
       const targetLayer = block.category === 'valve' ? 'WATER_VALVE' : block.category === 'structure' ? 'WATER_STRUCTURE' : block.category === 'pipework' ? 'WATER_PIPE' : 'WATER_FITTING';
-      const insert: BlockInsert = { blockName: block.name, at: { x: atMetres.x * 1000, y: atMetres.y * 1000 }, rotationDeg: 0, scaleX: 1, scaleY: 1, layer: targetLayer, properties: { ...block.defaultProperties } };
+      const insert: BlockInsert = { blockName: block.name, at: { x: atMetres.x * 1000, y: atMetres.y * 1000 }, rotationDeg: libraryRotationDeg, scaleX: 1, scaleY: 1, layer: targetLayer, properties: { ...block.defaultProperties } };
       const primitives = instantiateEngineeringBlock(insert);
       const toDrawing = (point: { x: number; y: number }) => ({ x: point.x / 1000 / calibratedMetresPerUnit, y: point.y / 1000 / calibratedMetresPerUnit });
       const newShapes: Shape[] = primitives.map(primitive => {
@@ -827,7 +835,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         setWaterCad(current => ({ ...current, components: [...current.components, component] }));
         setSelectedWaterId(id);
       }
-      setMessage(block.name + ' inserted at calibrated scale. Review position, orientation and engineering properties before design use.');
+      setLibraryPlacementActive(false);
+      setMessage(block.name + ' inserted at calibrated scale and ' + libraryRotationDeg + '° rotation. Review position, orientation and engineering properties before design use.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Engineering object could not be inserted.'); }
   }
 
@@ -1267,7 +1276,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <select value={libraryBlockName} onChange={event => setLibraryBlockName(event.target.value)} style={{ minWidth: 210, padding: 7 }}>
             {ENGINEERING_BLOCK_LIBRARY.map(block => <option key={block.name} value={block.name}>{block.name.replaceAll('_', ' ')} · {block.category}</option>)}
           </select>
-          <button className="secondary-button" onClick={insertEngineeringBlock} disabled={!calibratedMetresPerUnit}>Insert at drawing centre</button>
+          <label>Rotation (degrees) <input type="number" step="1" value={libraryRotationDeg} onChange={event => setLibraryRotationDeg(Number(event.target.value)||0)} style={{width:75}}/></label>
+          <button className={libraryPlacementActive ? "primary-button" : "secondary-button"} onClick={() => { if (!calibratedMetresPerUnit) { setMessage('Calibrate the drawing before placing engineering objects.'); return; } setLibraryPlacementActive(value => !value); setMessage(libraryPlacementActive ? 'Object placement cancelled.' : 'Click a point in the drawing to place the selected engineering object.'); }} disabled={!calibratedMetresPerUnit}>{libraryPlacementActive ? 'Cancel placement' : 'Place object · click drawing'}</button>
+          <button className="secondary-button" onClick={() => insertEngineeringBlock()} disabled={!calibratedMetresPerUnit}>Insert at drawing centre</button>
           {!calibratedMetresPerUnit && <span className="muted" style={{ fontSize: 11 }}>Scale calibration required</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
