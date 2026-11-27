@@ -6,7 +6,7 @@ const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
 const num=(v:string|undefined,fallback=0)=>{const n=Number(v);return v!==undefined&&Number.isFinite(n)?n:fallback;};
 const safe=(s:string)=>s.replace(/[^A-Za-z0-9_.-]/g,'_').slice(0,31)||'ID';
 type Row={section:string; values:string[]; line:number};
-const supported=new Set(['JUNCTIONS','RESERVOIRS','TANKS','PIPES','PUMPS','VALVES','COORDINATES','CURVES','OPTIONS','DEMANDS','PATTERNS','EMITTERS','VERTICES','TIMES']);
+const supported=new Set(['JUNCTIONS','RESERVOIRS','TANKS','PIPES','PUMPS','VALVES','COORDINATES','CURVES','OPTIONS','STATUS','DEMANDS','PATTERNS','EMITTERS','VERTICES','TIMES']);
 export function importEpanetInp(input:string, verticalDatum='EPANET imported elevations'):EpanetImportResult {
   const warnings:string[]=[];
   const rows:Row[]=[]; let section='';
@@ -40,6 +40,12 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
   const headlossFormula=headlossRaw==='D-W'?'D-W':headlossRaw==='C-M'?'C-M':'H-W';
   const times=(key:string,fallback:number)=>{const parts=key.split(' ');const row=bySection('TIMES').find(r=>r.values.slice(0,parts.length).join(' ').toUpperCase()===key);return parseTime(row?.values[parts.length],fallback);};
   const epanetTimes={durationSeconds:times('DURATION',0),hydraulicStepSeconds:times('HYDRAULIC TIMESTEP',3600),patternStepSeconds:times('PATTERN TIMESTEP',3600),patternStartSeconds:times('PATTERN START',0),reportStepSeconds:times('REPORT TIMESTEP',3600),reportStartSeconds:times('REPORT START',0)};
+  const linkStatuses=new Map<string,'OPEN'|'CLOSED'>();
+  bySection('STATUS').forEach(row=>{
+    const status=(row.values[1]??'').toUpperCase();
+    if(status==='OPEN'||status==='CLOSED')linkStatuses.set(safe(row.values[0]),status);
+    else if(row.values.length>1)warnings.push('Unsupported numeric/active link status for '+row.values[0]+' at line '+row.line+' was not preserved.');
+  });
   const patternMap=new Map<string,number[]>();
   bySection('PATTERNS').forEach(r=>{const id=safe(r.values[0]);const values=patternMap.get(id)??[];values.push(...r.values.slice(1).map(Number).filter(Number.isFinite));patternMap.set(id,values);});
   const nodes=new Map<string,WaterCadComponent>();
@@ -86,7 +92,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     const length=lengthToM(num(r.values[3]));const diameter=diameterToMm(num(r.values[4]));
     if(!(length>0)||!(diameter>0)){warnings.push('Pipe '+r.values[0]+' has invalid length or diameter and was skipped.');return;}
     const checkValve=(r.values[7]??'OPEN').toUpperCase()==='CV';
-    addLink(r.values[0],checkValve?'valve':'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),initialStatus:checkValve?undefined:((r.values[7]??'OPEN').toUpperCase()==='CLOSED'?'CLOSED':'OPEN'),valveType:checkValve?'check':undefined,description:'Imported from EPANET'},vertices.get(safe(r.values[0]))??[]);
+    addLink(r.values[0],checkValve?'valve':'pipe',r.values[1],r.values[2],diameter,{hydraulicLengthM:length,roughness:num(r.values[5],130),minorLossCoefficient:num(r.values[6]),initialStatus:checkValve?linkStatuses.get(safe(r.values[0])):((r.values[7]??linkStatuses.get(safe(r.values[0]))??'OPEN').toUpperCase()==='CLOSED'?'CLOSED':'OPEN'),valveType:checkValve?'check':undefined,description:'Imported from EPANET'},vertices.get(safe(r.values[0]))??[]);
   });
   const pumpCurves=new Map<string,Array<{flowM3h:number;headM:number}>>();
   bySection('CURVES').forEach(r=>{if(r.values.length>=3){const id=safe(r.values[0]);const points=pumpCurves.get(id)??[];points.push({flowM3h:flowToM3h(num(r.values[1])),headM:headToM(num(r.values[2]))});pumpCurves.set(id,points);}});
@@ -100,6 +106,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     const points=curveId?pumpCurves.get(safe(curveId)):undefined;
     addLink(r.values[0],'pump',r.values[1],r.values[2],0,{
       description:'Imported from EPANET pump link',
+      initialStatus:linkStatuses.get(safe(r.values[0])),
       epanetPumpCurveId:curveId,
       pumpCurvePoints:points,
       pumpPowerKw:powerIndex>=0?num(r.values[powerIndex+1])*(usUnits?0.745699872:1):undefined,
@@ -117,7 +124,7 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     if(r.values.length<5){warnings.push('Malformed valve at line '+r.line+'.');return;}
     const type=r.values[4].toUpperCase();const map:Record<string,WaterCadComponent['properties']['valveType']>={PRV:'PRV',PSV:'PSV',PBV:'PBV',FCV:'FCV',TCV:'TCV',GPV:'GPV',PCV:'PCV'};
     const rawSetting=num(r.values[5]);const setting=type==='FCV'?flowToM3h(rawSetting)*1000/3600:['PRV','PSV','PBV'].includes(type)?pressureToM(rawSetting):rawSetting;
-    addLink(r.values[0],'valve',r.values[1],r.values[2],diameterToMm(num(r.values[3])),{valveType:map[type]??'control',valveSetting:setting,description:'Imported EPANET '+type+' valve'});
+    addLink(r.values[0],'valve',r.values[1],r.values[2],diameterToMm(num(r.values[3])),{valveType:map[type]??'control',valveSetting:setting,initialStatus:linkStatuses.get(safe(r.values[0])),description:'Imported EPANET '+type+' valve'});
     if(!map[type]||type==='GPV'||type==='PCV')warnings.push('Valve '+r.values[0]+' type '+type+' requires a supported curve/engine mapping review before re-export.');
   });
   const referenced=new Set(rows.filter(r=>['PIPES','PUMPS','VALVES'].includes(r.section)).flatMap(r=>r.values.slice(1,3)).map(safe));
