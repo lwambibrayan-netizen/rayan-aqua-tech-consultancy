@@ -1768,7 +1768,7 @@ button:disabled {
 .aquacad-document-tab.active{background:#1e2630;color:#f1f5f9;border-color:#1e2630}
 .aquacad-document-tab span{margin-left:12px;color:#aeb8c3}
 .aquacad-document-add{width:30px;padding:2px;background:#fff}
-.aquacad-shell>.panel:not(:has(.aquacad-drawing-stage)){display:none!important}
+/* Existing tool panels are retained below the new CAD workspace. */
 .aquacad-shell>.panel:has(.aquacad-drawing-stage){order:0!important;flex:1 1 auto!important;min-height:0!important;height:auto!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:hidden!important;background:#1e2630!important}
 .aquacad-shell>.panel:has(.aquacad-drawing-stage)>div[style],.aquacad-shell>.panel:has(.aquacad-drawing-stage)>p{display:none!important}
 .aquacad-shell>.panel:has(.aquacad-drawing-stage) .aquacad-dock{width:205px!important;min-width:205px!important;flex:0 0 205px!important;max-height:none!important;overflow:auto!important}
@@ -1796,4 +1796,22 @@ button:disabled {
  .aquacad-titlelockup small{display:none!important}
  .aquacad-quick-access button{padding:2px 4px!important;font-size:9px!important}
  .aquacad-ribbon-tabs button{padding:5px 9px!important}
+}
+
+/* AquaCAD integration: keep every existing engineering/CAD panel reachable.
+   Only the canvas workspace is compact; tool libraries and drawing controls
+   remain available beneath the command/status area instead of being hidden. */
+.aquacad-shell{height:auto!important;min-height:620px!important;overflow:visible!important}
+.aquacad-shell>.panel:not(:has(.aquacad-drawing-stage)){
+ display:block!important;flex:0 0 auto!important;order:3!important;
+ margin:8px 0 0!important;padding:12px!important;
+ border:1px solid #cfd6df!important;border-radius:5px!important;
+ background:#fff!important;color:#1c2530!important;overflow:visible!important
+}
+.aquacad-shell>.panel:not(:has(.aquacad-drawing-stage)) h3{margin-top:4px!important;color:#1c2530!important}
+.aquacad-shell>.panel:has(.aquacad-drawing-stage){
+ flex:0 0 min(62vh,680px)!important;height:min(62vh,680px)!important;min-height:460px!important
+}
+@media(max-width:760px){
+ .aquacad-shell>.panel:has(.aquacad-drawing-stage){flex-basis:58vh!important;height:58vh!important;min-height:390px!important}
 }
