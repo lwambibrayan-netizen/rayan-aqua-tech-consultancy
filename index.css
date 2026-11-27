@@ -1595,3 +1595,48 @@ button:disabled {
 .aquacad-fullscreen .aquacad-quickbar{position:sticky;top:165px;z-index:3}
 .aquacad-shell .panel{border-radius:5px;box-shadow:0 1px 3px rgba(25,45,60,.06)}
 @media(max-width:760px){.aquacad-titlebar{padding:7px 9px}.aquacad-project-label{display:none}.aquacad-ribbon-tabs{padding:0 4px}.aquacad-ribbon-tabs button{padding:9px 11px}.aquacad-ribbon-content{padding:7px}.aquacad-ribbon-groups{min-height:82px}.aquacad-fullscreen{padding:0 5px 8px}.aquacad-fullscreen .aquacad-ribbon{top:48px}.aquacad-fullscreen .aquacad-quickbar{top:150px}}
+
+
+/* AquaCAD compact professional ribbon and command/status dock */
+.aquacad-shell{border-radius:3px;box-shadow:none;background:#dce2e7;min-height:0}
+.aquacad-titlebar{min-height:34px;padding:4px 9px;background:#263746}
+.aquacad-mark{width:23px;height:23px;font-size:13px}
+.aquacad-titlelockup{gap:7px}.aquacad-titlelockup strong{font-size:12px}.aquacad-titlelockup small{font-size:9px}
+.aquacad-window-button{padding:4px 8px;font-size:10px}
+.aquacad-ribbon{background:#e9edf0}
+.aquacad-ribbon-tabs{min-height:27px;padding:0 6px;background:#d3dbe1;gap:0}
+.aquacad-ribbon-tabs button{padding:5px 11px;font-size:10px;border-bottom-width:2px;gap:4px}
+.aquacad-ribbon-content{padding:4px 7px 5px}
+.aquacad-ribbon-groups{min-height:49px;gap:5px;overflow-x:auto;align-items:stretch}
+.aquacad-ribbon-group{gap:3px;padding:1px 7px 3px 2px}
+.aquacad-ribbon-group>strong{font-size:8px;letter-spacing:.45px}
+.aquacad-ribbon-group>div{gap:3px;flex-wrap:nowrap}
+.aquacad-ribbon-group button,.aquacad-ribbon-group select{min-height:25px;padding:4px 6px;border-radius:2px;font-size:9px;font-weight:500}
+.aquacad-ribbon-group button svg{width:12px;height:12px}
+.aquacad-quickbar{padding:3px 8px;gap:11px;font-size:8px;background:#e3e8ec}
+.aquacad-ribbon>div:nth-child(4){display:none!important}
+.aquacad-commandbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,34%);align-items:center;gap:8px;padding:5px 8px;background:#273744;color:#e6edf2;border-top:1px solid #17232c}
+.aquacad-status-controls{display:flex;align-items:center;gap:5px;min-width:0;overflow-x:auto;white-space:nowrap}
+.aquacad-status-label{font-size:8px;letter-spacing:.8px;color:#a9bac6}
+.aquacad-status-controls>strong{font:600 9px 'DM Mono',monospace;color:#fff}
+.aquacad-status-separator{height:17px;border-left:1px solid #526575;margin:0 3px}
+.aquacad-status-controls button{border:1px solid #526575;background:#354958;color:#dce6ed;border-radius:2px;padding:4px 6px;font:8px 'DM Mono',monospace}
+.aquacad-status-controls button.is-on{background:#176e67;border-color:#45a69b;color:#fff}
+.aquacad-status-setting{display:flex;align-items:center;gap:3px;color:#a9bac6;font:8px 'DM Mono',monospace}
+.aquacad-status-setting input{width:43px;padding:3px;border:1px solid #526575;background:#172630;color:#fff;font-size:9px}
+.aquacad-status-setting select{max-width:52px;padding:3px;border:1px solid #526575;background:#172630;color:#fff;font-size:9px}
+.aquacad-status-count{margin-left:auto;color:#a9bac6;font:8px 'DM Mono',monospace}
+.aquacad-command-input{display:flex;align-items:center;gap:7px;min-width:0;padding:3px 7px;border:1px solid #526575;border-radius:2px;background:#172630;color:#a9bac6}
+.aquacad-command-input>span{font-size:15px;line-height:1}
+.aquacad-command-input input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#fff;font-size:10px}
+.aquacad-command-input input::placeholder{color:#91a2ae}
+.aquacad-command-input kbd{padding:2px 4px;border:1px solid #526575;border-radius:2px;color:#d8e2e9;font-size:8px}
+.aquacad-fullscreen{padding:0 5px 5px}
+@media(max-width:760px){
+ .aquacad-commandbar{grid-template-columns:1fr;gap:4px}
+ .aquacad-status-controls{padding-bottom:2px}
+ .aquacad-command-input{min-height:29px}
+ .aquacad-ribbon-tabs button{padding:5px 8px}
+ .aquacad-ribbon-groups{min-height:44px}
+ .aquacad-ribbon-group>div{flex-wrap:nowrap}
+}
