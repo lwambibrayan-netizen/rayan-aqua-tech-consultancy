@@ -1,5 +1,5 @@
 import { createWaterComponent, type WaterCadDocument, type WaterCadComponent, type WaterComponentKind } from './water-cad';
-import { getWaterPorts, type NetworkDocument } from './water-network-engineering';
+import { getWaterPorts, type EpanetIdMap, type NetworkDocument } from './water-network-engineering';
 
 export type EpanetImportResult = { document: NetworkDocument; warnings: string[] };
 const finite=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n);
@@ -165,7 +165,7 @@ export function epanetSimulationToHydraulicSeries(simulation:unknown):HydraulicR
     links:links.filter((link:any)=>link&&typeof link.id==='string').map((link:any)=>({id:link.id,...(Number.isFinite(Number(link.flow))?{flowLps:Number(link.flow)}:{}),...(Number.isFinite(Number(link.velocity))?{velocityMs:Number(link.velocity)}:{}),...(Number.isFinite(Number(link.headloss))?{headlossM:Number(link.headloss)}:{}),...(typeof link.status==='string'?{status:link.status}:{})}))
   }];
 }
-export function mergeEpanetRoundTrip(base:WaterCadDocument,imported:WaterCadDocument):WaterCadDocument {
+export function mergeEpanetRoundTrip(base:WaterCadDocument,imported:WaterCadDocument,idMap:EpanetIdMap[]=[]):WaterCadDocument {
   const original=new Map(base.components.map(c=>[c.id,c]));
   const hydraulicKinds=new Set<WaterComponentKind>(['pipe','pump','valve','junction','source','tank','reservoir']);
   const importedIds=new Set(imported.components.map(c=>c.id));
@@ -211,12 +211,15 @@ export function mergeEpanetRoundTrip(base:WaterCadDocument,imported:WaterCadDocu
     });
   }
   const importedNodes=imported.components.filter(component=>['junction','source','tank','reservoir'].includes(component.kind));
-  const matchedNodes=importedNodes.filter(component=>original.has(component.id));
-  const matchedNetwork=matchedNodes.length>0&&matchedNodes.every(component=>{
-    const prior=original.get(component.id);
-    const a=prior?.geometry[0],b=component.geometry[0];
-    return !!a&&!!b&&Math.hypot(a.x-b.x,a.y-b.y)<0.001;
+  const cadIdByEpanetId=new Map(idMap.filter(item=>item.kind==='node').map(item=>[item.epanetId,item.cadId]));
+  const matchedNodes=importedNodes.filter(component=>{
+    const prior=original.get(component.id)??original.get(cadIdByEpanetId.get(component.id)??'');
+    const b=component.geometry[0];
+    if(!prior||!b)return false;
+    const candidates=[...prior.geometry,...getWaterPorts(prior).map(port=>port.point)];
+    return candidates.some(a=>Math.hypot(a.x-b.x,a.y-b.y)<0.001);
   });
+  const matchedNetwork=matchedNodes.length>0&&matchedNodes.length===importedNodes.length;
   return {
     ...base,...imported,components,connections,
     horizontalCrs:matchedNetwork&&base.horizontalCrs?base.horizontalCrs:imported.horizontalCrs,
