@@ -67,6 +67,27 @@ R1 0 0
 J1 100 0
 J2 180 0
 [END]`;
+ it('round-trips a CAD hydraulic network through EPANET INP with node elevations, pipe properties and stable IDs',()=>{
+  const reservoir=createWaterComponent('reservoir','RES-01',0,0);
+  reservoir.properties.hydraulicHeadM=112;
+  const junction=createWaterComponent('junction','JUNC-01',100,0);
+  junction.properties.hydraulicElevationM=91.5;
+  junction.properties.flowM3h=36;
+  const pipe=createWaterComponent('pipe','MAIN-01',0,0);
+  pipe.geometry=[{x:0,y:0},{x:45,y:12},{x:100,y:0}];
+  pipe.fromNodeId='RES-01';pipe.toNodeId='JUNC-01';
+  pipe.properties.internalDiameterMm=200;pipe.properties.hydraulicLengthM=110;pipe.properties.roughness=140;
+  const cad:NetworkDocument={schemaVersion:1,units:'m',verticalDatum:'AHD',horizontalCrs:'EPSG:32737',horizontalUnits:'m',components:[reservoir,junction,pipe]};
+  const exported=exportWaterNetworkToEpanet(cad);
+  expect(exported.warnings.filter(w=>w.includes('omitted'))).toHaveLength(0);
+  const imported=importEpanetInp(exported.input,'AHD').document;
+  expect(imported.components.find(c=>c.id==='RES-01')?.properties.hydraulicHeadM).toBe(112);
+  expect(imported.components.find(c=>c.id==='JUNC-01')?.properties.hydraulicElevationM).toBe(91.5);
+  expect(imported.components.find(c=>c.id==='JUNC-01')?.properties.flowM3h).toBe(36);
+  expect(imported.components.find(c=>c.id==='MAIN-01')?.properties.hydraulicLengthM).toBe(110);
+  expect(imported.components.find(c=>c.id==='MAIN-01')?.properties.internalDiameterMm).toBe(200);
+  expect(imported.components.find(c=>c.id==='MAIN-01')?.geometry).toHaveLength(3);
+ });
  it('imports nodes and links while preserving elevations, geometry and hydraulic lengths',()=>{
   const result=importEpanetInp(inp,'AHD');
   const p=result.document.components.find(c=>c.id==='P1')!;
