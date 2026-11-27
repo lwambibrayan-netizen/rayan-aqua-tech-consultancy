@@ -1601,6 +1601,13 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     <div className={`aquacad-shell ${isFullscreen ? 'aquacad-fullscreen' : ''}`}>
       <div className="aquacad-titlebar">
         <div className="aquacad-titlelockup"><span className="aquacad-mark">A</span><div><strong>AquaCAD</strong><small>RayanAqua · Project drawing environment</small></div></div>
+        <div className="aquacad-quick-access" aria-label="Quick access toolbar">
+          <button title="Open / import drawing" onClick={()=>fileRef.current?.click()}>Open</button>
+          <button title="Save drawing" onClick={saveDrawing} disabled={busy}>Save</button>
+          <button title="Undo" onClick={()=>setHistory(current=>undoHistory(current))} disabled={!history.past.length}>↶</button>
+          <button title="Redo" onClick={()=>setHistory(current=>redoHistory(current))} disabled={!history.future.length}>↷</button>
+          <button title="Plot / PDF" onClick={()=>exportSheetSvg(true)}>Plot</button>
+        </div>
         <div className="aquacad-title-actions">
           <span className="aquacad-project-label">PROJECT DRAWING</span>
           <button className="aquacad-window-button" onClick={toggleCadFullscreen} title={isFullscreen ? 'Exit full screen' : 'Maximize CAD workspace'} aria-label={isFullscreen ? 'Restore CAD workspace' : 'Maximize CAD workspace'}>
@@ -2244,6 +2251,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <label className="aquacad-status-setting">UNITS <select value={units} disabled={!calibratedMetresPerUnit} onChange={event => setUnits(event.target.value)}><option value="m">m</option><option value="mm">mm</option></select></label>
           <span className="aquacad-status-count">{shapes.length} ENTITIES</span>
         </div>
+        <div className="aquacad-command-history">{message || 'Command ready. Select a ribbon tool or enter a command.'}</div>
         <form className="aquacad-command-input" onSubmit={event => {
           event.preventDefault();
           const cmd = commandLine.trim().toLowerCase();
