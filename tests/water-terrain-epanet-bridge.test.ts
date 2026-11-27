@@ -184,6 +184,9 @@ P1 CLOSED
 DURATION 12:00
 HYDRAULIC TIMESTEP 0:30
 PATTERN TIMESTEP 1:00
+PATTERN START 0:30
+REPORT TIMESTEP 0:15
+REPORT START 0:05
 [COORDINATES]
 R1 0 0
 J1 100 0
@@ -200,6 +203,9 @@ PAT1 1 1.2
   expect(pipe.properties.initialStatus).toBe('CLOSED');
   expect(imported.document.epanetTimes?.durationSeconds).toBe(43200);
   expect(imported.document.epanetTimes?.hydraulicStepSeconds).toBe(1800);
+  expect(imported.document.epanetTimes?.patternStartSeconds).toBe(1800);
+  expect(imported.document.epanetTimes?.reportStepSeconds).toBe(900);
+  expect(imported.document.epanetTimes?.reportStartSeconds).toBe(300);
   const exported=exportWaterNetworkToEpanet(imported.document).input;
   expect(exported).toContain('HEADLOSS D-W');
   expect(exported).toContain('DURATION 12:00');
