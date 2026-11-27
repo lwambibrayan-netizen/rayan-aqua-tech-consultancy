@@ -39,6 +39,9 @@ export type WaterEngineeringProperties = {
   valveSetting?: number;
   pumpDutyFlowM3h?: number;
   pumpDutyHeadM?: number;
+  /** Imported EPANET pump curve points, retained in m³/h and metres of head. */
+  pumpCurvePoints?: Array<{ flowM3h: number; headM: number }>;
+  epanetPumpCurveId?: string;
   pumpEfficiencyPct?: number;
   tankType?: 'ground' | 'elevated' | 'underground';
   tankCapacityM3?: number;
