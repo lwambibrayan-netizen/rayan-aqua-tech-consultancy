@@ -42,9 +42,9 @@ describe('water network engineering', () => {
   it('connects fitting ports only within the declared tolerance and prevents double connections', () => {
     const tee = createWaterComponent('tee', 'T-1', 0, 0);
     const pipeA = createWaterComponent('pipe', 'P-A', -5, 0);
-    pipeA.geometry = [{ x: -0.5, y: 0 }, { x: 0, y: 0 }];
+    pipeA.geometry = [{ x: -1, y: 0 }, { x: -0.5, y: 0 }];
     const pipeB = createWaterComponent('pipe', 'P-B', 0, 0);
-    pipeB.geometry = [{ x: 0, y: 0 }, { x: 0.5, y: 0 }];
+    pipeB.geometry = [{ x: -0.5, y: 0 }, { x: 0, y: 0 }];
     const doc: NetworkDocument = { schemaVersion: 1, units: 'm', verticalDatum: 'test', components: [tee, pipeA, pipeB] };
     const joined = connectWaterPorts(doc, 'P-A:P2', 'T-1:P1', 0);
     expect(joined.connections).toHaveLength(1);
