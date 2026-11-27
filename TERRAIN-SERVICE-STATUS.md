@@ -15,6 +15,9 @@
 - The GIS workspace shows saved PyQGIS outputs and supports downloading them.
 - The Dockerfile now uses the same QGIS Server LTR runtime as the existing Railway service and mounts `/io/data` as persistent storage.
 - Hydraulic map overlays support pressure, flow, velocity and headloss, with a time-step selector using bounded EPANET simulation snapshots.
+- The PyQGIS processor exposes an authenticated project-scoped DEM-to-CAD terrain-grid operation. It resamples the projected Copernicus DEM to a bounded regular grid (maximum 96 × 96), stores metre elevations, projected CRS and the EGM2008 vertical datum, and archives the output under the user's project.
+- GIS now has a **Send DEM surface to CAD / 3D** action. It transfers the validated grid into the project's saved drawing document; CAD's 3D view uses terrain-derived buried pipe centreline elevations when the network CRS, metre units and vertical datum match the DEM. Explicit surveyed Z/invert values take precedence.
+- The PyQGIS self-test now validates DEM-grid dimensions, positive cell spacing and valid elevation samples in addition to profiles, contours and slope processing.
 - EPANET import/export now preserves unrecognised INP sections and unsupported control/rule blocks rather than silently dropping them.
 
 ## Deployment protection
