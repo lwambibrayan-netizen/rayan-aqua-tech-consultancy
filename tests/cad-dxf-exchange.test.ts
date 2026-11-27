@@ -29,4 +29,18 @@ describe('structured DXF exchange', () => {
     if (imported.annotations[1].kind === 'aligned' || imported.annotations[1].kind === 'linear') expect(imported.annotations[1].offsetM).toBeCloseTo(2);
     expect(imported.layerNames).toEqual(['PIPE','FITTING','BOUNDARY','TEXT','DIMENSIONS']);
   });
+
+  it('imports legacy POLYLINE/VERTEX sequences including bulge and closure', () => {
+    const legacy = ['0','SECTION','2','ENTITIES','0','POLYLINE','8','WATER_PIPE','70','1',
+      '0','VERTEX','10','0','20','0','42','0.25',
+      '0','VERTEX','10','10','20','0',
+      '0','VERTEX','10','10','20','10',
+      '0','SEQEND','0','ENDSEC','0','EOF'].join('\\n');
+    const result = importDraftingDxf(legacy);
+    expect(result.shapes).toHaveLength(1);
+    expect(result.shapes[0].type).toBe('polyline');
+    expect(result.shapes[0].layer).toBe('WATER_PIPE');
+    expect(result.shapes[0].points).toHaveLength(4);
+    expect(result.shapes[0].bulges?.[0]).toBe(0.25);
+  });
 });
