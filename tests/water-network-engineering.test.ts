@@ -30,6 +30,22 @@ describe('water network engineering', () => {
     expect(getWaterPorts(reducer)[1].diameterMm).toBe(110);
   });
 
+  it('uses exact persisted symbol ports for topology and snap connections', () => {
+    const doc = document();
+    const valve = createWaterComponent('valve', 'V-LIB', 10, 0);
+    valve.customPorts = [
+      { id: 'inlet', point: { x: 10, y: 0 }, role: 'inlet', diameterMm: 110 },
+      { id: 'outlet', point: { x: 10.2, y: 0 }, role: 'outlet', diameterMm: 110 },
+    ];
+    doc.components.push(valve);
+    const ports = getWaterPorts(valve);
+    expect(ports.map(port => port.id)).toEqual(['V-LIB:inlet', 'V-LIB:outlet']);
+    expect(ports[0].point).toEqual({ x: 10, y: 0 });
+    const connected = connectWaterPorts(doc, 'P-1:P2', 'V-LIB:inlet', 0.001);
+    expect(connected.connections).toHaveLength(1);
+    expect(connected.connections?.[0].aPortId).toBe('P-1:P2');
+  });
+
   it('builds circular bend, tee and reducer centreline geometry', () => {
     const bend = createWaterComponent('bend', 'B-1', 0, 0);
     const arc = buildBendCentreline(bend, 24);
