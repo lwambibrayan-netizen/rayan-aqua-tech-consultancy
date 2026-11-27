@@ -15,7 +15,9 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
     const header=line.match(/^\[([^\]]+)\]$/);
     if(header){section=header[1].toUpperCase();if(!supported.has(section)) warnings.push('Unsupported EPANET section ['+section+'] was not imported.');return;}
     if(!section||line.startsWith(';')) return;
-    rows.push({section,values:line.split(/\s+/),line:index+1});
+    const dataLine=line.split(';')[0].trim();
+    if(!dataLine)return;
+    rows.push({section,values:dataLine.split(/\s+/),line:index+1});
   });
   const bySection=(name:string)=>rows.filter(row=>row.section===name);
   const coordinates=new Map<string,{x:number;y:number}>();
