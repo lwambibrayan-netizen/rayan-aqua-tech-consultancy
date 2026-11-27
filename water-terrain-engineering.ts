@@ -37,7 +37,7 @@ export function sampleTerrainElevation(grid: TerrainGrid, x: number, y: number):
   const values = [at(x0,y0), at(x0+1,y0), at(x0,y0+1), at(x0+1,y0+1)];
   const weights=[(1-tx)*(1-ty),tx*(1-ty),(1-tx)*ty,tx*ty];
   if(values.some((value,index)=>value===null&&weights[index]>1e-12))return null;
-  return values.reduce((sum,value,index)=>sum+(value===null?0:value*weights[index]),0);
+  return values.reduce<number>((sum,value,index)=>sum+(value ?? 0)*weights[index],0);
 }
 function segmentLength(a: WaterPoint, b: WaterPoint): number { return Math.hypot(b.x-a.x,b.y-a.y); }
 export function sampleGroundProfile(grid: TerrainGrid, route: WaterPoint[], spacingM = 5): GroundProfileSample[] {
