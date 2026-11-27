@@ -151,7 +151,7 @@ export function exportDraftingDxf(shapes:DxfShape[], drafting:DraftingDocument, 
   for(const [index,layer] of exportLayers.entries()) out.push('0','LAYER','5',(21+index).toString(16).toUpperCase(),'100','AcDbSymbolTableRecord','100','AcDbLayerTableRecord','2',layer.name,'70',layer.locked?'4':'0','62',layer.visible? '7':'-7','420',String(parseInt(layer.color.slice(1),16)),'6',layer.lineType,'370',String(Math.round(layer.lineWeightMm*100)),'290',layer.plot?'1':'0');
   out.push('0','ENDTAB','0','ENDSEC','0','SECTION','2','ENTITIES');
   let nextEntityHandle=4096;
-  const emitEntity=(kind:string,values:(string|number[])[])=>entity(kind,values as (string|number)[],(nextEntityHandle++).toString(16).toUpperCase());
+  const emitEntity=(kind:string,values:(string|number)[])=>entity(kind,values,(nextEntityHandle++).toString(16).toUpperCase());
   for(const shape of shapes){
     const layer=shape.layer||'0';
     if(shape.type==='line') out.push(...emitEntity('LINE',['8',layer,'10',fmt(shape.points[0].x),'20',fmt(shape.points[0].y),'11',fmt(shape.points[1].x),'21',fmt(shape.points[1].y)]));
