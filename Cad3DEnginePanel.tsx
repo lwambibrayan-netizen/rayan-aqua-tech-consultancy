@@ -1421,7 +1421,17 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const polygon = [[ends[0].x + nx*d1/2, ends[0].y + ny*d1/2], [ends[1].x + nx*d2/2, ends[1].y + ny*d2/2], [ends[1].x - nx*d2/2, ends[1].y - ny*d2/2], [ends[0].x - nx*d1/2, ends[0].y - ny*d1/2]].map(q => q.join(',')).join(' ');
       return <g key={component.id} data-water-id={component.id}><polygon points={polygon} fill="#e4f4f2" stroke={stroke} strokeWidth={sw * 2} /><text x={p.x + 5} y={p.y - 8} fontSize={Math.max(viewBox.width / 90, 8)} fill={stroke}>{component.properties.tag}</text></g>;
     }
-    if (component.kind === 'pipe' && pts.length > 1) return <g key={component.id} data-water-id={component.id}><polyline points={pts.map(q=>q.x+','+q.y).join(' ')} fill="none" stroke={stroke} strokeWidth={sw*3} /><text x={p.x+5} y={p.y-6} fontSize={Math.max(viewBox.width/90,8)} fill={stroke}>{component.properties.tag}{hydraulicItem ? ' · ' + hydraulicItem.label : ''}</text></g>;
+    if (component.kind === 'pipe' && pts.length > 1) {
+      let flowArrow:string|null=null;
+      if(hydraulicItem?.direction&&hydraulicItem.direction!=='stagnant'){
+        const index=Math.max(0,Math.floor((pts.length-1)/2));
+        let a=pts[index],b=pts[Math.min(index+1,pts.length-1)];
+        if(hydraulicItem.direction==='reverse'){const swap=a;a=b;b=swap;}
+        const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy)||1,ux=dx/length,uy=dy/length,nx=-uy,ny=ux,size=Math.max(viewBox.width/180,6),mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2},tip={x:mid.x+ux*size,y:mid.y+uy*size},base={x:mid.x-ux*size*0.65,y:mid.y-uy*size*0.65};
+        flowArrow=[tip.x+','+tip.y,(base.x+nx*size*0.55)+','+(base.y+ny*size*0.55),(base.x-nx*size*0.55)+','+(base.y-ny*size*0.55)].join(' ');
+      }
+      return <g key={component.id} data-water-id={component.id}><polyline points={pts.map(q=>q.x+','+q.y).join(' ')} fill="none" stroke={stroke} strokeWidth={sw*3} />{flowArrow&&<polygon points={flowArrow} fill={stroke}/>}<text x={p.x+5} y={p.y-6} fontSize={Math.max(viewBox.width/90,8)} fill={stroke}>{component.properties.tag}{hydraulicItem ? ' · ' + hydraulicItem.label : ''}</text></g>;
+    }
     if (component.kind === 'tank' || component.kind === 'reservoir') return <g key={component.id} data-water-id={component.id}><circle cx={p.x} cy={p.y} r={12*sw} fill="#e4f4f2" stroke={stroke} strokeWidth={sw*2}/><text x={p.x+14*sw} y={p.y} fontSize={Math.max(viewBox.width/90,8)} fill={stroke}>{component.properties.tag}</text></g>;
     if (component.kind === 'pump') return <g key={component.id} data-water-id={component.id}><path d={`M ${p.x-10*sw} ${p.y-9*sw} L ${p.x+10*sw} ${p.y} L ${p.x-10*sw} ${p.y+9*sw} Z`} fill="#e4f4f2" stroke={stroke} strokeWidth={sw*2}/><text x={p.x+14*sw} y={p.y} fontSize={Math.max(viewBox.width/90,8)} fill={stroke}>{component.properties.tag}</text></g>;
     const symbol = component.kind === 'valve' ? <path d={`M ${p.x-9*sw} ${p.y-8*sw} L ${p.x} ${p.y} L ${p.x-9*sw} ${p.y+8*sw} M ${p.x+9*sw} ${p.y-8*sw} L ${p.x} ${p.y} L ${p.x+9*sw} ${p.y+8*sw}`} /> : <rect x={p.x-8*sw} y={p.y-8*sw} width={16*sw} height={16*sw} />;
