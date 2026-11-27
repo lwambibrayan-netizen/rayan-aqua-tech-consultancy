@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createWaterComponent, type WaterCadDocument } from '../water-cad';
 import { sampleTerrainElevation, sampleGroundProfile, samplePipeCentrelineElevation, applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, type TerrainGrid } from '../water-terrain-engineering';
-import { importEpanetInp, mergeEpanetRoundTrip } from '../water-epanet-bridge';
+import { epanetSimulationToHydraulicSeries, importEpanetInp, mergeEpanetRoundTrip } from '../water-epanet-bridge';
 import { exportWaterNetworkToEpanet, type NetworkDocument } from '../water-network-engineering';
 import { buildHydraulicOverlay } from '../water-hydraulic-overlays';
 
@@ -269,6 +269,23 @@ J1 100 0
   const network:NetworkDocument={schemaVersion:1,units:'m',verticalDatum:'test',components:[first,second],connections:[{id:'JOIN-1',aPortId:'PIPE-A:P2',bPortId:'PIPE-B:P1'}]};
   const exported=exportWaterNetworkToEpanet(network);
   expect(exported.idMap.some(item=>item.kind==='node'&&item.cadId==='PIPE-A'&&item.epanetId.startsWith('N_'))).toBe(true);
+ });
+ it('converts saved EPANET snapshots into CAD overlay frames with exact timestep and hydraulic values',()=>{
+  const frames=epanetSimulationToHydraulicSeries({simulationHours:2,snapshots:[
+   {timeHours:0,nodes:[{id:'J1',pressure:24}],links:[{id:'P1',kind:'pipe',flow:12,velocity:0.95,headloss:2.1,status:'Open'}]},
+   {timeHours:1,nodes:[{id:'J1',pressure:21}],links:[{id:'P1',kind:'pipe',flow:15,velocity:1.19,headloss:3.2,status:'Open'}]}
+  ]});
+  expect(frames).toHaveLength(2);
+  expect(frames[1].timeSeconds).toBe(3600);
+  expect(frames[1].nodes[0]).toMatchObject({id:'J1',pressureM:21});
+  expect(frames[1].links[0]).toMatchObject({id:'P1',flowLps:15,velocityMs:1.19,headlossM:3.2,status:'Open'});
+ });
+ it('falls back to final EPANET results when saved snapshots are absent',()=>{
+  const frames=epanetSimulationToHydraulicSeries({simulationHours:3,nodes:[{id:'J1',pressure:18,head:118}],links:[{id:'P1',flow:8,velocity:.64,headloss:1.5,status:'Open'}]});
+  expect(frames).toHaveLength(1);
+  expect(frames[0].timeSeconds).toBe(10800);
+  expect(frames[0].nodes[0].headM).toBe(118);
+  expect(frames[0].links[0].velocityMs).toBe(.64);
  });
  it('maps simulation results to CAD IDs and highlights threshold violations',()=>{
   const document:WaterCadDocument={schemaVersion:1,units:'m',verticalDatum:'test',components:[createWaterComponent('junction','J1',0,0),createWaterComponent('pipe','P1',0,0)]};
