@@ -228,9 +228,9 @@ export function chamferPolylineCorner<T extends CadEditableEntity>(entity: T, co
   const b = { x: corner.x + (next.x - corner.x) * distance / lenB, y: corner.y + (next.y - corner.y) * distance / lenB };
   return { ...entity, points: [...pts.slice(0, cornerIndex), a, b, ...pts.slice(cornerIndex + 1)].map(clonePoint) };
 }
-export function filletPolylineCorner<T extends CadEditableEntity>(entity:T,cornerIndex:number,radius:number,segments=8):T {
+export function filletPolylineCorner<T extends CadEditableEntity>(entity:T,cornerIndex:number,radius:number):T {
   if(entity.type!=='polyline'||!Number.isInteger(cornerIndex)||cornerIndex<=0||cornerIndex>=entity.points.length-1)throw new Error('FILLET requires an internal polyline corner.');
-  if(!finite(radius)||radius<=0||!Number.isInteger(segments)||segments<2)throw new Error('Fillet radius and segment count must be positive.');
+  if(!finite(radius)||radius<=0)throw new Error('Fillet radius must be positive and finite.');
   if(entity.bulges?.some(value=>Math.abs(value)>1e-12))throw new Error('FILLET currently requires straight adjacent polyline segments.');
   const pts=entity.points,p0=pts[cornerIndex-1],p1=pts[cornerIndex],p2=pts[cornerIndex+1];
   const v1={x:p0.x-p1.x,y:p0.y-p1.y},v2={x:p2.x-p1.x,y:p2.y-p1.y};
