@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
-import { connectPipeEndpoints, createWaterComponent, component3dLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';\nimport { buildPipeLongitudinalProfile, buildPreliminaryBoq, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts } from './water-network-engineering';
+import { connectPipeEndpoints, createWaterComponent, component3dLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
+import { buildPipeLongitudinalProfile, buildPreliminaryBoq, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts } from './water-network-engineering';
 
 type Point2D = { x: number; y: number };
 type Shape = {
@@ -316,7 +317,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [waterCad, setWaterCad] = useState<WaterCadDocument>(() => initialData?.waterCad || { schemaVersion: 1, units: 'm', verticalDatum: 'Project datum - confirm before design', components: [] });
   const [selectedWaterId, setSelectedWaterId] = useState('');
   const [activeWaterTool, setActiveWaterTool] = useState<WaterComponentKind | null>(null);
-  const [waterDraft, setWaterDraft] = useState<Point2D[]>([]);\n  const [portA, setPortA] = useState('');\n  const [portB, setPortB] = useState('');
+  const [waterDraft, setWaterDraft] = useState<Point2D[]>([]);
+  const [portA, setPortA] = useState('');
+  const [portB, setPortB] = useState('');
   const shapes = history.present;
   function setShapes(next: Shape[] | ((current: Shape[]) => Shape[])) {
     setHistory(current => pushHistory(current, typeof next === 'function' ? next(current.present) : next));
@@ -675,6 +678,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     try {
       await onSave({
         shapes,
+        waterCad,
         units,
         schemaVersion: 1,
         coordinateSystem: calibratedMetresPerUnit ? 'calibrated-local-grid' : 'legacy-unscaled-drawing-units',
@@ -689,6 +693,27 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     } finally {
       setBusy(false);
     }
+  }
+
+  function downloadWaterFile(filename: string, content: string, type: string) {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadEpanetInput() {
+    const result = exportWaterNetworkToEpanet(waterCad);
+    downloadWaterFile('rayanaqua-network.inp', result.input, 'text/plain');
+    setMessage(result.warnings.length ? 'EPANET INP exported with ' + result.warnings.length + ' warning(s): ' + result.warnings.join(' ') : 'EPANET INP exported. Validate and run it in EPANET before design use.');
+  }
+
+  function downloadWaterBoq() {
+    const rows = buildPreliminaryBoq(waterCad);
+    const csv = ['Code,Description,Unit,Quantity,Material,Nominal diameter (mm)', ...rows.map(row => [row.code, '"' + row.description.replace(/"/g, '""') + '"', row.unit, row.quantity.toFixed(3), row.material || '', row.nominalDiameterMm || ''].join(','))].join('\n');
+    downloadWaterFile('rayanaqua-preliminary-boq.csv', csv, 'text/csv');
   }
 
   function downloadDxf() {
