@@ -23,14 +23,14 @@
 | ELLIPSE | Import as sampled editable polyline; exact analytic ellipse is not retained |
 | Polyline-boundary HATCH | Import boundary only; hatch fill/pattern is not retained |
 | SOLID, TRACE, 3DFACE | Import 2D boundary; Z/elevation is not retained |
-| XREF, MINSERT arrays, unsupported entities | XREFs are skipped; MINSERT arrays are reduced to the first cell; unsupported entities are skipped with warnings where detected |
+| XREF, unsupported entities | XREFs are skipped; unsupported entities are skipped with warnings where detected |
 
 ## Explicit limitations
 
 - Binary DXF is not supported by the current text-pair reader; use ASCII DXF export from the source CAD application.
 - Native DWG read/write is not provided. Use DXF for exchange.
 - Dimension annotations are visually represented on export, not preserved as fully associative native dimension objects.
-- Block INSERTs are exploded to editable primitives; MINSERT arrays are reduced to their first cell, and block definitions/attributes and parametric engineering-object identity are not round-tripped.
+- Block INSERTs and MINSERT arrays are expanded to editable primitives; block definitions/attributes and parametric engineering-object identity are not round-tripped. MINSERT arrays larger than 1,000 cells are rejected with a warning.
 - Unsupported or approximated entities must be reviewed before engineering use.
 
 ## Verification record
