@@ -15,7 +15,7 @@ import { ENGINEERING_BLOCK_LIBRARY, getEngineeringBlock, instantiateEngineeringB
 import { fitViewportScale, pointInsideViewport, validatePaperLayout, type PaperLayout } from './cad-paper-space';
 import { calculateAngularDimension, calculateRadiusDimension, calculateDiameterDimension, calculateOrdinateDimension, calculateBaselineDimensions, calculateChainDimensions } from './cad-dimension-geometry';
 import { buildBendCentreline, buildPipeLongitudinalProfile, buildPreliminaryBoq, buildReducerCentreline, buildTeeCentreline, connectWaterPorts, exportWaterNetworkToEpanet, getWaterPorts, validateWaterNetworkTopology } from './water-network-engineering';
-import { applyTerrainToPipe, buildTerrainIssues, sampleGroundProfile, type TerrainGrid } from './water-terrain-engineering';
+import { applyTerrainToPipe, buildTerrainAwarePipeProfile, buildTerrainIssues, sampleGroundProfile, type TerrainGrid } from './water-terrain-engineering';
 import { importEpanetInp, type HydraulicResults } from './water-epanet-bridge';
 import { buildHydraulicOverlay, type HydraulicOverlay, type HydraulicOverlayMetric } from './water-hydraulic-overlays';
 import { runEpanetHydraulicSimulation } from './water-epanet-runner';
@@ -1678,9 +1678,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <strong style={{ fontSize: 13 }}>Longitudinal profile · {selectedWaterComponent.id}</strong>
           <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse', marginTop: 6 }}>
             <thead><tr>{['Chainage (m)','Ground RL (m)','Invert RL (m)','Crown RL (m)','Cover (m)'].map(label => <th key={label} style={{ textAlign: 'right', padding: 5 }}>{label}</th>)}</tr></thead>
-            <tbody>{buildPipeLongitudinalProfile(selectedWaterComponent).map((point, index) => <tr key={index}>{[point.chainageM, point.groundLevelM, point.invertLevelM, point.crownLevelM, point.coverDepthM].map((value, i) => <td key={i} style={{ textAlign: 'right', padding: 5 }}>{value === null ? '—' : value.toFixed(3)}</td>)}</tr>)}</tbody>
+            <tbody>{(terrainGrid && waterCad.horizontalCrs===terrainGrid.crs && waterCad.horizontalUnits==='m' ? buildTerrainAwarePipeProfile(selectedWaterComponent,terrainGrid,terrainProfileSpacingM) : buildPipeLongitudinalProfile(selectedWaterComponent)).map((point, index) => <tr key={index}>{[point.chainageM, point.groundLevelM, point.invertLevelM, point.crownLevelM, point.coverDepthM].map((value, i) => <td key={i} style={{ textAlign: 'right', padding: 5 }}>{value === null ? '—' : value.toFixed(3)}</td>)}</tr>)}</tbody>
           </table>
-          <p className="muted" style={{ fontSize: 11 }}>Profile values interpolate the entered start/end ground and invert levels. Add surveyed intermediate vertices and levels for a true surveyed profile; blank levels remain blank.</p>
+          <p className="muted" style={{ fontSize: 11 }}>{terrainGrid && waterCad.horizontalCrs===terrainGrid.crs && waterCad.horizontalUnits==='m' ? 'Ground RL is sampled from the aligned terrain grid at the selected spacing. Invert levels are interpolated between the specified pipe endpoint inverts.' : 'Without a CRS-aligned terrain grid, ground and invert values use only entered endpoint levels; unsurveyed intermediate ground is not inferred.'}</p>
         </div>}
         <div style={{ overflowX: 'auto', marginTop: 12 }}>
           <strong style={{ fontSize: 13 }}>Preliminary material and fitting schedule</strong>
@@ -1695,13 +1695,14 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <h4 style={{ margin: '5px 0' }}>Elevation-aware network and hydraulic results</h4>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
             <button className="secondary-button" onClick={() => terrainFileRef.current?.click()}>Import terrain grid JSON</button>
+            <button className="secondary-button" onClick={() => downloadWaterFile('rayanaqua-terrain-grid-template.json',JSON.stringify({width:3,height:3,originX:0,originY:0,cellSizeX:10,cellSizeY:10,elevationsM:[100,101,102,99,100,101,98,99,100],crs:'LOCAL_METRIC',verticalDatum:'Project datum'},null,2),'application/json')}>Download terrain JSON template</button>
             <button className="secondary-button" onClick={() => epanetFileRef.current?.click()}>Import EPANET INP → CAD</button>
             <button className="secondary-button" onClick={downloadEpanetInput}>Export CAD → EPANET INP</button>
             <button className="primary-button" onClick={runProjectHydraulics} disabled={simulationBusy || !waterCad.components.length}>{simulationBusy ? 'Running EPANET…' : 'Run EPANET simulation'}</button>
             <button className="secondary-button" onClick={() => hydraulicResultsFileRef.current?.click()}>Import hydraulic results JSON</button>
             <button className="secondary-button" onClick={() => { const issues = buildTerrainIssues(waterCad); setMessage('Terrain check: ' + issues.length + ' issue(s). ' + issues.slice(0,5).map(issue => issue.componentId + ': ' + issue.message).join(' ')); }}>Check terrain cover</button>
           </div>
-          <p className="muted" style={{ fontSize: 11, margin: '6px 0' }}>{terrainGrid ? 'Terrain loaded · '+terrainGrid.width+' × '+terrainGrid.height+' · '+terrainGrid.crs+' · datum '+terrainGrid.verticalDatum : 'No terrain surface loaded. Import a regular-grid elevation JSON in project metres.'} {hydraulicResults ? ' · Hydraulic results at '+hydraulicResults.timeSeconds+' s' : ' · No hydraulic results loaded.'}</p>
+          <p className="muted" style={{ fontSize: 11, margin: '6px 0' }}>Terrain JSON requires width, height, originX/Y, cellSizeX/Y, row-major elevationsM, crs and verticalDatum. Values must be metres in the same projected CRS as this water network. {terrainGrid ? 'Terrain loaded · '+terrainGrid.width+' × '+terrainGrid.height+' · '+terrainGrid.crs+' · datum '+terrainGrid.verticalDatum : 'No terrain surface loaded. Import a regular-grid elevation JSON in project metres.'} {hydraulicResults ? ' · Hydraulic results at '+hydraulicResults.timeSeconds+' s' : ' · No hydraulic results loaded.'}</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'end' }}>
             <label style={{ fontSize: 12 }}>Target crown cover (m)<input type="number" min="0" step="0.05" value={terrainCoverM} onChange={e => setTerrainCoverM(Number(e.target.value))} style={{ display: 'block', width: 100 }}/></label>
             <label style={{ fontSize: 12 }}>Profile sample spacing (m)<input type="number" min="0.1" step="0.5" value={terrainProfileSpacingM} onChange={e => setTerrainProfileSpacingM(Number(e.target.value))} style={{ display: 'block', width: 100 }}/></label>
