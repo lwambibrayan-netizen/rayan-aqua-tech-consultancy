@@ -777,13 +777,14 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     setMessage(snapped ? 'Geometry created with endpoint snapped to ' + snapped.kind + '.' : 'Geometry created.');
   }
 
-  function finishPolyline() {
+  function finishPolyline(close = false) {
     if (draft.length > 1) {
-      setShapes(current => [...current, { id: makeId(), type: 'polyline', points: draft, layer }]);
+      const points = close && draft.length > 2 ? [...draft, { ...draft[0] }] : draft;
+      setShapes(current => [...current, { id: makeId(), type: 'polyline', points, layer }]);
     }
     setDraft([]);
     setMode('select');
-    setMessage('Polyline finished.');
+    setMessage(close ? 'Polyline closed.' : 'Polyline finished.');
   }
 
   async function importFile(file?: File) {
@@ -964,11 +965,18 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   }
 
   function deleteSelectedShape() {
-    if (!selectedShape) return;
-    if (!window.confirm('Delete the selected CAD entity?')) return;
-    setShapes(rows => rows.filter(shape => shape.id !== selectedShape.id));
+    const ids = selectedShapeIds.length ? selectedShapeIds : selectedShape ? [selectedShape.id] : [];
+    if (!ids.length) return;
+    const selected = shapes.filter(shape => ids.includes(shape.id));
+    if (selected.some(shape => drafting.layers.find(item => item.name === shape.layer)?.locked)) {
+      setMessage('Selection includes locked-layer entities. Unlock those layers before deleting.');
+      return;
+    }
+    if (!window.confirm('Delete ' + ids.length + ' selected CAD entity/entities?')) return;
+    setShapes(rows => rows.filter(shape => !ids.includes(shape.id)));
     setSelectedShapeId('');
-    setMessage('Selected CAD entity deleted.');
+    setSelectedShapeIds([]);
+    setMessage(ids.length + ' selected CAD entity/entities deleted.');
   }
 
   function insertEngineeringBlock(atDrawingPoint?: Point2D) {
@@ -1764,12 +1772,13 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
                 <button title="Create or edit drawing layers" onClick={()=>setRibbonTab('Drafting')}><i>＋</i><span>Manage Layers</span></button>
                 {mode==='ellipse'&&<label>Ellipse method <select value={ellipseMethod} onChange={e=>{setEllipseMethod(e.target.value as typeof ellipseMethod);setDraft([]);}}><option value="corner-corner">Opposite corners</option><option value="axis-endpoints">Major axis + minor radius (3-point)</option></select></label>}
                 {mode==='circle'&&<label>Circle method <select value={circleMethod} onChange={e=>{setCircleMethod(e.target.value as typeof circleMethod);setDraft([]);}}><option value="center-radius">Centre + radius</option><option value="center-diameter">Centre + diameter</option><option value="two-point">2-point diameter</option><option value="three-point">3-point</option></select></label>}
+                {mode==='polyline'&&draft.length>1&&<><button onClick={()=>finishPolyline(false)}><i>✓</i><span>Finish Polyline</span></button>{draft.length>2&&<button onClick={()=>finishPolyline(true)}><i>□</i><span>Close Polyline</span></button>}</>}
                 {mode==='arc'&&<><label>Arc method <select value={arcMethod} onChange={e=>{setArcMethod(e.target.value as typeof arcMethod);setDraft([]);}}><option value="three-point">3-point arc</option><option value="center-start-angle">Centre + start + angle</option></select></label>{arcMethod==='center-start-angle'&&<label>Sweep ° <input type="number" min="-359.999" max="359.999" step="any" value={arcSweepDegrees} onChange={e=>setArcSweepDegrees(Number(e.target.value))} style={{width:72}}/></label>}</>}
               </div></div>
               <div className="aquacad-ribbon-group"><strong>Modify</strong><div className="aquacad-tool-grid">
                 <button title="Undo" onClick={()=>setHistory(current=>undoHistory(current))} disabled={!history.past.length}><i>↶</i><span>Undo</span></button>
                 <button title="Redo" onClick={()=>setHistory(current=>redoHistory(current))} disabled={!history.future.length}><i>↷</i><span>Redo</span></button>
-                <button title="Delete selected" onClick={deleteSelectedShape} disabled={!selectedShapeIds.length}><i>⌫</i><span>Erase</span></button>
+                <button title="Delete all selected entities" onClick={deleteSelectedShape} disabled={!selectedShapeIds.length}><i>⌫</i><span>Erase</span></button>
                 <button title="Clear selection" onClick={()=>setSelectedShapeIds([])}><i>⊡</i><span>Deselect</span></button>
               </div></div>
               <div className="aquacad-ribbon-group"><strong>Precision</strong><div className="aquacad-tool-grid">
@@ -2254,6 +2263,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             aria-label="AquaCAD drawing canvas. Use Control or Command Z to undo, Shift Control or Command Z to redo, and Escape to cancel the active draft."
             viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
             onClick={handleCanvasClick}
+            onDoubleClick={() => { if (mode === 'polyline' && draft.length > 1) finishPolyline(false); }}
             onKeyDown={event => {
               const target = event.target as HTMLElement;
               if (target.closest('input,textarea,select,button,[contenteditable="true"]')) return;
@@ -2264,12 +2274,22 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               } else if ((event.ctrlKey || event.metaKey) && key === 'y') {
                 event.preventDefault();
                 setHistory(current => redoHistory(current));
+              } else if (key === 'delete' || key === 'backspace') {
+                event.preventDefault();
+                deleteSelectedShape();
+              } else if (key === 'enter' && mode === 'polyline' && draft.length > 1) {
+                event.preventDefault();
+                finishPolyline(false);
               } else if (key === 'escape') {
                 event.preventDefault();
                 setDraft([]);
                 setWaterDraft([]);
                 setAnnotationDraft([]);
                 setPreviewShapes(null);
+                setDraftTool('none');
+                setActiveWaterTool(null);
+                setLibraryPlacementActive(false);
+                setMode('select');
                 setMessage('Active CAD command cancelled.');
               }
             }}
