@@ -392,6 +392,11 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         setHydraulicTimeIndex(frames.length-1);
         setHydraulicResults(frames[frames.length-1]);
         setHydraulicOverlay(buildHydraulicOverlay(merged,frames[frames.length-1],hydraulicMetric));
+      }else{
+        setHydraulicResultSeries([]);
+        setHydraulicTimeIndex(0);
+        setHydraulicResults(null);
+        setHydraulicOverlay(null);
       }
       setMessage('Synchronized saved EPANET network into CAD: '+merged.components.length+' network objects'+(frames.length?' and '+frames.length+' hydraulic result timestep(s)':'')+'. CAD-only fittings and matching surveyed geometry are retained where IDs and coordinates match.');
     }catch(error){setMessage(error instanceof Error?'EPANET-to-CAD synchronization failed: '+error.message:'EPANET-to-CAD synchronization failed.');}
