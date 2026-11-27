@@ -18,19 +18,19 @@
 | ARC | Import as a bulged polyline segment |
 | TEXT, MTEXT | Import as editable text annotation; export as TEXT |
 | DIMENSION | Import definition points and displayed override; export dimension graphics as linework and text |
-| Simple BLOCK / INSERT | Expand block primitives using insertion point, scale and rotation |
+| Nested BLOCK / INSERT | Recursively expand block primitives using insertion point, scale and rotation; detect cycles and enforce a depth limit |
 | SPLINE | Import as sampled editable polyline; exact NURBS definition is not retained |
 | ELLIPSE | Import as sampled editable polyline; exact analytic ellipse is not retained |
 | Polyline-boundary HATCH | Import boundary only; hatch fill/pattern is not retained |
 | SOLID, TRACE, 3DFACE | Import 2D boundary; Z/elevation is not retained |
-| XREF, nested INSERT, unsupported entities | Skipped with warnings where detected |
+| XREF, MINSERT arrays, unsupported entities | XREFs are skipped; MINSERT arrays are reduced to the first cell; unsupported entities are skipped with warnings where detected |
 
 ## Explicit limitations
 
 - Binary DXF is not supported by the current text-pair reader; use ASCII DXF export from the source CAD application.
 - Native DWG read/write is not provided. Use DXF for exchange.
 - Dimension annotations are visually represented on export, not preserved as fully associative native dimension objects.
-- Block INSERTs are exploded to editable primitives; block definitions/attributes and parametric engineering-object identity are not round-tripped.
+- Block INSERTs are exploded to editable primitives; MINSERT arrays are reduced to their first cell, and block definitions/attributes and parametric engineering-object identity are not round-tripped.
 - Unsupported or approximated entities must be reviewed before engineering use.
 
 ## Verification record
