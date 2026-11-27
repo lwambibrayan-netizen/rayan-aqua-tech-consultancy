@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair, Maximize2, Minimize2, ChevronDown } from 'lucide-react';
 import { api } from './client';
 import { connectPipeEndpoints, createWaterComponent, component3dLength, componentPlanLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
-import { createDraftingDocument, makeAlignedDimension, makeLinearDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
+import { createDraftingDocument, makeAlignedDimension, makeLinearDimension, measureDimension, formatDimension, sheetDimensionsMm, validateDraftingDocument, findAssociativeAnchor, resolveAssociativeDimension, type DraftingDocument, type DraftAnnotation } from './cad-drafting';
 import { exportDraftingDxf, importDraftingDxf, type DxfShape } from './cad-dxf';
 import { DIMENSION_STYLES, formatStyledDimension, validateDimensionStyle, appendDrawingRevision, type DimensionStyle } from './cad-dimension-standards';
 import { synchronizeLayerTemplate, validateLayerStandard, validatePlotConfiguration, type LayerStandard } from './cad-layer-standards';
@@ -610,6 +610,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             const item = dimensionKind === 'linear' ? makeLinearDimension(makeId(), next[0], next[1], dimensionOffset * scale, 'DIMENSIONS', dimensionStyle.precision) : makeAlignedDimension(makeId(), next[0], next[1], dimensionOffset * scale, 'DIMENSIONS', dimensionStyle.precision);
             const measured = dimensionKind === 'linear' ? Math.abs(next[1].x-next[0].x) : Math.hypot(next[1].x-next[0].x,next[1].y-next[0].y);
             item.textOverride = formatStyledDimension(measured, dimensionStyle);
+            const anchorA = findAssociativeAnchor(next[0], shapes, 0.002, scale);
+            const anchorB = findAssociativeAnchor(next[1], shapes, 0.002, scale);
+            if (anchorA || anchorB) item.association = { a: anchorA, b: anchorB };
             setDrafting(current => ({ ...current, annotations: [...current.annotations, item] }));
           } else {
             const id = makeId(), graphics: Shape[] = [], pushLine = (a: Point2D, b: Point2D) => graphics.push({ id: makeId(), type: 'line', points: [{x:a.x/scale,y:a.y/scale},{x:b.x/scale,y:b.y/scale}], layer: 'DIMENSIONS' });
@@ -659,7 +662,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             const note: DraftAnnotation = {id,kind:'text',layer:'DIMENSIONS',at:labelPoint,text:label,heightMm:dimensionStyle.textHeightMm,rotationDeg:0};
             setDrafting(current => ({...current,annotations:[...current.annotations,note]}));
           }
-          setMessage(dimensionKind.charAt(0).toUpperCase()+dimensionKind.slice(1)+' dimension placed. Advanced dimensions are saved as editable CAD linework and text; associative remeasurement is not yet supported.');
+          setMessage(dimensionKind.charAt(0).toUpperCase()+dimensionKind.slice(1)+' dimension placed. Snapped line/polyline endpoints are associative and remeasure when their source vertices move; free-picked points remain fixed.');
         } catch (error) { setMessage(error instanceof Error ? error.message : 'Dimension could not be placed.'); }
       } else {
         const item: DraftAnnotation = { id: makeId(), kind: 'leader', layer: 'ANNOTATION', points: next, text: annotationText || 'Note', textHeightMm: 2.5 };
@@ -1744,7 +1747,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const toDrawing = (p: Point2D) => ({ x: p.x / (calibratedMetresPerUnit || 1), y: p.y / (calibratedMetresPerUnit || 1) });
     if (item.kind === 'text') { const at = toDrawing(item.at); return <text key={item.id} x={at.x} y={at.y} fontSize={paperHeight(item.heightMm)} fill={color}>{item.text}</text>; }
     if (item.kind === 'leader') { const pts = item.points.map(toDrawing); const last = pts[pts.length - 1]; return <g key={item.id}><polyline points={pts.map(p => p.x + ',' + p.y).join(' ')} fill='none' stroke={color}/><text x={last.x + paperHeight(1.5)} y={last.y - paperHeight(1)} fontSize={paperHeight(item.textHeightMm)} fill={color}>{item.text}</text></g>; }
-    const a = toDrawing(item.a), b = toDrawing(item.b);
+    const resolved = resolveAssociativeDimension(item, shapes, calibratedMetresPerUnit || 1);
+    const a = toDrawing(resolved.a), b = toDrawing(resolved.b);
     const dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy) || 1;
     const nx = -dy / length, ny = dx / length, off = item.offsetM / (calibratedMetresPerUnit || 1);
     const p1 = { x: a.x + nx * off, y: a.y + ny * off }, p2 = { x: b.x + nx * off, y: b.y + ny * off };
