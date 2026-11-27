@@ -1262,6 +1262,21 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     const horizontalScale = waterCad.horizontalUnits === 'ft' ? 0.3048 : 1;
     const networkPoints = waterCad.components.flatMap(component => component.geometry);
     const nodeElevations = new Map(waterCad.components.filter(component=>['junction','source','tank','reservoir'].includes(component.kind)).map(component=>[component.id,component.properties.hydraulicElevationM??component.geometry[0]?.z]));
+    const portElevations=new Map<string,number>();
+    waterCad.components.forEach(component=>{
+      getWaterPorts(component).forEach((port,index)=>{
+        const endpointId=index===0?component.fromNodeId:index===1?component.toNodeId:undefined;
+        const endpointLevel=endpointId?nodeElevations.get(endpointId):undefined;
+        const geometryPoint=component.kind==='pipe'?(index===0?component.geometry[0]:component.geometry[component.geometry.length-1]):component.geometry[port.index]??component.geometry[0];
+        const level=port.point.z??port.point.invertLevelM??geometryPoint?.z??geometryPoint?.invertLevelM??endpointLevel??component.properties.hydraulicElevationM;
+        if(typeof level==='number'&&Number.isFinite(level))portElevations.set(port.id,level);
+      });
+    });
+    (waterCad.connections??[]).forEach(connection=>{
+      const a=portElevations.get(connection.aPortId),b=portElevations.get(connection.bPortId);
+      if(a!==undefined&&b===undefined)portElevations.set(connection.bPortId,a);
+      else if(b!==undefined&&a===undefined)portElevations.set(connection.aPortId,b);
+    });
     const cadPoints = shapes.flatMap(shape => shape.points.map(point=>({x:point.x*(calibratedMetresPerUnit??1),y:point.y*(calibratedMetresPerUnit??1)})));
     const terrainAligned = !!terrainGrid && waterCad.horizontalUnits === 'm' && waterCad.horizontalCrs === terrainGrid.crs && waterCad.verticalDatum === terrainGrid.verticalDatum;
     const terrainValues = (terrainAligned ? terrainGrid?.elevationsM : undefined)?.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
@@ -1336,7 +1351,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     waterCad.components.forEach(component=>{
       const fromElevation=component.fromNodeId?nodeElevations.get(component.fromNodeId):undefined;
       const toElevation=component.toNodeId?nodeElevations.get(component.toNodeId):undefined;
-      const baseLevel=component.properties.hydraulicElevationM??fromElevation??toElevation??component.geometry[0]?.z??component.geometry[0]?.invertLevelM??0;
+      const connectedLevels=getWaterPorts(component).map(port=>portElevations.get(port.id)).filter((level):level is number=>typeof level==='number'&&Number.isFinite(level));
+      const connectedMean=connectedLevels.length?connectedLevels.reduce((sum,level)=>sum+level,0)/connectedLevels.length:undefined;
+      const baseLevel=component.properties.hydraulicElevationM??fromElevation??toElevation??connectedMean??component.geometry[0]?.z??component.geometry[0]?.invertLevelM??0;
       const routeLengths=[0];
       for(let index=1;index<component.geometry.length;index++){const a=component.geometry[index-1],b=component.geometry[index];routeLengths.push(routeLengths[index-1]+Math.hypot(b.x-a.x,b.y-a.y));}
       const totalRouteLength=routeLengths[routeLengths.length-1]??0;
