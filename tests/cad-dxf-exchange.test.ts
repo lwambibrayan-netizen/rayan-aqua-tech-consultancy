@@ -5,7 +5,7 @@ import { getEngineeringBlock, instantiateEngineeringBlock } from '../cad-object-
 
 describe('structured DXF exchange', () => {
   it('gives a clear message for unsupported binary DXF files', () => {
-    expect(()=>importDraftingDxf('AutoCAD Binary DXF\\r\\n\\u001a\\u0000')).toThrow('Binary DXF is not supported');
+    expect(()=>importDraftingDxf('AutoCAD Binary DXF\r\n\u001a\u0000')).toThrow('Binary DXF is not supported');
   });
   it('writes drawing units, layer table, linework and annotations', () => {
     const doc = createDraftingDocument();
