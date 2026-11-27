@@ -140,6 +140,31 @@ export function importEpanetInp(input:string, verticalDatum='EPANET imported ele
 export type HydraulicNodeResult={id:string;pressureM?:number;headM?:number;demandLps?:number;quality?:number};
 export type HydraulicLinkResult={id:string;flowLps?:number;velocityMs?:number;headlossM?:number;status?:string};
 export type HydraulicResults={timeSeconds:number;nodes:HydraulicNodeResult[];links:HydraulicLinkResult[]};
+/** Converts saved OWA-EPANET snapshots into CAD/GIS overlay frames without changing solver values. */
+export function epanetSimulationToHydraulicSeries(simulation:unknown):HydraulicResults[] {
+  if(!simulation||typeof simulation!=='object')return [];
+  const source=simulation as Record<string,any>;
+  const snapshots=Array.isArray(source.snapshots)?source.snapshots:[];
+  const frames:HydraulicResults[]=snapshots.map((snapshot:any)=>{
+    const hours=Number(snapshot?.timeHours);
+    if(!Number.isFinite(hours)||hours<0)return null;
+    return {
+      timeSeconds:Math.round(hours*3600),
+      nodes:(Array.isArray(snapshot.nodes)?snapshot.nodes:[]).filter((node:any)=>node&&typeof node.id==='string').map((node:any)=>({id:node.id,...(Number.isFinite(Number(node.pressure))?{pressureM:Number(node.pressure)}:{}),...(Number.isFinite(Number(source.nodeHeads?.[node.id]))?{headM:Number(source.nodeHeads[node.id])}:{})})),
+      links:(Array.isArray(snapshot.links)?snapshot.links:[]).filter((link:any)=>link&&typeof link.id==='string').map((link:any)=>({id:link.id,...(Number.isFinite(Number(link.flow))?{flowLps:Number(link.flow)}:{}),...(Number.isFinite(Number(link.velocity))?{velocityMs:Number(link.velocity)}:{}),...(Number.isFinite(Number(link.headloss))?{headlossM:Number(link.headloss)}:{}),...(typeof link.status==='string'?{status:link.status}:{})}))
+    };
+  }).filter((frame):frame is HydraulicResults=>frame!==null);
+  if(frames.length)return frames.sort((a,b)=>a.timeSeconds-b.timeSeconds);
+  const nodes=Array.isArray(source.nodes)?source.nodes:[];
+  const links=Array.isArray(source.links)?source.links:[];
+  const fallbackTime=Number(source.simulationHours??0)*3600;
+  if(!nodes.length&&!links.length)return [];
+  return [{
+    timeSeconds:Number.isFinite(fallbackTime)&&fallbackTime>=0?Math.round(fallbackTime):0,
+    nodes:nodes.filter((node:any)=>node&&typeof node.id==='string').map((node:any)=>({id:node.id,...(Number.isFinite(Number(node.pressure))?{pressureM:Number(node.pressure)}:{}),...(Number.isFinite(Number(node.head))?{headM:Number(node.head)}:{})})),
+    links:links.filter((link:any)=>link&&typeof link.id==='string').map((link:any)=>({id:link.id,...(Number.isFinite(Number(link.flow))?{flowLps:Number(link.flow)}:{}),...(Number.isFinite(Number(link.velocity))?{velocityMs:Number(link.velocity)}:{}),...(Number.isFinite(Number(link.headloss))?{headlossM:Number(link.headloss)}:{}),...(typeof link.status==='string'?{status:link.status}:{})}))
+  }];
+}
 export function mergeEpanetRoundTrip(base:WaterCadDocument,imported:WaterCadDocument):WaterCadDocument {
   const original=new Map(base.components.map(c=>[c.id,c]));
   const hydraulicKinds=new Set<WaterComponentKind>(['pipe','pump','valve','junction','source','tank','reservoir']);
