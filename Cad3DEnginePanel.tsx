@@ -929,6 +929,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
       const imported = importEpanetInp(await file.text(), waterCad.verticalDatum);
       setWaterCad(imported.document);
       setHydraulicResults(null);
+      setHydraulicResultSeries([]);
+      setHydraulicTimeIndex(0);
       setHydraulicOverlay(null);
       setMessage('Imported ' + imported.document.components.length + ' EPANET network objects into CAD.' + (imported.warnings.length ? ' Review: ' + imported.warnings.join(' ') : ' Coordinates and hydraulic link lengths were retained.'));
     } catch (error) { setMessage(error instanceof Error ? error.message : 'EPANET import failed.'); }
@@ -984,7 +986,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   function applyTerrainToSelectedPipe() {
     const selected = waterCad.components.find(component => component.id === selectedWaterId);
     if (!terrainGrid) { setMessage('Import a terrain elevation grid before routing a pipe.'); return; }
-    if (waterCad.horizontalUnits !== 'm' || waterCad.horizontalCrs !== terrainGrid.crs) { setMessage('Terrain routing blocked: project CRS ('+(waterCad.horizontalCrs||'unset')+', '+(waterCad.horizontalUnits||'unknown')+') must match terrain CRS ('+terrainGrid.crs+') in metres. Reproject the terrain or network first; do not relabel coordinates.'); return; }
+    if (waterCad.horizontalUnits !== 'm' || waterCad.horizontalCrs !== terrainGrid.crs || waterCad.verticalDatum !== terrainGrid.verticalDatum) { setMessage('Terrain routing blocked: project CRS ('+(waterCad.horizontalCrs||'unset')+', '+(waterCad.horizontalUnits||'unknown')+') must match terrain CRS ('+terrainGrid.crs+') and vertical datum ('+terrainGrid.verticalDatum+') in metres. Reproject/vertically transform the data first; do not relabel coordinates.'); return; }
     if (!selected || selected.kind !== 'pipe') { setMessage('Select a pipe in the component register first.'); return; }
     try {
       const updated = applyTerrainToPipe(selected, terrainGrid, terrainCoverM);
@@ -1252,7 +1254,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     });
     // Render the engineering network from project-metre XYZ geometry, not as a flat 2D extrusion.
     const networkPoints = waterCad.components.flatMap(component => component.geometry);
-    const terrainAligned = !!terrainGrid && waterCad.horizontalUnits === 'm' && waterCad.horizontalCrs === terrainGrid.crs;
+    const terrainAligned = !!terrainGrid && waterCad.horizontalUnits === 'm' && waterCad.horizontalCrs === terrainGrid.crs && waterCad.verticalDatum === terrainGrid.verticalDatum;
     const terrainValues = (terrainAligned ? terrainGrid?.elevationsM : undefined)?.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? [];
     const verticalBase = terrainValues.length ? Math.min(...terrainValues) : networkPoints.length ? Math.min(...networkPoints.map(point => point.z ?? point.invertLevelM ?? 0)) : 0;
     const allX = [...networkPoints.map(point => point.x), ...(terrainAligned && terrainGrid ? [terrainGrid.originX, terrainGrid.originX + (terrainGrid.width-1)*terrainGrid.cellSizeX] : [])];
@@ -1721,8 +1723,9 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           </div>}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 8, marginTop: 10 }}>
-        <label style={{ display: 'block', fontSize: 12 }}>Project horizontal CRS
+        <label style={{ display: 'block', fontSize: 12 }}>Project horizontal CRS (declare only if verified)
           <input value={waterCad.horizontalCrs || ''} onChange={e => setWaterCad(current => ({ ...current, horizontalCrs: e.target.value.trim() }))} placeholder="e.g. EPSG:32737 or LOCAL_METRIC" style={{ display: 'block', width: '100%' }} />
+          <span className="muted">Do not assign an EPSG code unless the stored coordinates already use it.</span>
         </label>
         <label style={{ display: 'block', fontSize: 12 }}>Horizontal coordinate units
           <select value={waterCad.horizontalUnits || 'unknown'} onChange={e => setWaterCad(current => ({ ...current, horizontalUnits: e.target.value as WaterCadDocument['horizontalUnits'] }))} style={{ display: 'block', width: '100%' }}><option value="m">Metres</option><option value="ft">Feet</option><option value="unknown">Unknown / unreferenced</option></select>
@@ -1731,7 +1734,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           <input value={waterCad.verticalDatum} onChange={e => setWaterCad(current => ({ ...current, verticalDatum: e.target.value }))} style={{ display: 'block', width: '100%' }} />
         </label>
         </div>
-        {terrainGrid && <p className="muted" style={{fontSize:11}}>Terrain CRS: {terrainGrid.crs}. {waterCad.horizontalCrs===terrainGrid.crs && waterCad.horizontalUnits==='m' ? 'CRS and metre units match.' : 'CRS or units do not match; terrain routing and co-registered 3D terrain are disabled until coordinates are properly reprojected.'}</p>}
+        {terrainGrid && <p className="muted" style={{fontSize:11}}>Terrain CRS: {terrainGrid.crs}. {waterCad.horizontalCrs===terrainGrid.crs && waterCad.horizontalUnits==='m' && waterCad.verticalDatum===terrainGrid.verticalDatum ? 'Horizontal CRS, metre units and vertical datum match.' : 'CRS, units or vertical datum do not match; terrain routing and co-registered 3D terrain are disabled until coordinates and levels are properly transformed.'}</p>}
       </div>
 
       {view === '2d' ? (
