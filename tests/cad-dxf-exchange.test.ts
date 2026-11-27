@@ -76,6 +76,37 @@ describe('structured DXF exchange', () => {
     expect(line.points).toEqual([{x:10,y:20},{x:10,y:24}]);
     expect(circle.layer).toBe('SYMBOLS');
   });
+
+  it('recursively expands nested BLOCK INSERT transforms and inherited layer 0', () => {
+    const source = ['0','SECTION','2','BLOCKS',
+      '0','BLOCK','8','0','2','OUTER','10','0','20','0',
+      '0','INSERT','8','0','2','INNER','10','10','20','0','41','2','42','2','50','90',
+      '0','ENDBLK',
+      '0','BLOCK','8','0','2','INNER','10','1','20','0',
+      '0','LINE','8','0','10','1','20','0','11','2','21','0',
+      '0','ENDBLK','0','ENDSEC',
+      '0','SECTION','2','ENTITIES','0','INSERT','8','BLOCKS_LAYER','2','OUTER','10','100','20','200',
+      '0','ENDSEC','0','EOF'].join('\n');
+    const imported = importDraftingDxf(source);
+    expect(imported.shapes).toHaveLength(1);
+    expect(imported.shapes[0].points[0].x).toBeCloseTo(110);
+    expect(imported.shapes[0].points[0].y).toBeCloseTo(200);
+    expect(imported.shapes[0].points[1].x).toBeCloseTo(110);
+    expect(imported.shapes[0].points[1].y).toBeCloseTo(202);
+    expect(imported.shapes[0].layer).toBe('BLOCKS_LAYER');
+    expect(imported.warnings).toEqual([]);
+  });
+
+  it('detects cyclic nested BLOCK references instead of recursing indefinitely', () => {
+    const source = ['0','SECTION','2','BLOCKS',
+      '0','BLOCK','8','0','2','A','10','0','20','0','0','INSERT','8','0','2','B','10','0','20','0','0','ENDBLK',
+      '0','BLOCK','8','0','2','B','10','0','20','0','0','INSERT','8','0','2','A','10','0','20','0','0','ENDBLK','0','ENDSEC',
+      '0','SECTION','2','ENTITIES','0','INSERT','8','0','2','A','10','0','20','0','0','ENDSEC','0','EOF'].join('\n');
+    const imported = importDraftingDxf(source);
+    expect(imported.shapes).toHaveLength(0);
+    expect(imported.warnings.some(warning=>warning.includes('cyclic nested BLOCK reference'))).toBe(true);
+  });
+
   it('converts SPLINE, ELLIPSE and polyline-boundary HATCH to editable polylines', () => {
     const source = ['0','SECTION','2','ENTITIES',
       '0','SPLINE','8','CURVES','11','0','21','0','11','5','21','8','11','10','21','0',
