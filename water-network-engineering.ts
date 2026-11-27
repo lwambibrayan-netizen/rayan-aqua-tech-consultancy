@@ -333,15 +333,15 @@ export function exportWaterNetworkToEpanet(document: NetworkDocument): EpanetExp
   const pumps = document.components.filter(c => c.kind === 'pump');
   const valves = document.components.filter(c => c.kind === 'valve');
   const lines: string[] = ['[TITLE]', 'RayanAqua Water CAD export', '', '[JUNCTIONS]', ';ID Elevation_m BaseDemand_LPS Pattern'];
-  nodes.filter(n => n.kind === 'junction').forEach(n => lines.push([safeId(n.id), fmt(n.geometry[0]?.z ?? 0), fmt((n.properties.flowM3h ?? 0) * 1000 / 3600), ''].join(' ')));
+  nodes.filter(n => n.kind === 'junction').forEach(n => lines.push([safeId(n.id), fmt(n.properties.hydraulicElevationM ?? n.geometry[0]?.z ?? 0), fmt((n.properties.flowM3h ?? 0) * 1000 / 3600), ''].join(' ')));
   hydraulic.syntheticNodes.forEach(n => lines.push([n.id, fmt(n.elevationM), '0', ''].join(' ')));
   lines.push('', '[RESERVOIRS]', ';ID Head_m Pattern');
-  nodes.filter(n => n.kind === 'source' || n.kind === 'reservoir').forEach(n => lines.push([safeId(n.id), fmt(n.properties.tankOperatingLevelM ?? n.geometry[0]?.z ?? 0), ''].join(' ')));
+  nodes.filter(n => n.kind === 'source' || n.kind === 'reservoir').forEach(n => lines.push([safeId(n.id), fmt(n.properties.hydraulicHeadM ?? n.properties.tankOperatingLevelM ?? n.geometry[0]?.z ?? 0), ''].join(' ')));
   lines.push('', '[TANKS]', ';ID Elevation_m InitLevel_m MinLevel_m MaxLevel_m Diameter_m MinVolume_m3');
   nodes.filter(n => n.kind === 'tank').forEach(n => {
     const p = n.properties;
     const level = p.tankOperatingLevelM ?? 1;
-    lines.push([safeId(n.id), fmt(n.geometry[0]?.z ?? 0), fmt(level), '0', fmt(Math.max(level + 1, level * 1.5)), fmt(p.tankDiameterM ?? 1), '0'].join(' '));
+    lines.push([safeId(n.id), fmt(n.properties.hydraulicElevationM ?? n.geometry[0]?.z ?? 0), fmt(level), '0', fmt(Math.max(level + 1, level * 1.5)), fmt(p.tankDiameterM ?? 1), '0'].join(' '));
   });
   lines.push('', '[PIPES]', ';ID Node1 Node2 Length_m Diameter_mm Roughness MinorLoss Status');
   for (const p of pipes) {
