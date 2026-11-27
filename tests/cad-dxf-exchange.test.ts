@@ -41,7 +41,7 @@ describe('structured DXF exchange', () => {
     expect(imported.shapes.map(s => s.type)).toEqual(['line','polyline','polyline']);
     expect(imported.shapes[1].bulges?.[0]).toBeCloseTo(Math.tan(Math.PI/8));
     expect(imported.annotations[0].kind).toBe('text');
-    if (imported.annotations[0].kind === 'text') expect(imported.annotations[0].heightMm).toBeCloseTo(2500);
+    if (imported.annotations[0].kind === 'text') expect(imported.annotations[0].heightMm).toBeCloseTo(2.5);
     expect(imported.annotations[1].kind).toBe('aligned');
     if (imported.annotations[1].kind === 'aligned' || imported.annotations[1].kind === 'linear') expect(imported.annotations[1].offsetM).toBeCloseTo(2);
     expect(imported.layerNames).toEqual(['PIPE','FITTING','BOUNDARY','TEXT','DIMENSIONS']);
@@ -136,7 +136,7 @@ describe('structured DXF exchange', () => {
     expect(dxf).toContain('11\n2500');
     expect(dxf).toContain('40\n125');
     const imported = importDraftingDxf(dxf);
-    expect(imported.shapes.find(shape=>shape.id==='DXF-1')?.points[1].x).toBeCloseTo(2.5);
+    expect(imported.shapes.find(shape=>shape.id==='DXF-1')?.points[1].x).toBeCloseTo(2500);
     expect(imported.shapes.find(shape=>shape.type==='circle')?.radius).toBeCloseTo(125);
     expect(imported.shapes.find(shape=>shape.type==='polyline')?.points[2].y).toBeCloseTo(1000);
   });
