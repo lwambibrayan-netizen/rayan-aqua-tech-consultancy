@@ -120,7 +120,7 @@ J1 100 1 PAT1
 [RESERVOIRS]
 R1 110
 [PUMPS]
-PU1 R1 J1 HEAD PC1 PATTERN PAT1
+PU1 R1 J1 HEAD PC1 SPEED 1.1 PATTERN PAT1
 [PATTERNS]
 PAT1 1 2 3
 [CURVES]
@@ -134,6 +134,8 @@ J1 10 0
   expect(result.document.epanetPatterns?.[0].multipliers).toEqual([1,2,3]);
   expect(result.document.components.find(c=>c.id==='J1')?.properties.demandPatternId).toBe('PAT1');
   expect(result.document.components.find(c=>c.id==='PU1')?.properties.pumpSpeedPattern).toBe('PAT1');
+  expect(result.document.components.find(c=>c.id==='PU1')?.properties.pumpSpeedMultiplier).toBeCloseTo(1.1);
+  expect(exportWaterNetworkToEpanet(result.document).input).toContain('SPEED 1.1 PATTERN PAT1');
  });
  it('round-trips pipe vertices, additional demands, emitters, solver options and simulation times',()=>{
   const model=`[JUNCTIONS]
