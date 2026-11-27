@@ -21,7 +21,7 @@ describe('professional drawing standards', () => {
     expect(sheetDimensionsMm(doc.sheet)).toEqual({ widthMm: 500, heightMm: 700 });
     expect(validateDraftingDocument(doc)).toEqual([]);
     doc.sheet.widthMm = 20;
-    expect(validateDraftingDocument(doc)).toContain('Custom sheet width and height must each be between 50 mm and 5000 mm.');
+    expect(validateDraftingDocument(doc)).toContain('Custom sheet width and height must each be between 180 × 120 mm and 5000 × 5000 mm.');
   });
   it('persists revision history and dimension style configuration', () => {
     const doc = createDraftingDocument({ revisionHistory: [{ revision:'P01', date:'2026-11-27', description:'Initial issue', drawnBy:'A', checkedBy:'B', approvedBy:'', status:'FOR REVIEW' }] });
