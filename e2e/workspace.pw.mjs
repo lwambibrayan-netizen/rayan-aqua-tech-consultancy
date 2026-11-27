@@ -85,6 +85,16 @@ test('engineer opens a project, uses visible CAD navigation, saves and opens 3D'
   await page.getByRole('button', { name: /Voi Water Supply E2E/ }).click();
   await page.getByRole('button', { name: /CAD & 3D workspace/ }).click();
 
+  const ribbon = page.getByRole('tablist', { name: 'AquaCAD ribbon' });
+  await ribbon.getByRole('tab', { name: 'Drafting' }).click();
+  await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="drafting"]')).toBeVisible();
+  await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="drafting"]')).toContainText('Dimensions, annotations, layers & drawing sheets');
+  await ribbon.getByRole('tab', { name: 'Insert' }).click();
+  await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="blocks"]')).toContainText('Engineering object library');
+  await ribbon.getByRole('tab', { name: 'Water Network' }).click();
+  await expect(page.locator('.aquacad-shell [data-cad-ribbon-panel="water-network"]')).toContainText('Network component library');
+  await ribbon.getByRole('tab', { name: 'Home' }).click();
+
   const pan = page.getByRole('button', { name: 'Pan drawing' });
   await expect(pan).toBeVisible();
   await expect(pan).toHaveAttribute('aria-pressed', 'false');
