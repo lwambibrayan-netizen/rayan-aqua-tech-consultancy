@@ -9,7 +9,7 @@ export function buildHydraulicOverlay(document:WaterCadDocument,results:Hydrauli
  const ids=new Set(document.components.map(c=>c.id));
  const components=new Map(document.components.map(component=>[component.id,component]));
  const items=source.filter(item=>ids.has(item.id)).map(item=>{
-  const raw=(item as Record<string,unknown>)[metric];const value=finite(raw)?raw:null;
+  const raw=(item as unknown as Record<string,unknown>)[metric];const value=finite(raw)?raw:null;
   const component=components.get(item.id);
   const minimum=limits.minimum ?? (metric==='velocityMs'&&component?.kind==='pipe'?component.properties.velocityMinMs:undefined);
   const maximum=limits.maximum ?? (metric==='velocityMs'&&component?.kind==='pipe'?component.properties.velocityMaxMs:undefined);
