@@ -109,11 +109,11 @@ describe('structured DXF exchange', () => {
     for (const name of ['CONTINUOUS','DASHED','CENTER','HIDDEN','PHANTOM']) {
       expect(dxf).toContain('2\n' + name);
     }
-    expect(dxf).toContain('2\\nLAYER');
-    expect(dxf).toContain('6\\nDASHED');
-    expect(dxf).toContain('6\\nCENTER');
-    expect(dxf).toContain('6\\nHIDDEN');
-    expect(dxf).toContain('6\\nPHANTOM');
+    expect(dxf).toContain('2\nLAYER');
+    expect(dxf).toContain('6\nDASHED');
+    expect(dxf).toContain('6\nCENTER');
+    expect(dxf).toContain('6\nHIDDEN');
+    expect(dxf).toContain('6\nPHANTOM');
   });
 
   it('round-trips DXF layer colour, linetype, lineweight, visibility, lock and plot state', () => {
