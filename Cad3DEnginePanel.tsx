@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Download, FileUp, Layers3, Save, Crosshair } from 'lucide-react';
 import { api } from './client';
-import { createWaterComponent, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
+import { connectPipeEndpoints, createWaterComponent, component3dLength, type WaterCadComponent, type WaterCadDocument, type WaterComponentKind } from './water-cad';
 
 type Point2D = { x: number; y: number };
 type Shape = {
@@ -440,8 +440,16 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
     }
     if (mode === 'select') {
       setLastSelectionWindow(null);
-      const target = (event.target as SVGElement).closest('[data-shape-id]') as SVGElement | null;
+      const target = (event.target as SVGElement).closest('[data-shape-id], [data-water-id]') as SVGElement | null;
       const id = target?.getAttribute('data-shape-id') || '';
+      const waterId = target?.getAttribute('data-water-id') || '';
+      if (waterId) {
+        setSelectedWaterId(waterId);
+        setSelectedShapeId('');
+        setSelectedShapeIds([]);
+        setMessage('Water component selected. Edit its engineering properties in the component register.');
+        return;
+      }
       if (event.shiftKey && id) {
         setSelectedShapeIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
         setSelectedShapeId(id);
@@ -876,6 +884,10 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               <label style={{ fontSize: 12 }}>End X (m)<input type="number" step="any" value={selectedWaterComponent.geometry[1].x} onChange={e => setWaterCad(current => ({ ...current, components: current.components.map(item => item.id === selectedWaterId ? { ...item, geometry: item.geometry.map((point,index) => index === 1 ? { ...point, x: Number(e.target.value) } : point) } : item) }))} style={{ display: 'block', width: '100%' }} /></label>
               <label style={{ fontSize: 12 }}>End Y (m)<input type="number" step="any" value={selectedWaterComponent.geometry[1].y} onChange={e => setWaterCad(current => ({ ...current, components: current.components.map(item => item.id === selectedWaterId ? { ...item, geometry: item.geometry.map((point,index) => index === 1 ? { ...point, y: Number(e.target.value) } : point) } : item) }))} style={{ display: 'block', width: '100%' }} /></label>
               <label style={{ fontSize: 12 }}>Calculated plan length (m)<strong style={{ display: 'block' }}>{selectedWaterComponent.kind === 'pipe' ? Math.hypot(selectedWaterComponent.geometry[1].x-selectedWaterComponent.geometry[0].x, selectedWaterComponent.geometry[1].y-selectedWaterComponent.geometry[0].y).toFixed(3) : '—'}</strong></label>
+              <label style={{ fontSize: 12 }}>End elevation Z (m)<input type="number" step="any" value={selectedWaterComponent.geometry[1].z ?? ''} onChange={e => setWaterCad(current => ({ ...current, components: current.components.map(item => item.id === selectedWaterId ? { ...item, geometry: item.geometry.map((point,index) => index === 1 ? { ...point, z: Number(e.target.value) } : point) } : item) }))} style={{ display: 'block', width: '100%' }} /></label>
+              <label style={{ fontSize: 12 }}>Calculated 3D length (m)<strong style={{ display: 'block' }}>{component3dLength(selectedWaterComponent).toFixed(3)}</strong></label>
+              <label style={{ fontSize: 12 }}>From network node<select value={selectedWaterComponent.fromNodeId || ''} onChange={e => { const to = selectedWaterComponent.toNodeId || ''; if (e.target.value && to) { try { setWaterCad(current => connectPipeEndpoints(current, selectedWaterId, e.target.value, to)); } catch(error) { setMessage(error instanceof Error ? error.message : 'Connection failed.'); } } else setWaterCad(current => ({ ...current, components: current.components.map(item => item.id === selectedWaterId ? { ...item, fromNodeId: e.target.value || undefined } : item) })); }} style={{ display: 'block', width: '100%' }}><option value="">Unconnected</option>{waterCad.components.filter(item => ['junction','source','tank','reservoir'].includes(item.kind) && item.id !== selectedWaterId).map(item => <option key={item.id} value={item.id}>{item.id} · {item.kind}</option>)}</select></label>
+              <label style={{ fontSize: 12 }}>To network node<select value={selectedWaterComponent.toNodeId || ''} onChange={e => { const from = selectedWaterComponent.fromNodeId || ''; if (from && e.target.value) { try { setWaterCad(current => connectPipeEndpoints(current, selectedWaterId, from, e.target.value)); } catch(error) { setMessage(error instanceof Error ? error.message : 'Connection failed.'); } } else setWaterCad(current => ({ ...current, components: current.components.map(item => item.id === selectedWaterId ? { ...item, toNodeId: e.target.value || undefined } : item) })); }} style={{ display: 'block', width: '100%' }}><option value="">Unconnected</option>{waterCad.components.filter(item => ['junction','source','tank','reservoir'].includes(item.kind) && item.id !== selectedWaterId).map(item => <option key={item.id} value={item.id}>{item.id} · {item.kind}</option>)}</select></label>
             </> : null}
             <label style={{ fontSize: 12 }}>Start elevation Z (m)<input type="number" step="any" value={selectedWaterComponent.geometry[0]?.z ?? ''} onChange={e => setWaterCad(current => ({ ...current, components: current.components.map(item => item.id === selectedWaterId ? { ...item, geometry: item.geometry.map((point,index) => index === 0 ? { ...point, z: Number(e.target.value) } : point) } : item) }))} style={{ display: 'block', width: '100%' }} /></label>
             {selectedWaterComponent.kind === 'bend' ? <>
