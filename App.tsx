@@ -1301,12 +1301,6 @@ function App() {
                   status="Connected"
                 />
                 <ToolCard
-                  icon={<Box size={21} />}
-                  title="CAD / 3D coordination"
-                  text="DXF and DWG conversion, OBJ export and 3D clash checking."
-                  status="Engine not connected"
-                />
-                <ToolCard
                   icon={<Activity size={21} />}
                   title="EPANET network simulation"
                   text="Draw a water network from scratch, edit components, run OWA-EPANET and review pressure/velocity diagnostics."
