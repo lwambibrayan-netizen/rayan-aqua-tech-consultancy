@@ -160,8 +160,12 @@ describe('structured DXF exchange', () => {
     expect(imported.shapes[1].points[0]).toEqual({x:1500,y:2500});
     expect(imported.shapes[1].radius).toBeCloseTo(100);
     expect(imported.metresPerDrawingUnit).toBeCloseTo(0.001);
-    expect(imported.annotations[0].at).toEqual({x:1.5,y:2.5});
-    expect(imported.annotations[0].text).toBe('Valve chamber label');
+    const importedLabel = imported.annotations[0];
+    expect(importedLabel.kind).toBe('text');
+    if(importedLabel.kind==='text'){
+      expect(importedLabel.at).toEqual({x:1.5,y:2.5});
+      expect(importedLabel.text).toBe('Valve chamber label');
+    }
   });
 
 
