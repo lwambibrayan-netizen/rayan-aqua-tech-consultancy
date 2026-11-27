@@ -164,6 +164,8 @@ SPECIFIC GRAVITY 1.02
 VISCOSITY 1.1
 TRIALS 60
 ACCURACY 0.0001
+[STATUS]
+P1 CLOSED
 [TIMES]
 DURATION 12:00
 HYDRAULIC TIMESTEP 0:30
@@ -181,12 +183,14 @@ PAT1 1 1.2
   expect(pipe.geometry[1]).toEqual({x:50,y:10});
   expect(junction.properties.additionalDemands?.[0].flowM3h).toBeCloseTo(5.4);
   expect(junction.properties.emitterCoefficient).toBeCloseTo(0.5);
+  expect(pipe.properties.initialStatus).toBe('CLOSED');
   expect(imported.document.epanetTimes?.durationSeconds).toBe(43200);
   expect(imported.document.epanetTimes?.hydraulicStepSeconds).toBe(1800);
   const exported=exportWaterNetworkToEpanet(imported.document).input;
   expect(exported).toContain('HEADLOSS D-W');
   expect(exported).toContain('DURATION 12:00');
   expect(exported).toContain('P1 50 10');
+  expect(exported).toContain('P1 R1 J1 125 150 140 0.2 CLOSED');
   expect(exported).toContain('J1 1.5 PAT1');
   expect(exported).toContain('J1 0.5');
  });
