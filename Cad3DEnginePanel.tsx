@@ -448,7 +448,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
   const [mode, setMode] = useState<'select' | 'line' | 'polyline' | 'rect' | 'circle'>('select');
   const [draft, setDraft] = useState<Point2D[]>([]);
   const [view, setView] = useState<'2d' | '3d'>('2d');
-  const [ribbonTab, setRibbonTab] = useState<'Home'|'Modify'|'Insert'|'Annotate'|'Water Network'|'3D Modeling'|'Analyze'|'View'|'Output'|'Manage'>('Home');
+  const [ribbonTab, setRibbonTab] = useState<'Home'|'Modify'|'Insert'|'Annotate'|'Drafting'|'Water Network'|'3D Modeling'|'Analyze'|'View'|'Output'|'Manage'>('Home');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [commandLine, setCommandLine] = useState('');
   const [layer, setLayer] = useState('WATER_NETWORK');
@@ -1668,7 +1668,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
 
       <div className="aquacad-ribbon">
         <div className="aquacad-ribbon-tabs" role="tablist" aria-label="AquaCAD ribbon">
-          {(['Home','Modify','Insert','Annotate','Water Network','3D Modeling','Analyze','View','Output','Manage'] as const).map(tab => <button key={tab} role="tab" aria-selected={ribbonTab===tab} className={ribbonTab===tab?'active':''} onClick={()=>setRibbonTab(tab)}>{tab}</button>)}
+          {(['Home','Modify','Insert','Annotate','Drafting','Water Network','3D Modeling','Analyze','View','Output','Manage'] as const).map(tab => <button key={tab} role="tab" aria-selected={ribbonTab===tab} className={ribbonTab===tab?'active':''} onClick={()=>setRibbonTab(tab)}>{tab}</button>)}
         </div>
         <div className="aquacad-ribbon-content">
           <input ref={fileRef} type="file" accept=".dxf,.json" hidden onChange={event => importFile(event.target.files?.[0])} />
@@ -1817,12 +1817,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
               <button onClick={runEngineeringAudit}><i>✓</i><span>Audit</span></button>
             </div></div>}
           </div>
-        </div>
-        <div className="aquacad-quickbar"><span>Model: {view.toUpperCase()}</span><span>{shapes.length} entities</span><span>{waterCad.components.length} water objects</span><span>{units}</span><span>{snapEnabled?'OSNAP ON':'OSNAP OFF'}</span></div>
-
-      </div>
-
-
+        {ribbonTab==='Insert' && <div className="aquacad-ribbon-extra" data-cad-ribbon-panel="blocks">
       <div className="panel" style={{ padding: 14, display: 'grid', gap: 9 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <div><strong>Engineering object library</strong><div className="muted" style={{ fontSize: 12 }}>Parametric water symbols with named connection ports and default schedules</div></div>
@@ -1862,6 +1857,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           {engineeringAudit.issues.length > 12 && <span className="muted">Showing first 12 of {engineeringAudit.issues.length} findings.</span>}
         </div>}
       </div>
+        </div>}
+        {ribbonTab==='Drafting' && <div className="aquacad-ribbon-extra" data-cad-ribbon-panel="drafting">
       <div className="panel" style={{ padding: 14 }}>
         <span className="eyebrow muted">PROFESSIONAL DRAFTING</span>
         <h3 style={{ margin: "5px 0" }}>Dimensions, annotations, layers & drawing sheets</h3>
@@ -1935,7 +1932,8 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         {drafting.revisionHistory?.length > 0 && <div style={{ overflowX: "auto", marginTop: 8 }}><strong>Revision history</strong><table style={{ width: "100%", fontSize: 11 }}><thead><tr>{["Rev","Date","Description","Drawn","Checked","Approved","Status"].map(x => <th key={x}>{x}</th>)}</tr></thead><tbody>{drafting.revisionHistory.map((r,i) => <tr key={r.revision+i}><td>{r.revision}</td><td>{r.date}</td><td>{r.description}</td><td>{r.drawnBy}</td><td>{r.checkedBy}</td><td>{r.approvedBy}</td><td>{r.status}</td></tr>)}</tbody></table></div>}
         {drafting.annotations.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>{drafting.annotations.map(item => <button key={item.id} className="secondary-button" onClick={() => removeAnnotation(item.id)}>Delete {item.kind} · {item.id.slice(0,6)}</button>)}</div>}
       </div>
-
+        </div>}
+        {ribbonTab==='Water Network' && <div className="aquacad-ribbon-extra" data-cad-ribbon-panel="water-network">
       <div className="panel" style={{ padding: 14 }}>
         <span className="eyebrow muted">WATER ENGINEERING OBJECTS</span>
         <h3 style={{ margin: '5px 0' }}>Network component library</h3>
@@ -2114,6 +2112,12 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
         </div>
         {terrainGrid && <p className="muted" style={{fontSize:11}}>Terrain CRS: {terrainGrid.crs}. {waterCad.horizontalCrs===terrainGrid.crs && waterCad.horizontalUnits==='m' && waterCad.verticalDatum===terrainGrid.verticalDatum ? 'Horizontal CRS, metre units and vertical datum match.' : 'CRS, units or vertical datum do not match; terrain routing and co-registered 3D terrain are disabled until coordinates and levels are properly transformed.'}</p>}
       </div>
+        </div>}
+        </div>
+        <div className="aquacad-quickbar"><span>Model: {view.toUpperCase()}</span><span>{shapes.length} entities</span><span>{waterCad.components.length} water objects</span><span>{units}</span><span>{snapEnabled?'OSNAP ON':'OSNAP OFF'}</span></div>
+
+      </div>
+
 
       <div className="aquacad-document-tabs" role="tablist" aria-label="Open drawings">
         <button className="aquacad-document-tab active" role="tab" aria-selected="true">▧ {projectId ? 'Current project drawing' : 'Untitled drawing'} <span>×</span></button>
