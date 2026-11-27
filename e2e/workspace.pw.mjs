@@ -143,7 +143,7 @@ test('engineer opens a project, verifies precision drafting, saves and opens 3D'
   await cadCanvas.click({ position: { x: 300, y: 240 } });
   await ribbonContent.getByRole('button', { name: 'Finish Polyline' }).click();
   await expect(page.getByText(/Polyline finished/).first()).toBeVisible();
-  await expect(cadCanvas.locator('[data-shape-id]').first()).toHaveAttribute('stroke', '#087e83');
+  await expect(cadCanvas.locator('polyline[data-shape-id]').last()).toHaveAttribute('stroke', '#087e83');
 
   await ribbonContent.getByRole('button', { name: 'Circle' }).click();
   await ribbonContent.getByLabel('Circle method').selectOption('center-radius');
