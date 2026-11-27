@@ -7,7 +7,7 @@ export type WaterComponentKind =
   | 'pipe' | 'bend' | 'tee' | 'reducer' | 'valve' | 'pump'
   | 'tank' | 'chamber' | 'hydrant' | 'meter' | 'air-valve'
   | 'washout' | 'reservoir' | 'source' | 'junction';
-export type WaterPoint = { x: number; y: number; z?: number };
+export type WaterPoint = { x: number; y: number; z?: number; groundLevelM?: number; invertLevelM?: number };
 export type PipeMaterial = 'DI' | 'HDPE' | 'uPVC' | 'steel' | 'concrete' | 'GRP' | 'other';
 export type WaterEngineeringProperties = {
   tag: string;
@@ -148,7 +148,7 @@ export function validateWaterCad(document: WaterCadDocument): WaterCadIssue[] {
     const add = (severity: WaterCadIssue['severity'], code: string, message: string) => issues.push({ componentId: c.id, severity, code, message });
     if (!c.id || ids.has(c.id)) add('error', 'DUPLICATE_ID', 'Component IDs must be unique and non-empty.');
     ids.add(c.id);
-    if (!c.geometry.length || c.geometry.some(point => !finite(point.x) || !finite(point.y) || (point.z !== undefined && !finite(point.z)))) add('error', 'INVALID_GEOMETRY', 'Component coordinates must be finite.');
+    if (!c.geometry.length || c.geometry.some(point => !finite(point.x) || !finite(point.y) || (point.z !== undefined && !finite(point.z)) || (point.groundLevelM !== undefined && !finite(point.groundLevelM)) || (point.invertLevelM !== undefined && !finite(point.invertLevelM)))) add('error', 'INVALID_GEOMETRY', 'Component coordinates must be finite.');
     if (c.kind === 'pipe') {
       const length = componentPlanLength(c);
       if (length <= 0) add('error', 'ZERO_LENGTH_PIPE', 'Pipe must have a positive plan length.');
