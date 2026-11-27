@@ -1941,8 +1941,30 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           </div>
           <svg
             ref={svgRef}
+            tabIndex={0}
+            role="application"
+            aria-label="AquaCAD drawing canvas. Use Control or Command Z to undo, Shift Control or Command Z to redo, and Escape to cancel the active draft."
             viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
             onClick={handleCanvasClick}
+            onKeyDown={event => {
+              const target = event.target as HTMLElement;
+              if (target.closest('input,textarea,select,button,[contenteditable="true"]')) return;
+              const key = event.key.toLowerCase();
+              if ((event.ctrlKey || event.metaKey) && key === 'z') {
+                event.preventDefault();
+                setHistory(current => event.shiftKey ? redoHistory(current) : undoHistory(current));
+              } else if ((event.ctrlKey || event.metaKey) && key === 'y') {
+                event.preventDefault();
+                setHistory(current => redoHistory(current));
+              } else if (key === 'escape') {
+                event.preventDefault();
+                setDraft([]);
+                setWaterDraft([]);
+                setAnnotationDraft([]);
+                setPreviewShapes(null);
+                setMessage('Active CAD command cancelled.');
+              }
+            }}
             onWheel={event => {
               event.preventDefault();
               const anchor = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
