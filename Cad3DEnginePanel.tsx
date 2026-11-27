@@ -38,7 +38,7 @@ function nearestPointOnSegment(point: Point2D, a: Point2D, b: Point2D): Point2D 
   return { x: a.x + t * dx, y: a.y + t * dy };
 }
 
-function exportDxf(shapes: Shape[]) {
+export function exportDxf(shapes: Shape[]) {
   const output = [
     '0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '0', '0', 'ENDSEC',
     '0', 'SECTION', '2', 'ENTITIES',
@@ -85,7 +85,7 @@ function exportDxf(shapes: Shape[]) {
   return output.concat(['0', 'ENDSEC', '0', 'EOF']).join('\n');
 }
 
-function importDxf(source: string): Shape[] {
+export function importDxf(source: string): Shape[] {
   const rows = source.replace(/\r/g, '').split('\n');
   const pairs: Array<[string, string]> = [];
   for (let i = 0; i + 1 < rows.length; i += 2) {
@@ -233,9 +233,10 @@ function getSnapCandidates(shapes: Shape[], cursor: Point2D): Array<{ point: Poi
     getSegments([shape]).forEach(([a, b]) => candidates.push({ point: nearestPointOnSegment(cursor, a, b), kind: 'NEAREST' }));
     if (shape.type === 'line' || shape.type === 'polyline') {
       for (let i = 0; i < shape.points.length - 1; i++) {
-        const a = shape.points[i];
-        const b = shape.points[i + 1];
-        candidates.push({ point: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, kind: 'MIDPOINT' });
+        const segment=shape.type==='polyline'
+          ? bulgeSegmentPoints(shape.points[i],shape.points[i+1],shape.bulges?.[i]||0,2)
+          : [shape.points[i],shape.points[i+1]];
+        candidates.push({ point: segment[Math.floor(segment.length/2)], kind: 'MIDPOINT' });
       }
     }
   });
@@ -862,7 +863,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
             <rect x={viewBox.x} y={viewBox.y} width={viewBox.width} height={viewBox.height} fill="url(#cad-grid)" pointerEvents="none" />
             {renderedShapes}
             {selectionBox && <rect x={Math.min(selectionBox.start.x,selectionBox.end.x)} y={Math.min(selectionBox.start.y,selectionBox.end.y)} width={Math.abs(selectionBox.end.x-selectionBox.start.x)} height={Math.abs(selectionBox.end.y-selectionBox.start.y)} fill={selectionBox.end.x<selectionBox.start.x?'rgba(30,130,190,.12)':'rgba(20,150,110,.12)'} stroke={selectionBox.end.x<selectionBox.start.x?'#2684c7':'#15966e'} strokeDasharray="6 4" pointerEvents="none" />}
-            {previewShapes && previewShapes.map(shape => shape.type==='circle' ? <circle key={'preview-'+shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius||12} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/> : <polyline key={'preview-'+shape.id} points={(shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]]:shape.type==='polyline'?expandedPolylinePoints(shape):shape.points).map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>)}
+            {previewShapes && previewShapes.map(shape => shape.type==='circle' ? <circle key={'preview-'+shape.id} cx={shape.points[0].x} cy={shape.points[0].y} r={shape.radius||12} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/> : shape.type==='polyline' ? <path key={'preview-'+shape.id} d={polylineSvgPath(shape)} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/> : <polyline key={'preview-'+shape.id} points={(shape.type==='rect'?[shape.points[0],{x:shape.points[1].x,y:shape.points[0].y},shape.points[1],{x:shape.points[0].x,y:shape.points[1].y},shape.points[0]]:shape.points).map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#d59b42" strokeWidth="2" strokeDasharray="5 4" pointerEvents="none"/>)}
             {draft.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="5" fill="#d59b42" />)}
             {draft.length > 1 && <polyline points={draft.map(point => point.x + ',' + point.y).join(' ')} fill="none" stroke="#d59b42" strokeDasharray="7 5" />}
             {cursorPoint && mode !== 'select' && (
