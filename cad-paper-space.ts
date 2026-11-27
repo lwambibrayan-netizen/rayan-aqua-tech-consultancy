@@ -37,7 +37,7 @@ export function createViewportTransform(viewport:PaperViewport):ViewportTransfor
  const paperToModel=(point:PaperPoint):PaperPoint=>{
   const x=(point.x-viewport.xMm-viewport.widthMm/2)/scaleModelToPaper;
   const y=-(point.y-viewport.yMm-viewport.heightMm/2)/scaleModelToPaper;
-  return{x:viewport.modelCenter.x+x*c-y*s,y:viewport.modelCenter.y-x*s-y*c};
+  return{x:viewport.modelCenter.x+x*c+y*s,y:viewport.modelCenter.y-x*s+y*c};
  };
  return{scaleModelToPaper,rotationRad,modelToPaper,paperToModel};
 }
