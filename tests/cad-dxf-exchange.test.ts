@@ -141,6 +141,15 @@ describe('structured DXF exchange', () => {
     expect(imported.shapes.find(shape=>shape.type==='polyline')?.points[2].y).toBeCloseTo(1);
   });
 
+
+  it('preserves closed polyline topology in an export/import round trip', () => {
+    const closed = { id:'CLOSED', type:'polyline' as const, points:[{x:0,y:0},{x:4,y:0},{x:2,y:3},{x:0,y:0}], layer:'CHAMBERS' };
+    const dxf = exportDraftingDxf([closed], createDraftingDocument(), 1);
+    expect(dxf).toContain('70\n1');
+    const imported = importDraftingDxf(dxf);
+    expect(imported.shapes[0].points[0]).toEqual(imported.shapes[0].points.at(-1));
+  });
+
   it('reads standard external DXF INSUNITS metadata when no project calibration override is supplied', () => {
     const externalDrawing = ['0','SECTION','2','HEADER','9','$ACADVER','1','AC1018','9','$INSUNITS','70','4','0','ENDSEC',
       '0','SECTION','2','ENTITIES','0','LINE','8','WATER_PIPE','10','0','20','0','11','1500','21','2500',
