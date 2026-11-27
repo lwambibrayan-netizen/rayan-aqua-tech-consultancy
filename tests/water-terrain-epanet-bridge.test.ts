@@ -248,6 +248,16 @@ J1 100 0
   const result=importEpanetInp('[JUNCTIONS]\nJ1 10 1\n[RESERVOIRS]\nR1 20\n[PIPES]\nP1 R1 J1 50 100 130 0 OPEN\n[END]');
   expect(result.warnings.some(w=>w.includes('Synthetic layout positions'))).toBe(true);
  });
+ it('preserves seconds in EPANET simulation time settings',()=>{
+  const document:WaterCadDocument={schemaVersion:1,units:'m',verticalDatum:'test',components:[],epanetTimes:{durationSeconds:3665,hydraulicStepSeconds:905,patternStepSeconds:75,patternStartSeconds:35,reportStepSeconds:125,reportStartSeconds:5}};
+  const input=exportWaterNetworkToEpanet(document).input;
+  expect(input).toContain('DURATION 1:01:05');
+  expect(input).toContain('HYDRAULIC TIMESTEP 0:15:05');
+  expect(input).toContain('PATTERN TIMESTEP 0:01:15');
+  expect(input).toContain('PATTERN START 0:00:35');
+  expect(input).toContain('REPORT TIMESTEP 0:02:05');
+  expect(input).toContain('REPORT START 0:00:05');
+ });
  it('maps generated EPANET junctions back to their CAD connection object',()=>{
   const first=createWaterComponent('pipe','PIPE-A',0,0);first.geometry=[{x:0,y:0},{x:10,y:0}];first.properties.internalDiameterMm=100;
   const second=createWaterComponent('pipe','PIPE-B',10,0);second.geometry=[{x:10,y:0},{x:20,y:0}];second.properties.internalDiameterMm=100;
