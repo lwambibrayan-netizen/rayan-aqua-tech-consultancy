@@ -27,6 +27,7 @@ export type DraftingDocument = {
 };
 export const DEFAULT_DRAFT_LAYERS: DraftLayer[] = [
   { name: '0', color: '#202020', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
+  { name: 'WATER_NETWORK', color: '#167b78', lineType: 'CONTINUOUS', lineWeightMm: 0.35, visible: true, locked: false, plot: true },
   { name: 'WATER_PIPE', color: '#087e83', lineType: 'CONTINUOUS', lineWeightMm: 0.35, visible: true, locked: false, plot: true },
   { name: 'WATER_FITTING', color: '#087e83', lineType: 'CONTINUOUS', lineWeightMm: 0.35, visible: true, locked: false, plot: true },
   { name: 'DIMENSIONS', color: '#202020', lineType: 'CONTINUOUS', lineWeightMm: 0.18, visible: true, locked: false, plot: true },
