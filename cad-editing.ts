@@ -298,12 +298,15 @@ export function offsetPolyline<T extends CadEditableEntity>(entity:T,distance:nu
 export function chamferPolylineCorner<T extends CadEditableEntity>(entity: T, cornerIndex: number, distance: number): T {
   if (entity.type !== 'polyline' || !Number.isInteger(cornerIndex) || cornerIndex <= 0 || cornerIndex >= entity.points.length - 1) throw new Error('CHAMFER requires an internal polyline corner.');
   if (!finite(distance) || distance <= 0) throw new Error('Chamfer distance must be positive and finite.');
+  if (entity.bulges?.some(value => Math.abs(value) > 1e-12)) throw new Error('CHAMFER currently requires straight adjacent polyline segments.');
   const pts = entity.points, prev = pts[cornerIndex - 1], corner = pts[cornerIndex], next = pts[cornerIndex + 1];
   const lenA = dist(prev, corner), lenB = dist(corner, next);
   if (!lenA || !lenB || distance >= lenA || distance >= lenB) throw new Error('Chamfer distance is too large for the adjacent segments.');
   const a = { x: corner.x + (prev.x - corner.x) * distance / lenA, y: corner.y + (prev.y - corner.y) * distance / lenA };
   const b = { x: corner.x + (next.x - corner.x) * distance / lenB, y: corner.y + (next.y - corner.y) * distance / lenB };
-  return { ...entity, points: [...pts.slice(0, cornerIndex), a, b, ...pts.slice(cornerIndex + 1)].map(clonePoint) };
+  const points=[...pts.slice(0, cornerIndex), a, b, ...pts.slice(cornerIndex + 1)].map(clonePoint);
+  const bulges=entity.bulges ? Array(Math.max(0,points.length-1)).fill(0) : undefined;
+  return { ...entity, points, ...(bulges ? {bulges} : {}) };
 }
 export function filletPolylineCorner<T extends CadEditableEntity>(entity:T,cornerIndex:number,radius:number):T {
   if(entity.type!=='polyline'||!Number.isInteger(cornerIndex)||cornerIndex<=0||cornerIndex>=entity.points.length-1)throw new Error('FILLET requires an internal polyline corner.');
