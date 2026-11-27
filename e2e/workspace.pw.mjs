@@ -120,6 +120,9 @@ test('engineer opens a project, uses visible CAD navigation, saves and opens 3D'
   await page.getByRole('tab', { name: '3D Modeling' }).click();
   await page.getByRole('button', { name: /Open 3D View/ }).click();
   await expect(page.getByText('Interactive 3D model viewport')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Engineering tools', exact: true }).click();
+  await expect(page.getByText('CAD / 3D coordination')).toHaveCount(0);
 });
 
 test('PyQGIS service exposes a healthy processor and passing self-test', async ({ request }) => {
