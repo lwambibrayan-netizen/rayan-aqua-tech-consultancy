@@ -63,8 +63,8 @@ export function sampleGroundProfile(grid: TerrainGrid, route: WaterPoint[], spac
 export function applyTerrainToPipe(pipe: WaterCadComponent, grid: TerrainGrid, coverDepthM: number, invertOffsetM = 0): WaterCadComponent {
   if(pipe.kind!=='pipe'||pipe.geometry.length<2) throw new Error('Terrain routing requires a pipe with at least two vertices.');
   if(!finite(coverDepthM)||coverDepthM<0||!finite(invertOffsetM)) throw new Error('Cover depth must be non-negative and invert offset finite.');
-  const od=(pipe.properties.externalDiameterMm??pipe.properties.nominalDiameterMm??0)/1000;
-  if(!(od>0)) throw new Error('Set a positive external or nominal pipe diameter before terrain routing.');
+  const od=(pipe.properties.externalDiameterMm??0)/1000;
+  if(!(od>0)) throw new Error('Set a verified positive external pipe diameter (OD) before calculating cover depth.');
   const samples=sampleGroundProfile(grid,pipe.geometry,Math.min(5,Math.max(0.5,grid.cellSizeX,grid.cellSizeY)));
   const geometry=samples.map(point=>{
     const ground=point.groundLevelM;
@@ -79,7 +79,7 @@ export function applyTerrainToPipe(pipe: WaterCadComponent, grid: TerrainGrid, c
 export function buildTerrainAwarePipeProfile(pipe:WaterCadComponent,grid:TerrainGrid,spacingM=5):ProfilePoint[] {
   if(pipe.kind!=='pipe') throw new Error('A terrain profile requires a pipe component.');
   const ground=sampleGroundProfile(grid,pipe.geometry,spacingM);
-  const od=(pipe.properties.externalDiameterMm??pipe.properties.nominalDiameterMm??0)/1000;
+  const od=(pipe.properties.externalDiameterMm??0)/1000;
   const start=pipe.properties.invertInletM,end=pipe.properties.invertOutletM;
   const anchors:Array<{chainageM:number;invert:number|null}>=[];
   let anchorChainage=0;
