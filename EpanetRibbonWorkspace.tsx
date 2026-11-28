@@ -102,7 +102,7 @@ export default function EpanetRibbonWorkspace(props:Props){
  const tabs=['Home','Network','Hydraulics','Analysis','Output','GIS'] as const;
  const tabMap:Record<(typeof tabs)[number],Tab>={Home:'Home',Network:'Draw',Hydraulics:'Hydraulics',Analysis:'Simulation',Output:'Results',GIS:'GIS & CAD'};
  const [commandInput,setCommandInput]=useState('');
- const [statusToggles,setStatusToggles]=useState({SNAP:true,GRID:true,ORTHO:false,OSNAP:true});
+ const [statusToggles,setStatusToggles]=useState({SNAP:true,GRID:true,ORTHO:false});
  const active=useMemo<Command[]>(()=>commands[tabMap[tab]],[tab,tabMap]);
  const execute=(item:Command)=>{
   const root=document.getElementById('rayan-epanet-workspace');if(!root)return;
@@ -214,7 +214,7 @@ export default function EpanetRibbonWorkspace(props:Props){
      <button type="button" onClick={()=>setTab('Output')}>Reports & exports <span>›</span></button>
     </section>
    </aside>
-   <div className="ra-epanet-engine"><EpanetEnginePanel {...props}/></div>
+   <div className="ra-epanet-engine"><EpanetEnginePanel {...props} drawingAids={{snap:statusToggles.SNAP,grid:statusToggles.GRID,ortho:statusToggles.ORTHO}}/></div>
   </div>
   <div className="ra-epanet-commandline" role="search">
    <b>COMMAND</b>
@@ -222,8 +222,8 @@ export default function EpanetRibbonWorkspace(props:Props){
    <button type="button" onClick={()=>{const q=commandInput.trim().toLowerCase();const aliases:Record<string,string>={run:'Run EPANET',save:'Save design',pipe:'Pipe',junction:'Junction',tank:'Tank',reservoir:'Reservoir',pump:'Pump',valve:'Valve',select:'Select','zoom in':'Zoom in','zoom out':'Zoom out','zoom e':'Fit drawing',results:'Simulation results',properties:'Properties'};const label=aliases[q]||q;const item=Object.values(commands).flat().find(x=>x.label.toLowerCase()===label.toLowerCase()||x.target.toLowerCase()===label.toLowerCase());if(item)execute(item);else setMessage('Unknown command: '+commandInput);setCommandInput('');}}>Execute</button>
   </div>
   <div className="ra-epanet-statusbar" role="toolbar" aria-label="Drafting and model status">
-   {(['SNAP','GRID','ORTHO','OSNAP'] as const).map(name=><button key={name} type="button" aria-pressed={statusToggles[name]} onClick={()=>setStatusToggles(v=>({...v,[name]:!v}))}>{name}</button>)}
-   <span>SI UNITS · {props.projectTitle||'UNSAVED PROJECT'} · OWA-EPANET</span>
+   {(['SNAP','GRID','ORTHO'] as const).map(name=><button key={name} type="button" aria-pressed={statusToggles[name]} onClick={()=>setStatusToggles(v=>({...v,[name]:!v}))}>{name}</button>)}
+   <span>OSNAP · NODE PICK ACTIVE</span><span>SI UNITS · {props.projectTitle||'UNSAVED PROJECT'} · OWA-EPANET</span>
   </div>
  </div>;
 }
