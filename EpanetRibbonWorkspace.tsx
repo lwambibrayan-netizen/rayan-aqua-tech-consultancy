@@ -154,7 +154,50 @@ export default function EpanetRibbonWorkspace(props:Props){
  const renderCommand=(item:Command,compact=false)=>{const Icon=item.icon;return <button key={item.label} type="button" className={compact?'ra-epanet-quick':'ra-epanet-command'} title={item.hint} onClick={()=>execute(item)}><Icon size={compact?17:20}/><span>{item.label}</span>{!compact?<small>{item.hint}</small>:null}</button>};
  return <div id="rayan-epanet-workspace" className="ra-epanet-workspace" data-active-tab={tab}>
   <style>{`
-  .ra-epanet-workspace{--ra-ink:#12333d;--ra-muted:#637b80;--ra-line:#d7e3df;--ra-accent:#147b6b;color:var(--ra-ink);min-width:0;padding-bottom:68px}
+  .ra-epanet-workspace{--ra-ink:#16233f;--ra-muted:#5d6c8a;--ra-line:#c9d4e5;--ra-accent:#0b6fd6;color:var(--ra-ink);min-width:0;padding:0 0 8px;background:#e9eef5;font:12px/1.4 "Segoe UI",system-ui,sans-serif}
+  .ra-epanet-ribbon{border:1px solid #c9d4e5;border-radius:0;background:#f8fafd;box-shadow:none}
+  .ra-epanet-titlebar{justify-content:flex-start;padding:5px 10px;background:#dde5f0;color:#16233f;border-bottom:1px solid #c9d4e5}
+  .ra-epanet-titlebar:before{content:"R";display:grid;place-items:center;flex:0 0 26px;width:26px;height:26px;border-radius:5px;background:#0b6fd6;color:#fff;font-weight:900;font-size:17px}
+  .ra-epanet-titlebar strong{font-size:12px}.ra-epanet-titlebar small{color:#5d6c8a;font-size:10px}
+  .ra-epanet-titlebar>span{margin-left:auto!important;color:#176b58!important}
+  .ra-epanet-menubar{padding:2px 6px;background:#f8fafd;border:0;border-bottom:1px solid #c9d4e5;border-radius:0}
+  .ra-epanet-menubar button{padding:3px 10px;color:#16233f;font-size:11px}
+  .ra-epanet-tabs{padding:3px 8px 0;background:#f8fafd;border-bottom:1px solid #c9d4e5}
+  .ra-epanet-tab{padding:5px 14px;color:#5d6c8a;font-size:11px}
+  .ra-epanet-tab[aria-selected=true]{background:#e9eef5;color:#16233f;border:1px solid #c9d4e5;border-bottom:0}
+  .ra-epanet-group-label{display:none}
+  .ra-epanet-commandbar{gap:0;min-height:74px;padding:6px 8px;background:#e9eef5}
+  .ra-epanet-command{flex:0 0 64px;gap:3px;padding:4px 5px;border-right:1px solid #c9d4e5;border-radius:0;background:transparent;color:#16233f;font-size:10px}
+  .ra-epanet-command svg{color:#0b6fd6;width:20px;height:20px}
+  .ra-epanet-command small{display:none}
+  .ra-epanet-status{display:none}
+  .ra-epanet-body{grid-template-columns:230px minmax(0,1fr);gap:0;padding-top:0;align-items:stretch;min-height:480px}
+  .ra-epanet-browser{border:0;border-right:1px solid #c9d4e5;border-radius:0;background:#f8fafd;min-height:480px}
+  .ra-epanet-browser h3{padding:5px 10px;background:#dde5f0;color:#16233f;border-bottom:1px solid #c9d4e5;border-radius:0}
+  .ra-epanet-browser section{border-bottom:1px solid #c9d4e5}
+  .ra-epanet-browser button{color:#16233f}
+  .ra-epanet-engine>section:not([data-epanet-region="design-review"]){grid-template-columns:minmax(0,1fr) 250px;gap:0;padding:0!important;border:0!important;border-radius:0!important;background:#1c2128!important;box-shadow:none!important;align-items:stretch;min-height:480px}
+  .ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="drawing"]{grid-column:1;min-width:0;margin:0!important;padding:8px!important;border:0!important;border-radius:0!important;background:#1c2128!important;color:#cfd8e6}
+  .ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="drawing"]>div:first-child{color:#cfd8e6}
+  .ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="drawing"] svg{background-color:#1c2128!important;border:0!important;border-radius:0!important}
+  .ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="drawing"] svg text{fill:#cfd8e6!important}
+  .ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="properties"]{grid-column:2;display:block;min-width:0;margin:0!important;padding:0!important;border-left:1px solid #c9d4e5;background:#f8fafd}
+  .ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="properties"]>div{margin:0!important;padding:10px!important;border:0!important;border-bottom:1px solid #c9d4e5!important;border-radius:0!important;box-shadow:none!important;background:#f8fafd!important}
+  .ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="properties"] strong{color:#16233f}
+  .ra-epanet-commandline{margin:0;padding:4px 10px;border:0;border-top:1px solid #c9d4e5;border-radius:0;background:#f8fafd}
+  .ra-epanet-commandline b{color:#0b6fd6}
+  .ra-epanet-commandline input{color:#16233f}
+  .ra-epanet-modeltabs{display:flex;gap:0;background:#dde5f0;border-top:1px solid #c9d4e5}
+  .ra-epanet-modeltabs button{padding:4px 14px;border:0;border-right:1px solid #c9d4e5;background:transparent;color:#5d6c8a;font-size:10px;cursor:pointer}
+  .ra-epanet-modeltabs button[aria-pressed=true]{background:#e9eef5;color:#16233f;font-weight:800}
+  .ra-epanet-statusbar{margin:0;padding:3px 8px;border:0;border-top:1px solid #c9d4e5;border-radius:0;background:#dde5f0}
+  .ra-epanet-statusbar button{padding:2px 8px;color:#5d6c8a}
+  .ra-epanet-statusbar button[aria-pressed=true]{background:#0b6fd6;color:#fff}
+  .ra-epanet-statusbar span{font-size:10px;color:#5d6c8a}
+  .ra-epanet-bottom{display:none!important}
+  @media(max-width:900px){.ra-epanet-body{grid-template-columns:190px minmax(0,1fr)}.ra-epanet-engine>section:not([data-epanet-region="design-review"]){grid-template-columns:minmax(0,1fr) 220px}}
+  @media(max-width:760px){.ra-epanet-body{grid-template-columns:minmax(0,1fr)}.ra-epanet-browser{min-height:0;max-height:180px;border-right:0;border-bottom:1px solid #c9d4e5}.ra-epanet-engine>section:not([data-epanet-region="design-review"]){grid-template-columns:minmax(0,1fr)}.ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="drawing"],.ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="properties"]{grid-column:1}.ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="properties"]{border-left:0;border-top:1px solid #c9d4e5}.ra-epanet-engine>section:not([data-epanet-region="design-review"])>[data-epanet-region="drawing"] svg{min-width:0!important}}
+  @media(max-width:640px){.ra-epanet-titlebar{align-items:center;flex-direction:row}.ra-epanet-command{flex-basis:58px}.ra-epanet-commandline{gap:5px}.ra-epanet-statusbar{overflow-x:auto}}
   .ra-epanet-ribbon{border:1px solid var(--ra-line);border-radius:13px 13px 0 0;background:#f8fbfa;overflow:hidden;box-shadow:0 5px 18px rgba(20,55,55,.06)}
   .ra-epanet-titlebar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 15px;background:#12333d;color:#fff}
   .ra-epanet-titlebar strong{font-size:14px;letter-spacing:.02em}.ra-epanet-titlebar small{display:block;color:#c4d7d5;font-size:11px;margin-top:3px}
@@ -221,6 +264,7 @@ export default function EpanetRibbonWorkspace(props:Props){
    <input aria-label="EPANET command line" value={commandInput} onChange={e=>setCommandInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){const q=commandInput.trim().toLowerCase();const aliases:Record<string,string>={run:'Run EPANET',save:'Save design',pipe:'Pipe',junction:'Junction',tank:'Tank',reservoir:'Reservoir',pump:'Pump',valve:'Valve',select:'Select','zoom in':'Zoom in','zoom out':'Zoom out','zoom e':'Fit drawing',results:'Simulation results',properties:'Properties'};if(q==='help'){setMessage('Commands: RUN, SAVE, PIPE, JUNCTION, TANK, RESERVOIR, PUMP, VALVE, SELECT, ZOOM IN, ZOOM OUT, ZOOM E, RESULTS, PROPERTIES.');}else{const label=aliases[q]||q;const item=Object.values(commands).flat().find(x=>x.label.toLowerCase()===label.toLowerCase()||x.target.toLowerCase()===label.toLowerCase());if(item)execute(item);else setMessage('Unknown command: '+commandInput);}setCommandInput('');}}} placeholder="RUN, SAVE, PIPE, JUNCTION, ZOOM IN…"/>
    <button type="button" onClick={()=>{const q=commandInput.trim().toLowerCase();const aliases:Record<string,string>={run:'Run EPANET',save:'Save design',pipe:'Pipe',junction:'Junction',tank:'Tank',reservoir:'Reservoir',pump:'Pump',valve:'Valve',select:'Select','zoom in':'Zoom in','zoom out':'Zoom out','zoom e':'Fit drawing',results:'Simulation results',properties:'Properties'};const label=aliases[q]||q;const item=Object.values(commands).flat().find(x=>x.label.toLowerCase()===label.toLowerCase()||x.target.toLowerCase()===label.toLowerCase());if(item)execute(item);else setMessage('Unknown command: '+commandInput);setCommandInput('');}}>Execute</button>
   </div>
+  <div className="ra-epanet-modeltabs" role="tablist" aria-label="Drawing sheets"><button type="button" aria-pressed="true">Model</button><button type="button" aria-pressed="false">Layout1</button><button type="button" aria-label="Add layout" disabled>+</button></div>
   <div className="ra-epanet-statusbar" role="toolbar" aria-label="Drafting and model status">
    {(['SNAP','GRID','ORTHO'] as const).map(name=><button key={name} type="button" aria-pressed={statusToggles[name]} onClick={()=>setStatusToggles(v=>({...v,[name]:!v}))}>{name}</button>)}
    <span>OSNAP · NODE PICK ACTIVE</span><span>SI UNITS · {props.projectTitle||'UNSAVED PROJECT'} · OWA-EPANET</span>
