@@ -8,11 +8,11 @@ type Tab = 'Home' | 'Draw' | 'Edit' | 'Hydraulics' | 'Simulation' | 'Analysis' |
 const commands: Record<Tab, { label: string; hint: string; target?: string; icon: React.ComponentType<any> }[]> = {
   Home: [{label:'Save design',hint:'Save this project network',target:'Save design',icon:Save},{label:'Example network',hint:'Load a sample network',target:'Example network',icon:Network},{label:'Import .inp',hint:'Open an EPANET input file',target:'Import EPANET .inp',icon:ArrowUpFromLine},{label:'Export .inp',hint:'Export the native EPANET model',target:'Export .inp',icon:ArrowDownToLine}],
   Draw: [{label:'Select',hint:'Select and inspect components',target:'Select',icon:Move},{label:'Junction',hint:'Place a demand junction',target:'Junction',icon:CircleDot},{label:'Reservoir',hint:'Place a fixed-head source',target:'Reservoir',icon:Activity},{label:'Tank',hint:'Place a storage tank',target:'Tank',icon:Layers3},{label:'Pipe',hint:'Connect two nodes with a pipe',target:'Pipe',icon:Network},{label:'Pump',hint:'Connect a pump between nodes',target:'Pump',icon:Gauge},{label:'Valve',hint:'Place a control valve',target:'Valve',icon:Settings2},{label:'Check valve',hint:'Add a check-valve link',target:'Check valve',icon:CheckCircle2}],
-  Edit: [{label:'Select component',hint:'Choose an object on the network',target:'Select',icon:Move},{label:'Component properties',hint:'Jump to the properties inspector',target:'Component properties',icon:Settings2},{label:'Remove selected',hint:'Use the selected component delete control',target:'Component properties',icon:ClipboardList}],
-  Hydraulics: [{label:'Simulation settings',hint:'Duration, timestep and design criteria',target:'Simulation settings & criteria',icon:Settings2},{label:'Water quality',hint:'Configure chemical, age or source tracing',target:'Water quality & leakage analysis',icon:Activity},{label:'Leakage analysis',hint:'Configure emitter coefficients',target:'Water quality & leakage analysis',icon:Gauge}],
+  Edit: [{label:'Select component',hint:'Choose an object on the network',target:'Select',icon:Move},{label:'Component properties',hint:'Jump to the properties inspector',target:'Component properties',icon:Settings2},{label:'Edit selection',hint:'Jump to the selected component properties',target:'Component properties',icon:ClipboardList}],
+  Hydraulics: [{label:'Simulation settings',hint:'Duration, timestep and design criteria',target:'Simulation settings & criteria',icon:Settings2},{label:'Water quality',hint:'Configure chemical, age or source tracing',target:'Water Quality',icon:Activity},{label:'Leakage analysis',hint:'Configure emitter coefficients',target:'Leakage Detection',icon:Gauge}],
   Simulation: [{label:'Run EPANET',hint:'Run the OWA-EPANET solver after validation',target:'Run EPANET',icon:Play},{label:'Results',hint:'Review simulation outputs',target:'EPANET simulation results',icon:Activity}],
   Analysis: [{label:'Pressure results',hint:'Review node pressure compliance',target:'EPANET simulation results',icon:Gauge},{label:'Velocity & flow',hint:'Review link velocity and flow',target:'Pipe, pump and valve results',icon:Activity},{label:'Diagnostics',hint:'Review engineering warnings and suggestions',target:'Design review suggestions',icon:ClipboardList}],
-  'GIS & CAD': [{label:'Import GIS network',hint:'Create a hydraulic model from project GIS features',target:'Import GIS network',icon:Layers3},{label:'Import CAD model',hint:'Use the existing CAD-to-EPANET handoff when supplied',target:'Import EPANET .inp',icon:Network}],
+  'GIS & CAD': [{label:'Import GIS network',hint:'Create a hydraulic model from project GIS features',target:'Import GIS network',icon:Layers3},{label:'Import EPANET .inp',hint:'Load a native EPANET network file',target:'Import EPANET .inp',icon:Network}],
   View: [{label:'Network drawing',hint:'Focus the network canvas',target:'Network drawing',icon:Network},{label:'Zoom in',hint:'Magnify the network drawing',target:'__zoom_in__',icon:ZoomIn},{label:'Zoom out',hint:'Show more of the network drawing',target:'__zoom_out__',icon:ZoomOut},{label:'Fit drawing',hint:'Reset the drawing to its full view',target:'__fit__',icon:Move},{label:'Properties inspector',hint:'Focus component properties',target:'Component properties',icon:Settings2},{label:'Simulation settings',hint:'Focus model settings',target:'Simulation settings & criteria',icon:ClipboardList}],
   Reports: [{label:'Design report',hint:'Download the simulation design report',target:'Download design report',icon:ClipboardList},{label:'Compliance CSV',hint:'Download pressure and velocity checks',target:'Download compliance CSV',icon:ArrowDownToLine}],
 };
@@ -24,9 +24,26 @@ export default function EpanetRibbonWorkspace(props: Props) {
   const execute = (label: string, target?: string) => {
     const root = document.getElementById('rayan-epanet-workspace');
     if (!root || !target) return;
+    const canvas = root.querySelector('svg[aria-label="Sketch your water distribution network"]') as SVGSVGElement | null;
+    if (canvas && (target === '__zoom_in__' || target === '__zoom_out__' || target === '__fit__')) {
+      if (target === '__fit__') canvas.setAttribute('viewBox', '0 0 900 420');
+      else {
+        const values = (canvas.getAttribute('viewBox') || '0 0 900 420').trim().split(/[ ,]+/).map(Number);
+        const [x, y, width, height] = values.length === 4 && values.every(Number.isFinite) ? values : [0, 0, 900, 420];
+        const factor = target === '__zoom_in__' ? 0.8 : 1.25;
+        const nextWidth = Math.max(180, Math.min(1800, width * factor));
+        const nextHeight = Math.max(84, Math.min(840, height * factor));
+        canvas.setAttribute('viewBox', `${x + (width-nextWidth)/2} ${y + (height-nextHeight)/2} ${nextWidth} ${nextHeight}`);
+      }
+      setCommandMessage(label + ' · drawing view updated');
+      return;
+    }
     const candidates = Array.from(root.querySelectorAll('button, strong, h2, h3, summary')) as HTMLElement[];
-    const found = candidates.find(el => (el.innerText || el.textContent || '').trim().toLowerCase() === target.toLowerCase());
-    if (!found) { setCommandMessage(label + ' · use the relevant panel below'); return; }
+    const found = candidates.find(el => {
+      const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+      return text === target.toLowerCase() || (el instanceof HTMLButtonElement && text.startsWith(target.toLowerCase()));
+    });
+    if (!found) { setCommandMessage(label + ' · unavailable until the required model or result exists'); return; }
     if (found instanceof HTMLButtonElement) found.click();
     else found.scrollIntoView({behavior:'smooth',block:'center'});
     setCommandMessage(label + ' · command activated');
@@ -48,7 +65,7 @@ export default function EpanetRibbonWorkspace(props: Props) {
       .ra-epanet-status{display:flex;align-items:center;gap:7px;border:1px solid var(--ra-line);border-top:0;background:#f5f9f7;padding:7px 12px;color:#587178;font-size:10px}
       .ra-epanet-status span{margin-left:auto}
       .ra-epanet-body{padding-top:12px}
-      .ra-epanet-body>section{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:14px!important;border-radius:0 0 13px 13px!important;border-top:0!important;align-items:start}.ra-epanet-body>section>*{min-width:0;grid-column:1/-1}.ra-epanet-body>section>div:nth-child(6){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}.ra-epanet-body>section>div:nth-child(6)>div{min-width:0}.ra-epanet-body>section>div:nth-child(7){display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-content:start}@media(max-width:760px){.ra-epanet-body>section>div:nth-child(6){grid-template-columns:minmax(0,1fr)}}
+      .ra-epanet-body>section{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);gap:12px;padding:14px!important;border-radius:0 0 13px 13px!important;border-top:0!important;align-items:start}.ra-epanet-body>section>*{min-width:0;grid-column:1/-1}.ra-epanet-body>section>[data-epanet-region="drawing"]{grid-column:1;min-width:0}.ra-epanet-body>section>[data-epanet-region="properties"]{grid-column:2;display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-content:start;min-width:0}.ra-epanet-body>section>[data-epanet-region="properties"]>div{min-width:0}@media(max-width:760px){.ra-epanet-body>section{grid-template-columns:minmax(0,1fr)}.ra-epanet-body>section>[data-epanet-region="drawing"],.ra-epanet-body>section>[data-epanet-region="properties"]{grid-column:1}}
       .ra-epanet-body svg{max-width:100%}
       @media(max-width:640px){.ra-epanet-titlebar{align-items:flex-start;flex-direction:column}.ra-epanet-commandbar{min-height:78px}.ra-epanet-command{flex-basis:82px}}
     `}</style>
