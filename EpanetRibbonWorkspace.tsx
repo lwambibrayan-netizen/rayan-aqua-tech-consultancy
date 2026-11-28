@@ -4,6 +4,7 @@ import { Activity, AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Beaker, Chec
 
 type Props = React.ComponentProps<typeof EpanetEnginePanel>;
 type Tab = 'Home' | 'Draw' | 'Edit' | 'Hydraulics' | 'Controls' | 'Simulation' | 'Results' | 'GIS & CAD' | 'View' | 'Reports';
+type DisplayTab = 'Home' | 'Network' | 'Hydraulics' | 'Analysis' | 'Output' | 'GIS';
 type Command = {label:string;hint:string;target:string;icon:React.ComponentType<any>;group?:string};
 const commands:Record<Tab,Command[]> = {
  Home:[
@@ -96,13 +97,13 @@ const bottomCommands:Command[]=[
  {label:'Save',hint:'Save design',target:'Save design',icon:Save}
 ];
 export default function EpanetRibbonWorkspace(props:Props){
- const [tab,setTab]=useState<Tab>('Home');
+ const [tab,setTab]=useState<DisplayTab>('Home');
  const [message,setMessage]=useState('Ready · all EPANET commands are grouped in the ribbon');
  const tabs=['Home','Network','Hydraulics','Analysis','Output','GIS'] as const;
  const tabMap:Record<(typeof tabs)[number],Tab>={Home:'Home',Network:'Draw',Hydraulics:'Hydraulics',Analysis:'Simulation',Output:'Results',GIS:'GIS & CAD'};
  const [commandInput,setCommandInput]=useState('');
  const [statusToggles,setStatusToggles]=useState({SNAP:true,GRID:true,ORTHO:false,OSNAP:true});
- const active=useMemo(()=>commands[tabMap[tab]],[tab]);
+ const active=useMemo<Command[]>(()=>commands[tabMap[tab]],[tab,tabMap]);
  const execute=(item:Command)=>{
   const root=document.getElementById('rayan-epanet-workspace');if(!root)return;
   const target=item.target;
