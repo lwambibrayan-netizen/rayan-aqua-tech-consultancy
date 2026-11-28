@@ -98,8 +98,11 @@ const bottomCommands:Command[]=[
 export default function EpanetRibbonWorkspace(props:Props){
  const [tab,setTab]=useState<Tab>('Home');
  const [message,setMessage]=useState('Ready · all EPANET commands are grouped in the ribbon');
- const tabs=Object.keys(commands) as Tab[];
- const active=useMemo(()=>commands[tab],[tab]);
+ const tabs=['Home','Network','Hydraulics','Analysis','Output','GIS'] as const;
+ const tabMap:Record<(typeof tabs)[number],Tab>={Home:'Home',Network:'Draw',Hydraulics:'Hydraulics',Analysis:'Simulation',Output:'Results',GIS:'GIS & CAD'};
+ const [commandInput,setCommandInput]=useState('');
+ const [statusToggles,setStatusToggles]=useState({SNAP:true,GRID:true,ORTHO:false,OSNAP:true});
+ const active=useMemo(()=>commands[tabMap[tab]],[tab]);
  const execute=(item:Command)=>{
   const root=document.getElementById('rayan-epanet-workspace');if(!root)return;
   const target=item.target;
@@ -153,7 +156,11 @@ export default function EpanetRibbonWorkspace(props:Props){
   .ra-epanet-command small{font-size:9px;font-weight:500;color:#71868a;text-align:center;line-height:1.2}
   .ra-epanet-status{display:flex;align-items:center;gap:7px;border:1px solid var(--ra-line);border-top:0;background:#f5f9f7;padding:7px 12px;color:#587178;font-size:10px}
   .ra-epanet-status span:last-child{margin-left:auto}
-  .ra-epanet-body{padding-top:12px}
+  .ra-epanet-menubar{display:flex;gap:3px;align-items:center;padding:4px 9px;background:#fff;border:1px solid var(--ra-line);border-bottom:0;overflow-x:auto}.ra-epanet-menubar button{border:0;background:transparent;color:#48636a;padding:5px 11px;border-radius:5px;font-size:11px;cursor:pointer}.ra-epanet-menubar button:hover{background:#eaf3ef}
+  .ra-epanet-body{display:grid;grid-template-columns:205px minmax(0,1fr);gap:10px;padding-top:10px;align-items:start}
+  .ra-epanet-browser{border:1px solid var(--ra-line);border-radius:10px;background:#f8fbfa;overflow:hidden;min-width:0}.ra-epanet-browser h3{margin:0;padding:9px 11px;background:#dfe9e5;color:#294950;font-size:10px;letter-spacing:.09em}.ra-epanet-browser section{padding:8px 9px;border-bottom:1px solid #e2ebe7}.ra-epanet-browser strong{display:block;color:#71868a;font-size:9px;letter-spacing:.08em;margin:0 0 5px}.ra-epanet-browser button{display:flex;justify-content:space-between;width:100%;padding:5px 6px;border:0;border-radius:5px;background:transparent;color:#294950;font-size:11px;text-align:left;cursor:pointer}.ra-epanet-browser button:hover{background:#e8f3ee}
+  .ra-epanet-commandline{display:flex;align-items:center;gap:8px;margin-top:10px;padding:7px 10px;border:1px solid var(--ra-line);background:#f8fbfa;border-radius:8px}.ra-epanet-commandline b{font:700 11px Consolas,monospace;color:#147b6b}.ra-epanet-commandline input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#23454d;font:12px Consolas,monospace}.ra-epanet-commandline button{border:1px solid #cbdcd5;border-radius:5px;padding:4px 9px;background:#fff;color:#23454d;font-size:10px;cursor:pointer}
+  .ra-epanet-statusbar{display:flex;gap:4px;align-items:center;overflow-x:auto;margin-top:5px;padding:5px 8px;background:#e6eeea;border:1px solid #d2dfd9;border-radius:6px;white-space:nowrap}.ra-epanet-statusbar button{border:0;border-radius:4px;padding:3px 8px;background:transparent;color:#60777a;font:10px Consolas,monospace;cursor:pointer}.ra-epanet-statusbar button[aria-pressed=true]{background:#147b6b;color:#fff}.ra-epanet-statusbar span{margin-left:auto;color:#587178;font:10px Consolas,monospace}
   .ra-epanet-body>section{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);gap:12px;padding:14px!important;border-radius:0 0 13px 13px!important;border-top:0!important;align-items:start}
   .ra-epanet-body>section>*{min-width:0;grid-column:1/-1}
   .ra-epanet-body>section>[data-epanet-region="drawing"]{grid-column:1;min-width:0}
@@ -164,11 +171,13 @@ export default function EpanetRibbonWorkspace(props:Props){
   .ra-epanet-quick{display:flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;padding:9px 12px;border:1px solid #dce8e2;border-radius:8px;background:#fff;color:#23464c;font-size:11px;font-weight:800;cursor:pointer}
   .ra-epanet-quick svg{color:#147b6b}.ra-epanet-quick:hover{background:#eaf6f0;border-color:#9fcdbb}
   .ra-epanet-body svg{max-width:100%}
-  @media(max-width:760px){.ra-epanet-body>section{grid-template-columns:minmax(0,1fr)}.ra-epanet-body>section>[data-epanet-region="drawing"],.ra-epanet-body>section>[data-epanet-region="properties"]{grid-column:1}}
+  @media(max-width:900px){.ra-epanet-body{grid-template-columns:170px minmax(0,1fr)}}
+  @media(max-width:760px){.ra-epanet-body{grid-template-columns:minmax(0,1fr)}.ra-epanet-browser{display:none}.ra-epanet-body>section{grid-template-columns:minmax(0,1fr)}.ra-epanet-body>section>[data-epanet-region="drawing"],.ra-epanet-body>section>[data-epanet-region="properties"]{grid-column:1}}
   @media(max-width:640px){.ra-epanet-titlebar{align-items:flex-start;flex-direction:column}.ra-epanet-commandbar{min-height:82px}.ra-epanet-command{flex-basis:86px}.ra-epanet-bottom{margin-left:-2px;margin-right:-2px}.ra-epanet-quick{padding:9px 10px}}
   `}</style>
   <div className="ra-epanet-ribbon">
    <div className="ra-epanet-titlebar"><div><strong>RAYAN AQUATECH · EPANET HYDRAULIC DESIGN</strong><small>Complete hydraulic modelling workspace · {props.projectTitle||'unsaved project'}</small></div><span style={{fontSize:10,fontWeight:800,color:'#a9e2cf'}}>● OWA-EPANET ENGINE</span></div>
+   <div className="ra-epanet-menubar">{['File','Edit','View','Project','Report','Tools','Window','Help'].map(name=><button key={name} type="button" onClick={()=>name==='Help'?setMessage('Use ribbon commands or type HELP below.'):name==='View'?setTab('Network'):name==='Report'?setTab('Output'):setMessage(name+' menu · use the ribbon commands below')}>{name}</button>)}</div>
    <div className="ra-epanet-tabs" role="tablist" aria-label="EPANET tool ribbon">{tabs.map(name=><button key={name} type="button" role="tab" aria-selected={tab===name} className="ra-epanet-tab" onClick={()=>setTab(name)}>{name}</button>)}</div>
    <div className="ra-epanet-group-label">{tab} tools · select a command to open or activate it</div>
    <div className="ra-epanet-commandbar" role="toolbar" aria-label={tab+' commands'}>{active.map(item=>renderCommand(item))}</div>
