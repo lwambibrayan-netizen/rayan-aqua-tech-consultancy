@@ -104,6 +104,15 @@ export default function EpanetRibbonWorkspace(props:Props){
  const [commandInput,setCommandInput]=useState('');
  const [statusToggles,setStatusToggles]=useState({SNAP:true,GRID:true,ORTHO:false});
  const active=useMemo<Command[]>(()=>commands[tabMap[tab]],[tab,tabMap]);
+ const ribbonGroups=useMemo(()=>{
+  const draw=['Junction','Reservoir','Tank','Pipe','Pump','Valve','Check valve'];
+  const modify=['Select','Select component','Delete selection','Properties'];
+  const view=['Network canvas','Drawing area','Zoom in','Zoom out','Fit drawing','Properties panel'];
+  const layers=['Import GIS network','Import EPANET .inp','Export EPANET .inp','Import .inp','Export .inp'];
+  const classify=(item:Command)=>draw.includes(item.label)?'Draw':modify.includes(item.label)?'Modify':view.includes(item.label)?'View':layers.includes(item.label)?'Layers':'Analysis';
+  const names=(tab==='Home'||tab==='Network')?['Draw','Modify','View','Layers','Analysis']:[tab];
+  return names.map(name=>({name,items:active.filter(item=>(tab==='Home'||tab==='Network')?classify(item)===name:true)})).filter(group=>group.items.length>0);
+ },[active,tab]);
  const execute=(item:Command)=>{
   const root=document.getElementById('rayan-epanet-workspace');if(!root)return;
   const target=item.target;
@@ -166,6 +175,11 @@ export default function EpanetRibbonWorkspace(props:Props){
   .ra-epanet-tab{padding:5px 14px;color:#5d6c8a;font-size:11px}
   .ra-epanet-tab[aria-selected=true]{background:#e9eef5;color:#16233f;border:1px solid #c9d4e5;border-bottom:0}
   .ra-epanet-group-label{display:none}
+  .ra-epanet-ribbon-group{display:flex;flex-direction:column;justify-content:space-between;flex:0 0 auto;padding:0 8px;border-right:1px solid #c9d4e5}
+  .ra-epanet-ribbon-group .ra-epanet-group-label{display:block;padding:0 0 4px;color:#5d6c8a;text-align:center;font-size:9px;font-weight:700;letter-spacing:.02em;text-transform:none}
+  .ra-epanet-ribbon-group-tools{display:flex;align-items:stretch;gap:2px}
+  .ra-epanet-ribbon-group-tools .ra-epanet-command{border:1px solid transparent}
+  .ra-epanet-ribbon-group-tools .ra-epanet-command:hover{border-color:#c9d4e5;background:#dde5f0}
   .ra-epanet-commandbar{gap:0;min-height:74px;padding:6px 8px;background:#e9eef5}
   .ra-epanet-command{flex:0 0 64px;gap:3px;padding:4px 5px;border-right:1px solid #c9d4e5;border-radius:0;background:transparent;color:#16233f;font-size:10px}
   .ra-epanet-command svg{color:#0b6fd6;width:20px;height:20px}
@@ -235,7 +249,7 @@ export default function EpanetRibbonWorkspace(props:Props){
    <div className="ra-epanet-menubar">{['File','Edit','View','Project','Report','Tools','Window','Help'].map(name=><button key={name} type="button" onClick={()=>{const destinations:Record<string,DisplayTab>={File:'Home',Edit:'Network',View:'Network',Project:'Home',Report:'Output',Tools:'Analysis',Window:'GIS'};if(name==='Help')setMessage('Use ribbon commands or type RUN, SAVE, PIPE, JUNCTION, TANK, RESERVOIR, PUMP, VALVE or ZOOM IN.');else setTab(destinations[name]);}}>{name}</button>)}</div>
    <div className="ra-epanet-tabs" role="tablist" aria-label="EPANET tool ribbon">{tabs.map(name=><button key={name} type="button" role="tab" aria-selected={tab===name} className="ra-epanet-tab" onClick={()=>setTab(name)}>{name}</button>)}</div>
    <div className="ra-epanet-group-label">{tab} tools · select a command to open or activate it</div>
-   <div className="ra-epanet-commandbar" role="toolbar" aria-label={tab+' commands'}>{active.map(item=>renderCommand(item))}</div>
+   <div className="ra-epanet-commandbar" role="toolbar" aria-label={tab+' commands'}>{ribbonGroups.map(group=><div className="ra-epanet-ribbon-group" key={group.name}><div className="ra-epanet-group-label">{group.name}</div><div className="ra-epanet-ribbon-group-tools">{group.items.map(item=>renderCommand(item))}</div></div>)}</div>
    <div className="ra-epanet-status"><span style={{color:'#168775'}}>●</span>{message}<span>Project model · SI units</span></div>
   </div>
   <div className="ra-epanet-body">
