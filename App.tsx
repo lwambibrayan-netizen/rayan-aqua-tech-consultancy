@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 // Load specialist engineering engines only when their workspace is opened.
-const EpanetEnginePanel = lazy(() => import('./EpanetEnginePanel'));
+const EpanetEnginePanel = lazy(() => import('./EpanetRibbonWorkspace'));
 const GisEnginePanel = lazy(() => import('./GisEnginePanel'));
 const Cad3DEnginePanel = lazy(() => import('./Cad3DEnginePanel'));
 const BoqEnginePanel = lazy(() => import('./BoqEnginePanel'));
