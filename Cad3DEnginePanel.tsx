@@ -631,16 +631,7 @@ export default function Cad3DEnginePanel({ projectId, initialData, gisFeatures =
           } else {
             const id = makeId(), graphics: Shape[] = [], pushLine = (a: Point2D, b: Point2D) => graphics.push({ id: makeId(), type: 'line', points: [{x:a.x/scale,y:a.y/scale},{x:b.x/scale,y:b.y/scale}], layer: 'DIMENSIONS' });
             let labelPoint: Point2D, label = '';
-            if (dimensionKind === 'angular') {
-              const g = calculateAngularDimension(next[0], next[1], next[2], Math.max(0.001, Math.abs(dimensionOffset * scale)));
-              pushLine(g.firstExtension.a,g.firstExtension.b); pushLine(g.secondExtension.a,g.secondExtension.b);
-              const arcPoints = Array.from({length:25},(_,i)=>{const a=g.arc.startAngleRad+(g.arc.endAngleRad-g.arc.startAngleRad)*i/24;return {x:(g.arc.center.x+Math.cos(a)*g.arc.radius)/scale,y:(g.arc.center.y+Math.sin(a)*g.arc.radius)/scale};});
-              graphics.push({id:makeId(),type:'polyline',points:arcPoints,layer:'DIMENSIONS'}); labelPoint=g.labelPoint; label=(g.angleRad*180/Math.PI).toFixed(dimensionStyle.precision)+'°';
-            } else if (dimensionKind === 'radius' || dimensionKind === 'diameter') {
-              const g = dimensionKind === 'radius' ? calculateRadiusDimension(next[0],next[1],next[2]) : calculateDiameterDimension(next[0],next[1],next[2]);
-              g.centerMark.forEach(line=>pushLine(line.a,line.b)); pushLine(g.leader.a,g.leader.b);
-              labelPoint=g.labelPoint; label=(dimensionKind === 'radius'?'R ':'Ø ')+formatStyledDimension(dimensionKind === 'radius'?g.radius:g.radius*2,dimensionStyle);
-            } else if (dimensionKind === 'ordinate') {
+            if (dimensionKind === 'ordinate') {
               const offset = ordinateAxis === 'x' ? next[2].y-next[1].y : next[2].x-next[1].x;
               const g = calculateOrdinateDimension(next[0],next[1],ordinateAxis,offset);
               pushLine(g.originExtension.a,g.originExtension.b); pushLine(g.featureExtension.a,g.featureExtension.b); pushLine(g.dimensionLine.a,g.dimensionLine.b);
