@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { EpanetEnginePanel } from './EpanetEnginePanel';
+import EpanetEnginePanel from './EpanetEnginePanel';
 import { Activity, ArrowDownToLine, ArrowUpFromLine, CheckCircle2, CircleDot, ClipboardList, FilePlus2, Gauge, Layers3, Move, Network, Play, Save, Settings2, ZoomIn, ZoomOut } from 'lucide-react';
 
 type Props = React.ComponentProps<typeof EpanetEnginePanel>;
