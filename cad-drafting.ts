@@ -13,7 +13,9 @@ export type DraftPoint = { x: number; y: number };
 export type DraftAnchorReference = { entityId: string; pointIndex: number };
 export type DraftAnnotation =
   | { id: string; kind: 'linear' | 'aligned'; layer: string; a: DraftPoint; b: DraftPoint; offsetM: number; textOverride?: string; precision: number; association?: { a?: DraftAnchorReference; b?: DraftAnchorReference } }
-  | { id: string; kind: 'radial'; layer: string; circleId?: string; center: DraftPoint; radiusM: number; dimensionType: 'radius' | 'diameter'; leaderAngleRad: number; precision: number }\n  | { id: string; kind: 'angular'; layer: string; vertex: DraftPoint; rayA: DraftPoint; rayB: DraftPoint; offsetM: number; precision: number; association?: { vertex?: DraftAnchorReference; rayA?: DraftAnchorReference; rayB?: DraftAnchorReference } }\n  | { id: string; kind: 'text'; layer: string; at: DraftPoint; text: string; heightMm: number; rotationDeg: number }
+  | { id: string; kind: 'radial'; layer: string; circleId?: string; center: DraftPoint; radiusM: number; dimensionType: 'radius' | 'diameter'; leaderAngleRad: number; precision: number }
+  | { id: string; kind: 'angular'; layer: string; vertex: DraftPoint; rayA: DraftPoint; rayB: DraftPoint; offsetM: number; precision: number; association?: { vertex?: DraftAnchorReference; rayA?: DraftAnchorReference; rayB?: DraftAnchorReference } }
+  | { id: string; kind: 'text'; layer: string; at: DraftPoint; text: string; heightMm: number; rotationDeg: number }
   | { id: string; kind: 'leader'; layer: string; points: DraftPoint[]; text: string; textHeightMm: number };
 export type SheetSize = 'A0' | 'A1' | 'A2' | 'A3' | 'A4' | 'CUSTOM';
 export type DrawingSheet = {
@@ -156,7 +158,8 @@ export function measureAngularDimension(annotation: Extract<DraftAnnotation, { k
   if (al <= 1e-12 || bl <= 1e-12) throw new Error('Angular dimension rays must have non-zero length.');
   return Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by) / (al * bl))));
 }
-\nexport function measureDimension(annotation: Extract<DraftAnnotation, { kind: 'linear' | 'aligned' }>): number {
+
+export function measureDimension(annotation: Extract<DraftAnnotation, { kind: 'linear' | 'aligned' }>): number {
   const dx = annotation.b.x - annotation.a.x, dy = annotation.b.y - annotation.a.y;
   return annotation.kind === 'aligned' ? Math.hypot(dx, dy) : Math.abs(dx);
 }
