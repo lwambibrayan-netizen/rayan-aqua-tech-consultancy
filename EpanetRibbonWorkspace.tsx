@@ -44,7 +44,7 @@ export default function EpanetRibbonWorkspace(props: Props) {
       return text === target.toLowerCase() || (el instanceof HTMLButtonElement && text.startsWith(target.toLowerCase()));
     });
     if (!found) { setCommandMessage(label + ' · unavailable until the required model or result exists'); return; }
-    if (found instanceof HTMLButtonElement) found.click();
+    if (found instanceof HTMLButtonElement) { if (found.disabled) { setCommandMessage(label + ' · unavailable until required inputs are ready'); return; } found.click(); }
     else found.scrollIntoView({behavior:'smooth',block:'center'});
     setCommandMessage(label + ' · command activated');
   };
