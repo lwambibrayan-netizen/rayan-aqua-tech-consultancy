@@ -107,6 +107,17 @@ export default function EpanetRibbonWorkspace(props:Props){
  const execute=(item:Command)=>{
   const root=document.getElementById('rayan-epanet-workspace');if(!root)return;
   const target=item.target;
+  const actionByTarget:Record<string,string>={'Select':'select','Junction':'J','Reservoir':'R','Tank':'T','Pipe':'pipe','Pump':'pump','Valve':'valve','Check valve':'checkValve','Run EPANET':'run','Save design':'save','Clear all':'clear','Example network':'example','Import EPANET .inp':'import-inp','Import GIS network':'import-gis','Export .inp':'export-inp','Export EPANET .inp':'export-inp'};
+  const action=actionByTarget[target];
+  if(action){
+   const button=root.querySelector('[data-epanet-action="'+action+'"]') as HTMLButtonElement|null;
+   if(!button){setMessage(item.label+' · command is not available in the current workspace');return;}
+   if(button.disabled){setMessage(item.label+' · unavailable until required inputs are ready');return;}
+   button.click();setMessage(item.label+' · EPANET command executed');
+   if(action==='run')root.querySelector('[data-epanet-region="results"]')?.scrollIntoView({behavior:'smooth',block:'start'});
+   return;
+  }
+  if(target==='@quality'||target==='@leakage')setTab('Analysis');
   const regions:Record<string,string>={'@drawing':'drawing','@properties':'properties','@settings':'settings','@analysis':'analysis-config','@results':'results','@validation':'validation','@patterns':'patterns','@criteria':'criteria','@energy':'energy','@quality':'quality','@leakage':'leakage','@tank-controls':'tank-controls','@time-controls':'time-controls','@rule-controls':'rule-controls','@native-report':'native-report'};
   if(target==='__zoom_in__'||target==='__zoom_out__'||target==='__fit__'){
    const svg=root.querySelector('svg[aria-label="Sketch your water distribution network"]') as SVGSVGElement|null;
@@ -141,7 +152,7 @@ export default function EpanetRibbonWorkspace(props:Props){
   setMessage(item.label+' · command activated');
  };
  const renderCommand=(item:Command,compact=false)=>{const Icon=item.icon;return <button key={item.label} type="button" className={compact?'ra-epanet-quick':'ra-epanet-command'} title={item.hint} onClick={()=>execute(item)}><Icon size={compact?17:20}/><span>{item.label}</span>{!compact?<small>{item.hint}</small>:null}</button>};
- return <div id="rayan-epanet-workspace" className="ra-epanet-workspace">
+ return <div id="rayan-epanet-workspace" className="ra-epanet-workspace" data-active-tab={tab}>
   <style>{`
   .ra-epanet-workspace{--ra-ink:#12333d;--ra-muted:#637b80;--ra-line:#d7e3df;--ra-accent:#147b6b;color:var(--ra-ink);min-width:0;padding-bottom:68px}
   .ra-epanet-ribbon{border:1px solid var(--ra-line);border-radius:13px 13px 0 0;background:#f8fbfa;overflow:hidden;box-shadow:0 5px 18px rgba(20,55,55,.06)}
@@ -158,7 +169,7 @@ export default function EpanetRibbonWorkspace(props:Props){
   .ra-epanet-status{display:flex;align-items:center;gap:7px;border:1px solid var(--ra-line);border-top:0;background:#f5f9f7;padding:7px 12px;color:#587178;font-size:10px}
   .ra-epanet-status span:last-child{margin-left:auto}
   .ra-epanet-menubar{display:flex;gap:3px;align-items:center;padding:4px 9px;background:#fff;border:1px solid var(--ra-line);border-bottom:0;overflow-x:auto}.ra-epanet-menubar button{border:0;background:transparent;color:#48636a;padding:5px 11px;border-radius:5px;font-size:11px;cursor:pointer}.ra-epanet-menubar button:hover{background:#eaf3ef}
-  .ra-epanet-body{display:grid;grid-template-columns:205px minmax(0,1fr);gap:10px;padding-top:10px;align-items:start}
+  .ra-epanet-body{display:grid;grid-template-columns:205px minmax(0,1fr);gap:10px;padding-top:10px;align-items:start}.ra-epanet-body>section{min-width:0}.ra-epanet-body>section>[data-epanet-region="intro"],.ra-epanet-body>section>[data-epanet-region="tools"]{display:none!important}.ra-epanet-workspace[data-active-tab="Analysis"] .ra-epanet-body>section>[data-epanet-region="analysis-config"]{display:block!important}.ra-epanet-workspace:not([data-active-tab="Analysis"]) .ra-epanet-body>section>[data-epanet-region="analysis-config"]{display:none!important}
   .ra-epanet-browser{border:1px solid var(--ra-line);border-radius:10px;background:#f8fbfa;overflow:hidden;min-width:0}.ra-epanet-browser h3{margin:0;padding:9px 11px;background:#dfe9e5;color:#294950;font-size:10px;letter-spacing:.09em}.ra-epanet-browser section{padding:8px 9px;border-bottom:1px solid #e2ebe7}.ra-epanet-browser strong{display:block;color:#71868a;font-size:9px;letter-spacing:.08em;margin:0 0 5px}.ra-epanet-browser button{display:flex;justify-content:space-between;width:100%;padding:5px 6px;border:0;border-radius:5px;background:transparent;color:#294950;font-size:11px;text-align:left;cursor:pointer}.ra-epanet-browser button:hover{background:#e8f3ee}
   .ra-epanet-commandline{display:flex;align-items:center;gap:8px;margin-top:10px;padding:7px 10px;border:1px solid var(--ra-line);background:#f8fbfa;border-radius:8px}.ra-epanet-commandline b{font:700 11px Consolas,monospace;color:#147b6b}.ra-epanet-commandline input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#23454d;font:12px Consolas,monospace}.ra-epanet-commandline button{border:1px solid #cbdcd5;border-radius:5px;padding:4px 9px;background:#fff;color:#23454d;font-size:10px;cursor:pointer}
   .ra-epanet-statusbar{display:flex;gap:4px;align-items:center;overflow-x:auto;margin-top:5px;padding:5px 8px;background:#e6eeea;border:1px solid #d2dfd9;border-radius:6px;white-space:nowrap}.ra-epanet-statusbar button{border:0;border-radius:4px;padding:3px 8px;background:transparent;color:#60777a;font:10px Consolas,monospace;cursor:pointer}.ra-epanet-statusbar button[aria-pressed=true]{background:#147b6b;color:#fff}.ra-epanet-statusbar span{margin-left:auto;color:#587178;font:10px Consolas,monospace}
@@ -171,9 +182,9 @@ export default function EpanetRibbonWorkspace(props:Props){
   .ra-epanet-bottom-label{flex:0 0 auto;font-size:9px;font-weight:900;letter-spacing:.08em;color:#6b8282;padding:0 8px}
   .ra-epanet-quick{display:flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;padding:9px 12px;border:1px solid #dce8e2;border-radius:8px;background:#fff;color:#23464c;font-size:11px;font-weight:800;cursor:pointer}
   .ra-epanet-quick svg{color:#147b6b}.ra-epanet-quick:hover{background:#eaf6f0;border-color:#9fcdbb}
-  .ra-epanet-body svg{max-width:100%}
+  .ra-epanet-commandline{margin-top:9px}.ra-epanet-statusbar{margin-bottom:6px}.ra-epanet-body svg{max-width:100%}
   @media(max-width:900px){.ra-epanet-body{grid-template-columns:170px minmax(0,1fr)}}
-  @media(max-width:760px){.ra-epanet-body{grid-template-columns:minmax(0,1fr)}.ra-epanet-browser{display:none}.ra-epanet-body>section{grid-template-columns:minmax(0,1fr)}.ra-epanet-body>section>[data-epanet-region="drawing"],.ra-epanet-body>section>[data-epanet-region="properties"]{grid-column:1}}
+  @media(max-width:760px){.ra-epanet-body{grid-template-columns:minmax(0,1fr)}.ra-epanet-browser{display:block;max-height:190px;overflow:auto}.ra-epanet-body>section{grid-template-columns:minmax(0,1fr)}.ra-epanet-body>section>[data-epanet-region="drawing"],.ra-epanet-body>section>[data-epanet-region="properties"]{grid-column:1}}
   @media(max-width:640px){.ra-epanet-titlebar{align-items:flex-start;flex-direction:column}.ra-epanet-commandbar{min-height:82px}.ra-epanet-command{flex-basis:86px}.ra-epanet-bottom{margin-left:-2px;margin-right:-2px}.ra-epanet-quick{padding:9px 10px}}
   `}</style>
   <div className="ra-epanet-ribbon">
@@ -184,7 +195,35 @@ export default function EpanetRibbonWorkspace(props:Props){
    <div className="ra-epanet-commandbar" role="toolbar" aria-label={tab+' commands'}>{active.map(item=>renderCommand(item))}</div>
    <div className="ra-epanet-status"><span style={{color:'#168775'}}>●</span>{message}<span>Project model · SI units</span></div>
   </div>
-  <div className="ra-epanet-body"><EpanetEnginePanel {...props}/></div>
-  <div className="ra-epanet-bottom" role="toolbar" aria-label="EPANET quick access dock"><span className="ra-epanet-bottom-label">QUICK ACCESS</span>{bottomCommands.map(item=>renderCommand(item,true))}</div>
+  <div className="ra-epanet-body">
+   <aside className="ra-epanet-browser" aria-label="Project browser">
+    <h3>PROJECT BROWSER</h3>
+    <section><strong>NETWORK COMPONENTS</strong>
+     <button type="button" onClick={()=>execute({label:'Network drawing',hint:'Open drawing canvas',target:'@drawing',icon:Network})}>Network drawing <span>↗</span></button>
+     {(['Junction','Reservoir','Tank','Pipe','Pump','Valve','Check valve','Select'] as const).map(name=><button key={name} type="button" onClick={()=>execute({label:name,hint:'Activate '+name+' tool',target:name,icon:Network})}>{name}<span>›</span></button>)}
+    </section>
+    <section><strong>MODEL DATA</strong>
+     <button type="button" onClick={()=>execute({label:'Component properties',hint:'Open properties',target:'@properties',icon:SlidersHorizontal})}>Component properties <span>›</span></button>
+     <button type="button" onClick={()=>execute({label:'Hydraulic settings',hint:'Open settings',target:'@settings',icon:Settings2})}>Hydraulic settings <span>›</span></button>
+     <button type="button" onClick={()=>{setTab('Analysis');execute({label:'Demand patterns',hint:'Open analysis configuration',target:'@patterns',icon:Activity})}}>Patterns & curves <span>›</span></button>
+     <button type="button" onClick={()=>{setTab('Analysis');execute({label:'Control rules',hint:'Open control rules',target:'@rule-controls',icon:SlidersHorizontal})}}>Controls & rules <span>›</span></button>
+    </section>
+    <section><strong>ANALYSIS & OUTPUT</strong>
+     <button type="button" onClick={()=>setTab('Analysis')}>Water quality & leakage <span>›</span></button>
+     <button type="button" onClick={()=>execute({label:'Simulation results',hint:'Open results',target:'@results',icon:Activity})}>Simulation results <span>›</span></button>
+     <button type="button" onClick={()=>setTab('Output')}>Reports & exports <span>›</span></button>
+    </section>
+   </aside>
+   <EpanetEnginePanel {...props}/>
+  </div>
+  <div className="ra-epanet-commandline" role="search">
+   <b>COMMAND</b>
+   <input aria-label="EPANET command line" value={commandInput} onChange={e=>setCommandInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){const q=commandInput.trim().toLowerCase();const aliases:Record<string,string>={run:'Run EPANET',save:'Save design',pipe:'Pipe',junction:'Junction',tank:'Tank',reservoir:'Reservoir',pump:'Pump',valve:'Valve',select:'Select','zoom in':'Zoom in','zoom out':'Zoom out','zoom e':'Fit drawing',results:'Simulation results',properties:'Properties'};if(q==='help'){setMessage('Commands: RUN, SAVE, PIPE, JUNCTION, TANK, RESERVOIR, PUMP, VALVE, SELECT, ZOOM IN, ZOOM OUT, ZOOM E, RESULTS, PROPERTIES.');}else{const label=aliases[q]||q;const item=Object.values(commands).flat().find(x=>x.label.toLowerCase()===label.toLowerCase()||x.target.toLowerCase()===label.toLowerCase());if(item)execute(item);else setMessage('Unknown command: '+commandInput);}setCommandInput('');}}} placeholder="RUN, SAVE, PIPE, JUNCTION, ZOOM IN…"/>
+   <button type="button" onClick={()=>{const q=commandInput.trim().toLowerCase();const aliases:Record<string,string>={run:'Run EPANET',save:'Save design',pipe:'Pipe',junction:'Junction',tank:'Tank',reservoir:'Reservoir',pump:'Pump',valve:'Valve',select:'Select','zoom in':'Zoom in','zoom out':'Zoom out','zoom e':'Fit drawing',results:'Simulation results',properties:'Properties'};const label=aliases[q]||q;const item=Object.values(commands).flat().find(x=>x.label.toLowerCase()===label.toLowerCase()||x.target.toLowerCase()===label.toLowerCase());if(item)execute(item);else setMessage('Unknown command: '+commandInput);setCommandInput('');}}>Execute</button>
+  </div>
+  <div className="ra-epanet-statusbar" role="toolbar" aria-label="Drafting and model status">
+   {(['SNAP','GRID','ORTHO','OSNAP'] as const).map(name=><button key={name} type="button" aria-pressed={statusToggles[name]} onClick={()=>setStatusToggles(v=>({...v,[name]:!v}))}>{name}</button>)}
+   <span>SI UNITS · {props.projectTitle||'UNSAVED PROJECT'} · OWA-EPANET</span>
+  </div>
  </div>;
 }
